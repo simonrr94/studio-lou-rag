@@ -636,7 +636,7 @@ Be specific and actionable. If the context does not cover the question fully, sa
 Never invent facts not present in the context.""",
         messages=[{"role": "user", "content": f"Retrieved context:\n\n{context}\n\n---\n\nQuestion: {query}"}]
     )
-return jsonify({
+    return jsonify({
         "answer": response.content[0].text,
         "categories": categories,
         "chunks": chunk_ids,
