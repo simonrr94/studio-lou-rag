@@ -636,7 +636,7 @@ Be specific and actionable. If the context does not cover the question fully, sa
 Never invent facts not present in the context.""",
         messages=[{"role": "user", "content": f"Retrieved context:\n\n{context}\n\n---\n\nQuestion: {query}"}]
     )
-    return jsonify({
+return jsonify({
         "answer": response.content[0].text,
         "categories": categories,
         "chunks": chunk_ids,
@@ -646,5 +646,5 @@ Never invent facts not present in the context.""",
 
 if __name__ == "__main__":
     print("Starting Studio Lou RAG server...")
-    print("Open http://127.0.0.1:5000 in your browser")
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
