@@ -644,6 +644,74 @@ Never invent facts not present in the context.""",
         "chunks_data": chunks_data
     })
 
+@app.route("/mcp", methods=["GET", "POST"])
+def mcp_endpoint():
+    if request.method == "GET":
+        # SSE handshake — advertises this server as MCP-capable
+        def stream():
+            yield "data: {\"jsonrpc\":\"2.0\",\"method\":\"connection/established\"}\n\n"
+        return app.response_class(stream(), mimetype="text/event-stream")
+
+    # All JSON-RPC calls come in as POST
+    body = request.json
+    method = body.get("method")
+    req_id = body.get("id")
+
+    if method == "initialize":
+        return jsonify({
+            "jsonrpc": "2.0", "id": req_id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "serverInfo": {"name": "studio-lou-rag", "version": "1.0.0"},
+                "capabilities": {"tools": {}}
+            }
+        })
+
+    if method == "tools/list":
+        return jsonify({
+            "jsonrpc": "2.0", "id": req_id,
+            "result": {
+                "tools": [{
+                    "name": "query_studio_lou_rag",
+                    "description": "Query the Studio Lou Interiors knowledge base. Returns brand voice rules, blog standards, content operations, audience personas, and production history. Call this at the start of every session.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Natural language question about Studio Lou brand, content, or operations"
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }]
+            }
+        })
+
+    if method == "tools/call":
+        args = body.get("params", {}).get("arguments", {})
+        query = args.get("query", "")
+        embedding = get_embedding(query)
+        results = index.query(vector=embedding, top_k=5, include_metadata=True)
+        context = "\n\n---\n\n".join([m.metadata["text"] for m in results.matches])
+        response = claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1000,
+            system="You are a Studio Lou Interiors knowledge assistant. Answer using ONLY the retrieved context. Be specific and actionable.",
+            messages=[{"role": "user", "content": f"Context:\n\n{context}\n\nQuestion: {query}"}]
+        )
+        return jsonify({
+            "jsonrpc": "2.0", "id": req_id,
+            "result": {
+                "content": [{"type": "text", "text": response.content[0].text}]
+            }
+        })
+
+    return jsonify({
+        "jsonrpc": "2.0", "id": req_id,
+        "error": {"code": -32601, "message": "Method not found"}
+    }), 404
+
 if __name__ == "__main__":
     print("Starting Studio Lou RAG server...")
     port = int(os.environ.get('PORT', 5000))
