@@ -14,6 +14,17 @@ index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
 
 app = Flask(__name__, static_folder="static")
 
+@app.after_request
+def add_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    return response
+
+@app.route("/api/vision", methods=["OPTIONS"])
+def vision_preflight():
+    return "", 204
+
 HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -711,6 +722,27 @@ def mcp_endpoint():
         "jsonrpc": "2.0", "id": req_id,
         "error": {"code": -32601, "message": "Method not found"}
     }), 404
+
+@app.route("/api/vision", methods=["POST"])
+def vision():
+    data = request.json
+    image_b64 = data.get("image")
+    media_type = data.get("media_type", "image/jpeg")
+    prompt = data.get("prompt", "")
+
+    response = claude.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1000,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
+                {"type": "text", "text": prompt}
+            ]
+        }]
+    )
+
+    return jsonify({"content": [{"text": response.content[0].text}]})
 
 if __name__ == "__main__":
     print("Starting Studio Lou RAG server...")
