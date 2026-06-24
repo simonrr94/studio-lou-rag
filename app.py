@@ -5,6 +5,8 @@ from openai import OpenAI
 import anthropic
 from flask import Flask, request, jsonify, render_template_string, send_from_directory
 
+from flask_cors import CORS
+
 load_dotenv()
 
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
@@ -14,16 +16,7 @@ index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
 
 app = Flask(__name__, static_folder="static")
 
-@app.after_request
-def add_cors(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    return response
-
-@app.route("/api/vision", methods=["OPTIONS"])
-def vision_preflight():
-    return "", 204
+CORS(app)
 
 HTML = """
 <!DOCTYPE html>

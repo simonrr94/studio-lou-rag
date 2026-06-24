@@ -3,3 +3,4 @@ openai
 pinecone
 flask
 python-dotenv
+flask-cors
