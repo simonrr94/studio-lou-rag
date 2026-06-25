@@ -621,9 +621,13 @@ def home():
 def static_files(filename):
     return send_from_directory("static", filename)
 
-@app.route("/tools/content-brief")
+@app.route("/tool/content-brief")
 def content_brief():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "content-brief.html")
+
+@app.route("/tool/bio-generator")
+def bio_generator():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "bio-generator.html")
 
 @app.route("/ask", methods=["POST"])
 def ask():
