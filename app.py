@@ -739,6 +739,27 @@ def vision():
         return jsonify({"content": [{"text": response.content[0].text}]})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+    
+    return jsonify({"error": str(e)}), 400   # <-- end of /api/vision
+
+@app.route("/api/claude", methods=["POST"])       # <-- add this new route here
+def claude_proxy():
+    try:
+        data = request.json
+        system = data.get("system", "")
+        messages = data.get("messages", [])
+        max_tokens = data.get("max_tokens", 1000)
+
+        response = claude.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages
+        )
+
+        return jsonify({"content": [{"type": "text", "text": response.content[0].text}]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 if __name__ == "__main__":
     print("Starting Studio Lou RAG server...")
