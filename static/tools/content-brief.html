@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Content Brief Generator · Studio Lou</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -17,353 +14,410 @@
       color: #433E3C;
       padding: 40px 24px 80px;
     }
-    select { appearance: none; -webkit-appearance: none; }
+    .form-group { margin-bottom: 16px; }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b6560;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    input, select {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid #d0c9bc;
+      background: #ffffff;
+      color: #433E3C;
+      width: 100%;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .select-wrap { position: relative; }
+    .select-wrap::after {
+      content: "▾";
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: #6b6560;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .chip {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      padding: 8px 18px;
+      border: 1px solid #d0c9bc;
+      border-radius: 50px;
+      cursor: pointer;
+      background: #ffffff;
+      color: #433E3C;
+      user-select: none;
+      transition: all 0.15s;
+    }
+    .chip.selected { background: #582b36; color: #e7dbbf; border-color: #582b36; }
+    .btn-primary {
+      font-family: 'DM Sans', sans-serif;
+      padding: 14px 36px;
+      background: #A6BE47;
+      color: #ffffff;
+      border: none;
+      border-radius: 50px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: #fdecea;
+      color: #c0392b;
+      border-radius: 10px;
+      font-size: 15px;
+      display: none;
+    }
+    .output { margin-top: 40px; padding-top: 32px; border-top: 1px solid #e8e0d5; display: none; }
+    .output-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .output-header h2 { font-size: 20px; font-weight: 600; }
+    .output-actions { display: flex; gap: 8px; }
+    .btn-secondary {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: #433E3C;
+      background: none;
+      border: 1px solid #d0c9bc;
+      border-radius: 50px;
+      padding: 6px 16px;
+      cursor: pointer;
+    }
+    .btn-download {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: #ffffff;
+      background: #A6BE47;
+      border: none;
+      border-radius: 50px;
+      padding: 6px 16px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .blocks { display: flex; flex-direction: column; gap: 14px; }
+    .block {
+      background: #f5f0e8;
+      border: 1px solid #e8e0d5;
+      border-radius: 14px;
+      padding: 18px 20px;
+    }
+    .block-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #582b36;
+      margin-bottom: 10px;
+    }
+    .block-content {
+      font-size: 15px;
+      line-height: 1.75;
+      white-space: pre-wrap;
+      color: #433E3C;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div class="wrap">
 
-  <script type="text/babel">
-    const { useState } = React;
+  <div class="form-group">
+    <label>Firm type</label>
+    <div class="select-wrap">
+      <select id="firmType" onchange="handleFirmType(this.value)">
+        <option value="">Select firm type</option>
+        <option value="residential">Residential design firm</option>
+        <option value="hospitality">Hospitality design firm</option>
+        <option value="commercial">Commercial / workplace design firm</option>
+      </select>
+    </div>
+  </div>
 
-    const PLATFORMS = ["Instagram", "Pinterest", "LinkedIn", "TikTok", "Houzz"];
+  <div class="form-group">
+    <label>Content topic / focus</label>
+    <input id="topic" type="text" placeholder="e.g. master suite reveal, sourcing trip to High Point, boutique hotel lobby project" />
+  </div>
 
-    const BLOCK_META = [
-      { key: "platform_cadence", label: "Platform + posting cadence", icon: "📅" },
-      { key: "caption_hooks", label: "Caption angles + hook ideas", icon: "💬" },
-      { key: "content_types", label: "Content types + formats", icon: "🗂" },
-      { key: "seo_keywords", label: "SEO, keywords + hashtags", icon: "🔍" },
-      { key: "visual_direction", label: "Visual direction notes", icon: "🖼" },
-    ];
+  <div class="grid">
+    <div class="form-group" style="margin-bottom:0">
+      <label>Project type</label>
+      <input id="projectType" type="text" placeholder="e.g. full home renovation, hotel lobby" />
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Design style</label>
+      <input id="designStyle" type="text" placeholder="e.g. modern organic, coastal, transitional" />
+    </div>
+  </div>
 
-    const FIRM_PLATFORM_DEFAULTS = {
-      residential: ["Instagram", "Pinterest"],
-      hospitality: ["LinkedIn", "Houzz", "Instagram"],
-      commercial: ["LinkedIn", "Houzz"],
-      "": [],
-    };
+  <div class="form-group" style="margin-top:16px">
+    <label>Ideal client</label>
+    <input id="idealClient" type="text" placeholder="e.g. high-end homeowners in Austin, boutique hotel developers" />
+  </div>
 
-    const inputStyle = {
-      fontSize: 16, padding: "12px 16px", borderRadius: 12,
-      border: "1px solid #d0c9bc", background: "#ffffff",
-      color: "#433E3C", width: "100%",
-      fontFamily: "DM Sans, sans-serif",
-      outline: "none"
-    };
+  <div class="form-group">
+    <label id="platformLabel">Platforms</label>
+    <div class="platforms" id="platforms">
+      <div class="chip" data-platform="Instagram" onclick="togglePlatform(this)">Instagram</div>
+      <div class="chip" data-platform="Pinterest" onclick="togglePlatform(this)">Pinterest</div>
+      <div class="chip" data-platform="LinkedIn" onclick="togglePlatform(this)">LinkedIn</div>
+      <div class="chip" data-platform="TikTok" onclick="togglePlatform(this)">TikTok</div>
+      <div class="chip" data-platform="Houzz" onclick="togglePlatform(this)">Houzz</div>
+    </div>
+  </div>
 
-    const labelStyle = {
-      fontSize: 12, fontWeight: 600, color: "#6b6560",
-      textTransform: "uppercase", letterSpacing: "0.08em",
-      fontFamily: "DM Sans, sans-serif", display: "block", marginBottom: 6
-    };
+  <button class="btn-primary" id="generateBtn" onclick="generate()">✦ Generate brief</button>
 
-    function App() {
-      const [topic, setTopic] = useState("");
-      const [firmType, setFirmType] = useState("");
-      const [projectType, setProjectType] = useState("");
-      const [idealClient, setIdealClient] = useState("");
-      const [designStyle, setDesignStyle] = useState("");
-      const [selectedPlatforms, setSelectedPlatforms] = useState([]);
-      const [loading, setLoading] = useState(false);
-      const [brief, setBrief] = useState(null);
-      const [error, setError] = useState("");
-      const [copied, setCopied] = useState(false);
+  <div class="error" id="error"></div>
 
-      function handleFirmTypeChange(val) {
-        setFirmType(val);
-        setSelectedPlatforms(FIRM_PLATFORM_DEFAULTS[val] || []);
-      }
+  <div class="output" id="output">
+    <div class="output-header">
+      <h2>Content brief</h2>
+      <div class="output-actions">
+        <button class="btn-secondary" onclick="copyAll()">Copy all</button>
+        <button class="btn-download" onclick="downloadPDF()">↓ Download PDF</button>
+      </div>
+    </div>
+    <div class="blocks" id="blocks"></div>
+  </div>
 
-      function togglePlatform(p) {
-        setSelectedPlatforms(prev =>
-          prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
-        );
-      }
+</div>
 
-      function downloadPDF() {
-        if (!brief) return;
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ unit: "pt", format: "letter" });
-        const pageW = doc.internal.pageSize.getWidth();
-        const margin = 48;
-        const contentW = pageW - margin * 2;
-        let y = 0;
+<script>
+const FIRM_DEFAULTS = {
+  residential: ["Instagram", "Pinterest"],
+  hospitality: ["LinkedIn", "Houzz", "Instagram"],
+  commercial: ["LinkedIn", "Houzz"]
+};
 
-        doc.setFillColor(215, 232, 188);
-        doc.rect(0, 0, pageW, 64, "F");
-        doc.setFillColor(88, 43, 54);
-        doc.rect(0, 64, pageW, 3, "F");
-        doc.setFillColor(88, 43, 54);
-        doc.roundedRect(margin, 14, 36, 36, 4, 4, "F");
-        doc.setTextColor(215, 232, 188);
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.text("SL", margin + 18, 37, { align: "center" });
-        doc.setTextColor(88, 43, 54);
-        doc.setFontSize(16);
-        doc.text("Content Brief", margin + 48, 30);
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(100, 80, 80);
-        doc.text("Studio Lou · for interior design firms", margin + 48, 46);
-        doc.setFontSize(9);
-        doc.setTextColor(140, 120, 120);
-        doc.text(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), pageW - margin, 46, { align: "right" });
+const BLOCK_META = [
+  { key: "platform_cadence", label: "📅 Platform + posting cadence" },
+  { key: "caption_hooks", label: "💬 Caption angles + hook ideas" },
+  { key: "content_types", label: "🗂 Content types + formats" },
+  { key: "seo_keywords", label: "🔍 SEO, keywords + hashtags" },
+  { key: "visual_direction", label: "🖼 Visual direction notes" },
+];
 
-        y = 90;
-        doc.setFillColor(245, 242, 238);
-        doc.roundedRect(margin, y, contentW, 36, 4, 4, "F");
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(88, 43, 54);
-        const metaItems = [
-          firmType ? `Firm type: ${firmType}` : null,
-          topic ? `Topic: ${topic}` : null,
-          designStyle ? `Style: ${designStyle}` : null,
-          selectedPlatforms.length ? `Platforms: ${selectedPlatforms.join(", ")}` : null,
-        ].filter(Boolean);
-        doc.text(metaItems.join("   ·   "), margin + 12, y + 22);
-        y += 52;
+let currentBrief = null;
 
-        BLOCK_META.forEach(({ key, label }) => {
-          if (!brief[key]) return;
-          if (y > 680) { doc.addPage(); y = margin; }
-          doc.setFillColor(88, 43, 54);
-          doc.roundedRect(margin, y, contentW, 22, 3, 3, "F");
-          doc.setFontSize(9);
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(215, 232, 188);
-          doc.text(label.toUpperCase(), margin + 10, y + 14);
-          y += 28;
-          doc.setFontSize(10);
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(40, 30, 30);
-          const lines = doc.splitTextToSize(brief[key], contentW - 8);
-          lines.forEach(line => {
-            if (y > 720) { doc.addPage(); y = margin; }
-            doc.text(line, margin + 4, y);
-            y += 14;
-          });
-          y += 16;
-        });
+function handleFirmType(val) {
+  const defaults = FIRM_DEFAULTS[val] || [];
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.classList.toggle('selected', defaults.includes(chip.dataset.platform));
+  });
+  const label = document.getElementById('platformLabel');
+  label.textContent = val ? 'Platforms · recommended pre-selected for your firm type' : 'Platforms';
+}
 
-        doc.setFillColor(215, 232, 188);
-        doc.rect(0, doc.internal.pageSize.getHeight() - 28, pageW, 28, "F");
-        doc.setFontSize(8);
-        doc.setTextColor(88, 43, 54);
-        doc.setFont("helvetica", "normal");
-        doc.text("Generated by Studio Lou · studiolouinteriors.com", pageW / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" });
-        doc.save(`studio-lou-content-brief-${Date.now()}.pdf`);
-      }
+function togglePlatform(el) {
+  el.classList.toggle('selected');
+}
 
-      async function generate() {
-        if (!topic.trim()) { setError("Please enter a content topic or project focus."); return; }
-        if (!firmType) { setError("Please select a firm type."); return; }
+function getSelectedPlatforms() {
+  return [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.platform);
+}
 
-        setError("");
-        setBrief(null);
-        setLoading(true);
+function showError(msg) {
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
 
-        const platformList = selectedPlatforms.length ? selectedPlatforms.join(", ") : "Instagram, Pinterest";
+function hideError() {
+  document.getElementById('error').style.display = 'none';
+}
 
-        const platformGuidance = {
-          residential: `- Instagram: primary portfolio channel. Post 3-4x/week. Project reveals, before/afters, process shots, Reels for reach. Include location + style keywords in captions. Max 5 hashtags.\n- Pinterest: primary discovery channel. Post 5-10x/week. SEO-first titles and descriptions. Boards by room type and aesthetic.\n- LinkedIn: credibility layer. Post 1-2x/week. Professional case studies.\n- TikTok: cold reach. 2-3x/week. Before/after reveals, process time-lapses. Casual tone.\n- Houzz: discovery for renovation clients. Keep portfolio updated by room and style.`,
-          hospitality: `- LinkedIn: PRIMARY channel. Developers, hotel groups, operators, architects. Post 3x/week. Case study format.\n- Houzz: PRIMARY for project discovery. Portfolio by project type and sector.\n- Instagram: secondary. 2-3x/week. High-production imagery. Max 5 hashtags.\n- Pinterest: ambient discovery. Keyword-rich descriptions linking to portfolio.`,
-          commercial: `- LinkedIn: PRIMARY channel. Developers, property managers, corporate real estate. Post 3x/week. Case studies, thought leadership.\n- Houzz: project discovery by commercial sector.\n- Instagram: secondary. 2-3x/week. Process and completed project imagery.`,
-        };
+async function generate() {
+  const topic = document.getElementById('topic').value.trim();
+  const firmType = document.getElementById('firmType').value;
+  const projectType = document.getElementById('projectType').value.trim();
+  const idealClient = document.getElementById('idealClient').value.trim();
+  const designStyle = document.getElementById('designStyle').value.trim();
+  const platforms = getSelectedPlatforms();
 
-        const system = `You are an expert content strategist specializing in marketing for interior design firms. You understand the distinct difference between residential, hospitality, and commercial interior design businesses.
+  if (!topic) { showError('Please enter a content topic or project focus.'); return; }
+  if (!firmType) { showError('Please select a firm type.'); return; }
+  hideError();
+
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  btn.textContent = 'Generating your brief...';
+  document.getElementById('output').style.display = 'none';
+
+  const platformList = platforms.length ? platforms.join(', ') : 'Instagram, Pinterest';
+
+  const platformGuidance = {
+    residential: `- Instagram: primary portfolio channel. 3-4x/week. Project reveals, before/afters, process shots, Reels for reach. Location + style keywords in captions. Max 5 hashtags.\n- Pinterest: primary discovery. 5-10x/week. SEO-first titles and descriptions.\n- LinkedIn: credibility layer. 1-2x/week. Professional case studies.\n- TikTok: cold reach. 2-3x/week. Before/after reveals, casual tone.\n- Houzz: discovery for renovation clients. Portfolio updated by room and style.`,
+    hospitality: `- LinkedIn: PRIMARY channel. Developers, hotel groups, operators, architects. 3x/week. Case study format.\n- Houzz: PRIMARY for project discovery. Portfolio by project type and sector.\n- Instagram: secondary. 2-3x/week. High-production imagery. Max 5 hashtags.\n- Pinterest: ambient discovery. Keyword-rich descriptions.`,
+    commercial: `- LinkedIn: PRIMARY channel. Developers, property managers, corporate real estate. 3x/week. Case studies, thought leadership.\n- Houzz: project discovery by commercial sector.\n- Instagram: secondary. 2-3x/week. Process and completed project imagery.`
+  };
+
+  const system = `You are an expert content strategist for interior design firms. You understand residential, hospitality, and commercial design businesses deeply.
 
 KEY PRINCIPLES:
-- Residential firms market to homeowners: visual storytelling, before/afters, process documentation, and aspirational content drive inquiries.
-- Hospitality and commercial firms market to developers, operators, and architects: case studies, outcomes, and professional credibility matter most.
+- Residential firms market to homeowners: visual storytelling, before/afters, process documentation drive inquiries.
+- Hospitality and commercial firms market to developers, operators, architects: case studies and credibility matter most.
 - Content should be project-based and specific, not generic tips.
-- Instagram now functions as a search engine -- location and style keywords in captions matter.
-- Pinterest is SEO-first, boards organized by room type and aesthetic.
+- Instagram functions as a search engine -- location and style keywords matter.
+- Pinterest is SEO-first.
 - Houzz is critical for project-based discovery.
 
 PLATFORM GUIDANCE:
-${platformGuidance[firmType] || ""}
+${platformGuidance[firmType] || ''}
 
 CONTENT TYPES THAT BUILD TRUST:
 1. Process documentation -- material selections, site visits, work in progress
-2. Before/after reveals -- highest engagement, most shareable
+2. Before/after reveals -- highest engagement
 3. Material and finish flat lays -- aspirational, saveable
 4. Project case studies -- scope, constraints, outcome
-5. Behind-the-scenes -- sourcing trips, studio days, client presentations
+5. Behind-the-scenes -- sourcing trips, studio days
 6. Local and lifestyle context -- neighborhood guides, vendor spotlights
 
-Respond with ONLY a raw JSON object, no markdown, no explanation:
+Respond with ONLY a raw JSON object, no markdown:
 {"platform_cadence":"...","caption_hooks":"...","content_types":"...","seo_keywords":"...","visual_direction":"..."}
 
-For seo_keywords: include primary keyword, 4-6 secondary keywords, Pinterest keyword clusters (phrase-based, no #), and platform-specific hashtag sets. Instagram max 5 hashtags. LinkedIn 3-5 professional hashtags. TikTok 3-5 hashtags. Houzz and Pinterest use keywords only, no hashtags. Only include hashtags for platforms the user selected.`;
+For seo_keywords: primary keyword, 4-6 secondary keywords, Pinterest keyword clusters (phrase-based, no #), platform-specific hashtags. Instagram max 5, LinkedIn 3-5 professional, TikTok 3-5. Houzz and Pinterest keywords only.`;
 
-        try {
-          const res = await fetch("https://studio-lou-rag.onrender.com/api/claude", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              system,
-              max_tokens: 2000,
-              messages: [{
-                role: "user",
-                content: `Generate a content brief for this interior design firm:\n\nFirm type: ${firmType}\nContent topic / focus: ${topic}\nProject type: ${projectType || "not specified"}\nIdeal client: ${idealClient || "not specified"}\nDesign style: ${designStyle || "not specified"}\nPlatforms: ${platformList}\n\nBe specific and actionable, tailored to how ${firmType} design firms win clients through content.`
-              }]
-            })
-          });
+  try {
+    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system,
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: `Generate a content brief:\n\nFirm type: ${firmType}\nTopic: ${topic}\nProject type: ${projectType || 'not specified'}\nIdeal client: ${idealClient || 'not specified'}\nDesign style: ${designStyle || 'not specified'}\nPlatforms: ${platformList}\n\nBe specific and actionable for ${firmType} design firms.`
+        }]
+      })
+    });
 
-          const data = await res.json();
-          if (!res.ok) throw new Error(data?.error?.message || "API error " + res.status);
-          const raw = data.content?.[0]?.text || "";
-          const clean = raw.replace(/```json|```/g, "").trim();
-          setBrief(JSON.parse(clean));
-        } catch (e) {
-          setError("Error: " + e.message);
-        } finally {
-          setLoading(false);
-        }
-      }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'API error ' + res.status);
+    const raw = data.content?.[0]?.text || '';
+    const clean = raw.replace(/```json|```/g, '').trim();
+    currentBrief = JSON.parse(clean);
+    renderBrief(currentBrief);
+  } catch(e) {
+    showError('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✦ Generate brief';
+  }
+}
 
-      function copyAll() {
-        if (!brief) return;
-        const text = BLOCK_META.filter(m => brief[m.key]).map(m => `${m.label}\n${brief[m.key]}`).join("\n\n");
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
+function renderBrief(brief) {
+  const container = document.getElementById('blocks');
+  container.innerHTML = '';
+  BLOCK_META.forEach(({ key, label }) => {
+    if (!brief[key]) return;
+    const div = document.createElement('div');
+    div.className = 'block';
+    div.innerHTML = `<div class="block-label">${label}</div><div class="block-content">${brief[key]}</div>`;
+    container.appendChild(div);
+  });
+  document.getElementById('output').style.display = 'block';
+  document.getElementById('output').scrollIntoView({ behavior: 'smooth' });
+}
 
-      return (
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+function copyAll() {
+  if (!currentBrief) return;
+  const text = BLOCK_META.filter(m => currentBrief[m.key]).map(m => `${m.label}\n${currentBrief[m.key]}`).join('\n\n');
+  navigator.clipboard.writeText(text);
+  const btn = event.target;
+  btn.textContent = '✓ Copied';
+  setTimeout(() => btn.textContent = 'Copy all', 2000);
+}
 
-          {/* Firm type */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Firm type</label>
-            <div style={{ position: "relative" }}>
-              <select value={firmType} onChange={e => handleFirmTypeChange(e.target.value)} style={{ ...inputStyle, paddingRight: 36 }}>
-                <option value="">Select firm type</option>
-                <option value="residential">Residential design firm</option>
-                <option value="hospitality">Hospitality design firm</option>
-                <option value="commercial">Commercial / workplace design firm</option>
-              </select>
-              <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#6b6560" }}>▾</div>
-            </div>
-          </div>
+function downloadPDF() {
+  if (!currentBrief) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 48;
+  const contentW = pageW - margin * 2;
+  let y = 0;
 
-          {/* Topic */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Content topic / focus</label>
-            <input value={topic} onChange={e => setTopic(e.target.value)}
-              placeholder="e.g. master suite reveal, sourcing trip to High Point, boutique hotel lobby project"
-              style={inputStyle} />
-          </div>
+  doc.setFillColor(215, 232, 188);
+  doc.rect(0, 0, pageW, 64, 'F');
+  doc.setFillColor(88, 43, 54);
+  doc.rect(0, 64, pageW, 3, 'F');
+  doc.setFillColor(88, 43, 54);
+  doc.roundedRect(margin, 14, 36, 36, 4, 4, 'F');
+  doc.setTextColor(215, 232, 188);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('SL', margin + 18, 37, { align: 'center' });
+  doc.setTextColor(88, 43, 54);
+  doc.setFontSize(16);
+  doc.text('Content Brief', margin + 48, 30);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 80, 80);
+  doc.text('Studio Lou · for interior design firms', margin + 48, 46);
+  doc.setFontSize(9);
+  doc.setTextColor(140, 120, 120);
+  doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageW - margin, 46, { align: 'right' });
 
-          {/* Grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-            <div>
-              <label style={labelStyle}>Project type</label>
-              <input value={projectType} onChange={e => setProjectType(e.target.value)}
-                placeholder="e.g. full home renovation, hotel lobby"
-                style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Design style</label>
-              <input value={designStyle} onChange={e => setDesignStyle(e.target.value)}
-                placeholder="e.g. modern organic, coastal, transitional"
-                style={inputStyle} />
-            </div>
-          </div>
+  y = 90;
+  const firmType = document.getElementById('firmType').value;
+  const topic = document.getElementById('topic').value;
+  const designStyle = document.getElementById('designStyle').value;
+  const platforms = getSelectedPlatforms();
 
-          {/* Ideal client */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Ideal client</label>
-            <input value={idealClient} onChange={e => setIdealClient(e.target.value)}
-              placeholder="e.g. high-end homeowners in Austin, boutique hotel developers"
-              style={inputStyle} />
-          </div>
+  doc.setFillColor(245, 242, 238);
+  doc.roundedRect(margin, y, contentW, 36, 4, 4, 'F');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(88, 43, 54);
+  const meta = [firmType && `Firm: ${firmType}`, topic && `Topic: ${topic}`, designStyle && `Style: ${designStyle}`, platforms.length && `Platforms: ${platforms.join(', ')}`].filter(Boolean).join('   ·   ');
+  doc.text(meta, margin + 12, y + 22);
+  y += 52;
 
-          {/* Platforms */}
-          <div style={{ marginBottom: 24 }}>
-            <label style={labelStyle}>
-              Platforms{firmType ? " · recommended pre-selected for your firm type" : ""}
-            </label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {PLATFORMS.map(p => (
-                <div key={p} onClick={() => togglePlatform(p)} style={{
-                  fontSize: 15, padding: "8px 18px",
-                  border: "1px solid #d0c9bc", borderRadius: 50,
-                  cursor: "pointer",
-                  background: selectedPlatforms.includes(p) ? "#582b36" : "#ffffff",
-                  color: selectedPlatforms.includes(p) ? "#e7dbbf" : "#433E3C",
-                  userSelect: "none", transition: "all 0.15s",
-                  fontFamily: "DM Sans, sans-serif"
-                }}>{p}</div>
-              ))}
-            </div>
-          </div>
+  BLOCK_META.forEach(({ key, label }) => {
+    if (!currentBrief[key]) return;
+    if (y > 680) { doc.addPage(); y = margin; }
+    doc.setFillColor(88, 43, 54);
+    doc.roundedRect(margin, y, contentW, 22, 3, 3, 'F');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(215, 232, 188);
+    doc.text(label.replace(/[^\x00-\x7F]/g, '').trim().toUpperCase(), margin + 10, y + 14);
+    y += 28;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(40, 30, 30);
+    const lines = doc.splitTextToSize(currentBrief[key], contentW - 8);
+    lines.forEach(line => {
+      if (y > 720) { doc.addPage(); y = margin; }
+      doc.text(line, margin + 4, y);
+      y += 14;
+    });
+    y += 16;
+  });
 
-          {/* Generate button */}
-          <button onClick={generate} disabled={loading} style={{
-            padding: "14px 36px", background: "#A6BE47", color: "#ffffff",
-            border: "none", borderRadius: 50, fontSize: 16, fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.7 : 1,
-            fontFamily: "DM Sans, sans-serif"
-          }}>
-            {loading ? "Generating your brief..." : "✦ Generate brief"}
-          </button>
-
-          {/* Error */}
-          {error && (
-            <div style={{ marginTop: 16, padding: "12px 16px", background: "#fdecea", color: "#c0392b", borderRadius: 10, fontSize: 15, fontFamily: "DM Sans, sans-serif" }}>
-              {error}
-            </div>
-          )}
-
-          {/* Output */}
-          {brief && (
-            <div style={{ marginTop: 40, paddingTop: 32, borderTop: "1px solid #e8e0d5" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 600, color: "#433E3C", fontFamily: "DM Sans, sans-serif" }}>Content brief</h2>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={copyAll} style={{
-                    fontSize: 14, color: "#433E3C", background: "none",
-                    border: "1px solid #d0c9bc", borderRadius: 50,
-                    padding: "6px 16px", cursor: "pointer", fontFamily: "DM Sans, sans-serif"
-                  }}>
-                    {copied ? "✓ Copied" : "Copy all"}
-                  </button>
-                  <button onClick={downloadPDF} style={{
-                    fontSize: 14, color: "#ffffff", background: "#A6BE47",
-                    border: "none", borderRadius: 50,
-                    padding: "6px 16px", cursor: "pointer", fontFamily: "DM Sans, sans-serif", fontWeight: 600
-                  }}>
-                    ↓ Download PDF
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {BLOCK_META.filter(m => brief[m.key]).map(m => (
-                  <div key={m.key} style={{
-                    background: "#f5f0e8", border: "1px solid #e8e0d5",
-                    borderRadius: 14, padding: "18px 20px"
-                  }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#582b36", marginBottom: 10, fontFamily: "DM Sans, sans-serif" }}>
-                      {m.icon} {m.label}
-                    </div>
-                    <div style={{ fontSize: 15, lineHeight: 1.75, whiteSpace: "pre-wrap", color: "#433E3C", fontFamily: "DM Sans, sans-serif" }}>
-                      {brief[m.key]}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+  doc.setFillColor(215, 232, 188);
+  doc.rect(0, doc.internal.pageSize.getHeight() - 28, pageW, 28, 'F');
+  doc.setFontSize(8);
+  doc.setTextColor(88, 43, 54);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Generated by Studio Lou · studiolouinteriors.com', pageW / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+  doc.save(`studio-lou-content-brief-${Date.now()}.pdf`);
+}
+</script>
 </body>
 </html>
