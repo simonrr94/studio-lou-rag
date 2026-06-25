@@ -748,7 +748,7 @@ def claude_proxy():
         data = request.json
         system = data.get("system", "")
         messages = data.get("messages", [])
-        max_tokens = data.get("max_tokens", 1000)
+        max_tokens = data.get("max_tokens", 2000)
 
         response = claude.messages.create(
             model="claude-sonnet-4-6",
