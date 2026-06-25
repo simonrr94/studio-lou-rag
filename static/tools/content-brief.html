@@ -309,8 +309,10 @@ For seo_keywords: primary keyword, 4-6 secondary keywords, Pinterest keyword clu
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error?.message || 'API error ' + res.status);
     const raw = data.content?.[0]?.text || '';
+    console.log('Raw API response:', raw);
     const clean = raw.replace(/```json|```/g, '').trim();
     currentBrief = JSON.parse(clean);
+    console.log('Parsed brief:', currentBrief);
     renderBrief(currentBrief);
   } catch(e) {
     showError('Error: ' + e.message);
@@ -325,9 +327,10 @@ function renderBrief(brief) {
   container.innerHTML = '';
   BLOCK_META.forEach(({ key, label }) => {
     if (!brief[key]) return;
+    const val = typeof brief[key] === 'string' ? brief[key] : JSON.stringify(brief[key], null, 2);
     const div = document.createElement('div');
     div.className = 'block';
-    div.innerHTML = `<div class="block-label">${label}</div><div class="block-content">${brief[key]}</div>`;
+    div.innerHTML = `<div class="block-label">${label}</div><div class="block-content">${val}</div>`;
     container.appendChild(div);
   });
   document.getElementById('output').style.display = 'block';
