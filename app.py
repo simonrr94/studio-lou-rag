@@ -629,10 +629,6 @@ def bio_generator():
 def static_files(filename):
     return send_from_directory("static", filename)
 
-@app.route("/static/<path:filename>")
-def static_files(filename):
-    return send_from_directory("static", filename)
-
 @app.route("/ask", methods=["POST"])
 def ask():
     query = request.json.get("query", "")
