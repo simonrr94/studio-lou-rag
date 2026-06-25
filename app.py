@@ -625,6 +625,14 @@ def content_brief():
 def bio_generator():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "bio-generator.html")
 
+@app.route("/tools/hashtag-research")
+def hashtag_research():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "hashtag-research.html")
+
+@app.route("/tools/marketing-audit")
+def marketing_audit():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "marketing-audit.html")
+
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)
