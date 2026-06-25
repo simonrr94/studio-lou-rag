@@ -287,7 +287,7 @@ CONTENT TYPES THAT BUILD TRUST:
 5. Behind-the-scenes -- sourcing trips, studio days
 6. Local and lifestyle context -- neighborhood guides, vendor spotlights
 
-Respond with ONLY a raw JSON object, no markdown:
+Respond with ONLY a raw JSON object, no markdown. Every value must be a plain string, not a nested object. Use line breaks (\n) to separate multiple points within each field. Do not nest objects inside the values:
 {"platform_cadence":"...","caption_hooks":"...","content_types":"...","seo_keywords":"...","visual_direction":"..."}
 
 For seo_keywords: primary keyword, 4-6 secondary keywords, Pinterest keyword clusters (phrase-based, no #), platform-specific hashtags. Instagram max 5, LinkedIn 3-5 professional, TikTok 3-5. Houzz and Pinterest keywords only.`;
@@ -322,15 +322,23 @@ For seo_keywords: primary keyword, 4-6 secondary keywords, Pinterest keyword clu
   }
 }
 
+function flattenValue(val) {
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object' && val !== null) {
+    return Object.entries(val).map(([k, v]) => `${k.replace(/_/g, ' ').toUpperCase()}\n${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n\n');
+  }
+  return String(val);
+}
+
 function renderBrief(brief) {
   const container = document.getElementById('blocks');
   container.innerHTML = '';
   BLOCK_META.forEach(({ key, label }) => {
     if (!brief[key]) return;
-    const val = typeof brief[key] === 'string' ? brief[key] : JSON.stringify(brief[key], null, 2);
+    const val = flattenValue(brief[key]);
     const div = document.createElement('div');
     div.className = 'block';
-    div.innerHTML = `<div class="block-label">${label}</div><div class="block-content">${val}</div>`;
+    div.innerHTML = `<div class="block-label">${label}</div><div class="block-content">${val.replace(/\n/g, '<br>')}</div>`;
     container.appendChild(div);
   });
   document.getElementById('output').style.display = 'block';
@@ -404,7 +412,7 @@ function downloadPDF() {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(40, 30, 30);
-    const lines = doc.splitTextToSize(currentBrief[key], contentW - 8);
+    const lines = doc.splitTextToSize(flattenValue(currentBrief[key]), contentW - 8);
     lines.forEach(line => {
       if (y > 720) { doc.addPage(); y = margin; }
       doc.text(line, margin + 4, y);
