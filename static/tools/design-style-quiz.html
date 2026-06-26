@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design Style Quiz — Studio Lou</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300;1,9..40,400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 1800px;
+      background: #FAF9F6;
+      font-family: 'DM Sans', sans-serif;
+      color: #433E3C;
+    }
+
+    .quiz-wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    /* ── PROGRESS BAR ── */
+    .progress-bar-track {
+      width: 100%;
+      height: 3px;
+      background: #d0c9bc;
+      border-radius: 99px;
+      margin-bottom: 40px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #582b36;
+      border-radius: 99px;
+      transition: width 0.4s ease;
+    }
+
+    /* ── SCREENS ── */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── QUESTION ── */
+    .question-number {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #6b6560;
+      margin-bottom: 12px;
+    }
+    .question-text {
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.3;
+      color: #433E3C;
+      margin-bottom: 28px;
+    }
+    .options-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .option-btn {
+      width: 100%;
+      text-align: left;
+      padding: 16px 20px;
+      background: #ffffff;
+      border: 1.5px solid #d0c9bc;
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      color: #433E3C;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+      line-height: 1.4;
+    }
+    .option-btn:hover {
+      border-color: #582b36;
+      background: #fdf6f7;
+      transform: translateX(2px);
+    }
+    .option-btn.selected {
+      border-color: #582b36;
+      background: #fdf6f7;
+    }
+    .option-label {
+      font-weight: 700;
+      color: #582b36;
+      margin-right: 8px;
+    }
+
+    /* ── EMAIL GATE ── */
+    .gate-headline {
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .gate-sub {
+      font-size: 15px;
+      color: #6b6560;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .email-input {
+      width: 100%;
+      padding: 14px 18px;
+      border: 1.5px solid #d0c9bc;
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      color: #433E3C;
+      background: #ffffff;
+      margin-bottom: 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .email-input:focus { border-color: #582b36; }
+    .email-note {
+      font-size: 12px;
+      color: #6b6560;
+      margin-bottom: 24px;
+    }
+
+    /* ── RESULT ── */
+    .result-eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #582b36;
+      margin-bottom: 16px;
+    }
+    .result-primary {
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1.1;
+      color: #433E3C;
+      margin-bottom: 6px;
+    }
+    .result-secondary {
+      font-size: 16px;
+      font-weight: 400;
+      color: #6b6560;
+      margin-bottom: 28px;
+    }
+    .result-secondary strong {
+      color: #582b36;
+      font-weight: 600;
+    }
+    .result-card {
+      background: #f5f0e8;
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+    .result-description {
+      font-size: 15px;
+      line-height: 1.75;
+      color: #433E3C;
+    }
+    .result-description p + p { margin-top: 14px; }
+
+    .brands-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #6b6560;
+      margin-bottom: 12px;
+    }
+    .brands-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+    .brand-pill {
+      padding: 7px 14px;
+      background: #ffffff;
+      border: 1.5px solid #d0c9bc;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #433E3C;
+    }
+
+    .cta-block {
+      background: #582b36;
+      border-radius: 16px;
+      padding: 32px 28px;
+      text-align: center;
+    }
+    .cta-block h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fdfaf5;
+      margin-bottom: 8px;
+    }
+    .cta-block p {
+      font-size: 14px;
+      color: rgba(253,250,245,0.75);
+      line-height: 1.6;
+      margin-bottom: 22px;
+    }
+
+    /* ── BUTTONS ── */
+    .btn-primary {
+      display: inline-block;
+      padding: 13px 36px;
+      background: #A6BE47;
+      color: #433E3C;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      text-decoration: none;
+    }
+    .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      display: inline-block;
+      padding: 13px 36px;
+      background: transparent;
+      color: #433E3C;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      border: 1.5px solid #d0c9bc;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      margin-top: 16px;
+    }
+    .btn-secondary:hover { border-color: #433E3C; }
+
+    .btn-white {
+      display: inline-block;
+      padding: 13px 36px;
+      background: #fdfaf5;
+      color: #582b36;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      text-decoration: none;
+    }
+    .btn-white:hover { opacity: 0.88; }
+
+    /* ── NAV ROW ── */
+    .nav-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 28px;
+    }
+    .back-btn {
+      background: none;
+      border: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: #6b6560;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .back-btn:hover { color: #433E3C; }
+
+    /* ── LOADING ── */
+    .loading-wrap {
+      text-align: center;
+      padding: 48px 0;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #d0c9bc;
+      border-top-color: #582b36;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text {
+      font-size: 15px;
+      color: #6b6560;
+      line-height: 1.6;
+    }
+    .loading-text strong {
+      display: block;
+      font-size: 17px;
+      color: #433E3C;
+      margin-bottom: 6px;
+    }
+
+    /* ── ERROR ── */
+    .error-msg {
+      background: #fdf6f7;
+      border: 1.5px solid #e8c4ca;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 14px;
+      color: #582b36;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    @media (max-width: 480px) {
+      .intro-headline { font-size: 26px; }
+      .result-primary { font-size: 28px; }
+      .question-text { font-size: 19px; }
+    }
+  </style>
+</head>
+<body>
+<div class="quiz-wrap">
+
+  <!-- PROGRESS BAR -->
+  <div class="progress-bar-track" id="progressTrack">
+    <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+  </div>
+
+  <!-- ── SCREEN: QUESTION ── -->
+  <div class="screen active" id="screen-question">
+    <p class="question-number" id="questionNumber">Question 1 of 8</p>
+    <p class="question-text" id="questionText"></p>
+    <div class="options-grid" id="optionsGrid"></div>
+    <div class="nav-row">
+      <button class="back-btn" id="backBtn" onclick="goBack()">← Back</button>
+      <button class="btn-primary" id="nextBtn" onclick="goNext()" disabled>Next →</button>
+    </div>
+  </div>
+
+  <!-- ── SCREEN: EMAIL GATE ── -->
+  <div class="screen" id="screen-email">
+    <p class="intro-eyebrow">Almost there</p>
+    <h2 class="gate-headline">Where should we send your style profile?</h2>
+    <p class="gate-sub">We'll show your results right here — and send a copy to your inbox so you have it when you're ready to act on it.</p>
+    <div class="error-msg" id="emailError">Please enter a valid email address.</div>
+    <input type="email" class="email-input" id="emailInput" placeholder="your@email.com" />
+    <p class="email-note">No spam, ever. Just your results.</p>
+    <button class="btn-primary" id="submitBtn" onclick="submitQuiz()">See my results →</button>
+    <br>
+    <button class="btn-secondary" onclick="skipEmail()">Skip and see results</button>
+  </div>
+
+  <!-- ── SCREEN: LOADING ── -->
+  <div class="screen" id="screen-loading">
+    <div class="loading-wrap">
+      <div class="spinner"></div>
+      <p class="loading-text">
+        <strong>Pulling your profile together...</strong>
+        Reading your answers and finding the right words for your style.
+      </p>
+    </div>
+  </div>
+
+  <!-- ── SCREEN: RESULT ── -->
+  <div class="screen" id="screen-result">
+    <p class="result-eyebrow">Your Studio Lou Style Profile</p>
+    <h2 class="result-primary" id="resultPrimary"></h2>
+    <p class="result-secondary">with a <strong id="resultSecondary"></strong> influence</p>
+    <div class="result-card">
+      <div class="result-description" id="resultDescription"></div>
+    </div>
+    <p class="brands-label">You'd probably love</p>
+    <div class="brands-grid" id="brandPills"></div>
+    <div class="cta-block">
+      <h3>Want help bringing this to life?</h3>
+      <p>Studio Lou offers e-design services built around your style, your space, and your actual budget. No generic mood boards.</p>
+      <a href="https://www.studiolouinteriors.com/contact" target="_blank" class="btn-white">Work with Studio Lou →</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── QUESTIONS ──
+  const QUESTIONS = [
+    {
+      text: "When you walk into a room and immediately feel at home, it usually looks like:",
+      options: [
+        "Clean lines, minimal clutter, everything has a purpose",
+        "Layered and collected — art, books, objects that tell a story",
+        "Warm and timeless — quality furniture, classic silhouettes",
+        "Retro-inspired with character — tapered legs, bold accent colors, vintage finds"
+      ]
+    },
+    {
+      text: "Your ideal color palette is:",
+      options: [
+        "Warm neutrals — cream, linen, camel, soft terracotta",
+        "Cool and crisp — white, grey, black, the occasional pop",
+        "Rich and saturated — deep green, navy, burgundy, cognac",
+        "Earthy and natural — sage, clay, sand, warm wood tones"
+      ]
+    },
+    {
+      text: "When it comes to pattern and texture, you:",
+      options: [
+        "Keep it subtle — texture yes, pattern rarely",
+        "Love a mix — layered rugs, throw pillows, a printed wallpaper moment",
+        "Go bold — pattern is a design statement, not an afterthought",
+        "Let materials do the talking — linen, marble, cane, raw wood"
+      ]
+    },
+    {
+      text: "Your ideal Saturday at home looks like:",
+      options: [
+        "Everything in its place, calm and quiet — your home is your reset",
+        "People over — it's a space meant to be lived in loudly",
+        "Cozy and atmospheric — soft lighting, layers, a candle burning somewhere",
+        "Productive but beautiful — you work from home and your space needs to do both"
+      ]
+    },
+    {
+      text: "When you're shopping for furniture, you gravitate toward:",
+      options: [
+        "Investment pieces — fewer things, better quality",
+        "The find — vintage, one-of-a-kind, something with history",
+        "Accessible but elevated — CB2, Article, West Elm done right",
+        "The statement piece first, then build around it"
+      ]
+    },
+    {
+      text: "Clutter in your home makes you feel:",
+      options: [
+        "Genuinely anxious — a clear space is a clear mind",
+        "Kind of fine actually — organized chaos is still cozy",
+        "Motivated to edit, but you like having things around",
+        "Like something needs to change — you want beauty and function equally"
+      ]
+    },
+    {
+      text: "The room you most want to transform right now is:",
+      options: [
+        "Living room",
+        "Primary bedroom",
+        "Home office or workspace",
+        "Dining room or another space"
+      ]
+    },
+    {
+      text: "Where are you in your design process?",
+      options: [
+        "Early stages — gathering inspiration and figuring out my style",
+        "I know what I want, I just need help executing it",
+        "I'm in the middle of a move or renovation",
+        "I've been sitting on this project for a while and I'm ready to actually do it"
+      ]
+    }
+  ];
+
+  const LABELS = ['A', 'B', 'C', 'D'];
+
+  // ── STATE ──
+  let currentQ = 0;
+  let answers = new Array(8).fill(null);
+
+  // ── HELPERS ──
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-' + id).classList.add('active');
+  }
+
+  function updateProgress() {
+    const pct = ((currentQ) / 8) * 100;
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  // ── FLOW ──
+  function renderQuestion() {
+    const q = QUESTIONS[currentQ];
+    document.getElementById('questionNumber').textContent = 'Question ' + (currentQ + 1) + ' of 8';
+    document.getElementById('questionText').textContent = q.text;
+    document.getElementById('backBtn').style.visibility = currentQ === 0 ? 'hidden' : 'visible';
+
+    const grid = document.getElementById('optionsGrid');
+    grid.innerHTML = '';
+    q.options.forEach((opt, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'option-btn' + (answers[currentQ] === i ? ' selected' : '');
+      btn.innerHTML = '<span class="option-label">' + LABELS[i] + '.</span>' + opt;
+      btn.onclick = () => selectOption(i);
+      grid.appendChild(btn);
+    });
+
+    const nextBtn = document.getElementById('nextBtn');
+    nextBtn.disabled = answers[currentQ] === null;
+    nextBtn.textContent = currentQ === 7 ? 'See my results →' : 'Next →';
+    updateProgress();
+  }
+
+  function selectOption(idx) {
+    answers[currentQ] = idx;
+    document.querySelectorAll('.option-btn').forEach((b, i) => {
+      b.classList.toggle('selected', i === idx);
+    });
+    document.getElementById('nextBtn').disabled = false;
+  }
+
+  function goNext() {
+    if (answers[currentQ] === null) return;
+    if (currentQ < 7) {
+      currentQ++;
+      renderQuestion();
+    } else {
+      document.getElementById('progressFill').style.width = '100%';
+      showScreen('email');
+    }
+  }
+
+  function goBack() {
+    if (currentQ > 0) {
+      currentQ--;
+      renderQuestion();
+    }
+  }
+
+  // ── EMAIL + SUBMIT ──
+  function skipEmail() {
+    document.getElementById('emailInput').value = '';
+    submitQuiz();
+  }
+
+  async function submitQuiz() {
+    const email = document.getElementById('emailInput').value.trim();
+    const emailError = document.getElementById('emailError');
+
+    // Validate only if they typed something
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      emailError.style.display = 'block';
+      return;
+    }
+    emailError.style.display = 'none';
+    document.getElementById('submitBtn').disabled = true;
+
+    showScreen('loading');
+
+    // Build answer text for Claude
+    const answerLines = QUESTIONS.map((q, i) => {
+      const chosenIdx = answers[i];
+      const chosenText = chosenIdx !== null ? q.options[chosenIdx] : 'No answer';
+      return 'Q' + (i + 1) + ': ' + q.text + '\nAnswer: ' + chosenText;
+    }).join('\n\n');
+
+    const systemPrompt = `You are a professional interior designer and brand voice for Studio Lou, a Phoenix-based virtual interior design consultancy run by Lauren Payne. Your tone is warm, opinionated, and direct — like a designer friend giving real advice, not generic lifestyle copy.
+
+You will receive the answers to an 8-question design style quiz from a homeowner. Based on their answers, determine:
+1. Their PRIMARY design style (choose exactly one from: Modern, Traditional, Transitional, Mid-Century Modern, Contemporary)
+2. Their SECONDARY influence (choose exactly one from: Japandi, Moody, Glam, Eclectic, Coastal, Organic, Maximalist, Bohemian, Grandmillennial, Minimalist)
+3. A 3-paragraph result description written in Studio Lou voice — warm, specific, earned. First paragraph describes their primary style and what it says about them. Second paragraph brings in the secondary influence and how it nuances the primary. Third paragraph gives one concrete piece of design direction they can act on.
+4. Exactly 4 brand/retailer callouts that genuinely fit this combination (real brands: e.g. Serena & Lily, CB2, Article, Rejuvenation, Anthropologie Home, McGee & Co, Lulu and Georgia, West Elm, RH, World Market, Arhaus, Pottery Barn, IKEA, Crate & Barrel, Room & Board, Blu Dot, etc.)
+
+Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exactly this shape:
+{
+  "primaryStyle": "...",
+  "secondaryInfluence": "...",
+  "description": "Paragraph one here.\n\nParagraph two here.\n\nParagraph three here.",
+  "brands": ["Brand 1", "Brand 2", "Brand 3", "Brand 4"]
+}`;
+
+    let resultData = null;
+
+    try {
+      const response = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system: systemPrompt,
+          messages: [{ role: 'user', content: answerLines }],
+          max_tokens: 1000
+        })
+      });
+
+      const data = await response.json();
+      const text = data.content[0].text.trim();
+      // Strip any accidental markdown fences
+      const clean = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      resultData = JSON.parse(clean);
+    } catch (err) {
+      console.error('Claude API error:', err);
+      showScreen('email');
+      document.getElementById('submitBtn').disabled = false;
+      document.getElementById('emailError').textContent = 'Something went wrong generating your results. Please try again.';
+      document.getElementById('emailError').style.display = 'block';
+      return;
+    }
+
+    // Log to Google Sheet
+    if (email) {
+      logToSheet({
+        email,
+        answers,
+        primaryStyle: resultData.primaryStyle,
+        secondaryInfluence: resultData.secondaryInfluence
+      });
+    }
+
+    // Render result
+    document.getElementById('resultPrimary').textContent = resultData.primaryStyle;
+    document.getElementById('resultSecondary').textContent = resultData.secondaryInfluence;
+
+    const descEl = document.getElementById('resultDescription');
+    descEl.innerHTML = '';
+    resultData.description.split('\n\n').forEach(para => {
+      if (para.trim()) {
+        const p = document.createElement('p');
+        p.textContent = para.trim();
+        descEl.appendChild(p);
+      }
+    });
+
+    const brandsGrid = document.getElementById('brandPills');
+    brandsGrid.innerHTML = '';
+    resultData.brands.forEach(brand => {
+      const pill = document.createElement('span');
+      pill.className = 'brand-pill';
+      pill.textContent = brand;
+      brandsGrid.appendChild(pill);
+    });
+
+    document.getElementById('progressTrack').style.display = 'none';
+    showScreen('result');
+  }
+
+  // ── INIT ──
+  renderQuestion();
+
+  // ── SHEET LOGGING ──
+  function logToSheet(payload) {
+    const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzfZb7O-nnLV9ogBLOGbFZbHoqska3vniT8aDOpYtnxidjM5Fg5YlFXUW0no4nStGTt1g/exec';
+    if (SHEET_URL === 'PASTE_YOUR_APPS_SCRIPT_URL_HERE') return;
+
+    const body = {
+      email: payload.email || '',
+      q1: QUESTIONS[0].options[payload.answers[0]] || '',
+      q2: QUESTIONS[1].options[payload.answers[1]] || '',
+      q3: QUESTIONS[2].options[payload.answers[2]] || '',
+      q4: QUESTIONS[3].options[payload.answers[3]] || '',
+      q5: QUESTIONS[4].options[payload.answers[4]] || '',
+      q6: QUESTIONS[5].options[payload.answers[5]] || '',
+      q7: QUESTIONS[6].options[payload.answers[6]] || '',
+      q8: QUESTIONS[7].options[payload.answers[7]] || '',
+      primaryStyle: payload.primaryStyle,
+      secondaryInfluence: payload.secondaryInfluence
+    };
+
+    fetch(SHEET_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).catch(() => {}); // Silent fail — don't block the result screen
+  }
+</script>
+</body>
+</html>
