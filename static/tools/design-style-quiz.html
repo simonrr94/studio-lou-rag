@@ -9,8 +9,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      min-height: auto;
-      height: auto;
+      min-height: 1800px;
       background: #FAF9F6;
       font-family: 'DM Sans', sans-serif;
       color: #433E3C;
@@ -446,30 +445,9 @@
   let answers = new Array(8).fill(null);
 
   // ── HELPERS ──
-  function reportHeight() {
-    const height = Math.max(
-      document.body.scrollHeight,
-      document.body.offsetHeight,
-      document.documentElement.scrollHeight,
-      document.documentElement.offsetHeight
-    );
-    window.parent.postMessage({ type: 'studio-lou-height', height: height + 32 }, '*');
-  }
-
-  // Watch for any DOM changes and report updated height
-  const heightObserver = new MutationObserver(function() {
-    setTimeout(reportHeight, 50);
-  });
-
-  window.addEventListener('load', function() {
-    heightObserver.observe(document.body, { childList: true, subtree: true });
-    setTimeout(reportHeight, 100);
-  });
-
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById('screen-' + id).classList.add('active');
-    setTimeout(reportHeight, 100);
   }
 
   function updateProgress() {
@@ -631,9 +609,6 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
 
     document.getElementById('progressTrack').style.display = 'none';
     showScreen('result');
-    // Re-measure after results are fully painted
-    setTimeout(reportHeight, 200);
-    setTimeout(reportHeight, 600);
   }
 
   // ── INIT ──
