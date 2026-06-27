@@ -224,7 +224,7 @@
     .btn-white {
       display: inline-block;
       padding: 13px 36px;
-      background: #fdfaf5;
+      background: #FAF9F6;
       color: #582b36;
       font-family: 'DM Sans', sans-serif;
       font-size: 15px;
@@ -319,7 +319,7 @@
     <div class="options-grid" id="optionsGrid"></div>
     <div class="nav-row">
       <button class="back-btn" id="backBtn" onclick="goBack()">← Back</button>
-      <button class="btn-primary" id="nextBtn" onclick="goNext()" disabled>Next →</button>
+      <button class="btn-primary" id="nextBtn" onclick="goNext()" disabled>✦ Next →</button>
     </div>
   </div>
 
@@ -331,7 +331,7 @@
     <div class="error-msg" id="emailError">Please enter a valid email address.</div>
     <input type="email" class="email-input" id="emailInput" placeholder="your@email.com" />
     <p class="email-note">No spam, ever. Just your results.</p>
-    <button class="btn-primary" id="submitBtn" onclick="submitQuiz()">See my results →</button>
+    <button class="btn-primary" id="submitBtn" onclick="submitQuiz()">✦ See my results →</button>
     <br>
     <button class="btn-secondary" onclick="skipEmail()">Skip and see results</button>
   </div>
@@ -474,7 +474,7 @@
 
     const nextBtn = document.getElementById('nextBtn');
     nextBtn.disabled = answers[currentQ] === null;
-    nextBtn.textContent = currentQ === 7 ? 'See my results →' : 'Next →';
+    nextBtn.textContent = currentQ === 7 ? '✦ See my results →' : '✦ Next →';
     updateProgress();
   }
 
