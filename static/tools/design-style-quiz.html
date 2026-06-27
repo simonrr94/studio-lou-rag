@@ -9,7 +9,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      min-height: 400px;
+      min-height: auto;
       background: #FAF9F6;
       font-family: 'DM Sans', sans-serif;
       color: #433E3C;
@@ -446,8 +446,9 @@
 
   // ── HELPERS ──
   function reportHeight() {
-    const height = document.body.scrollHeight;
-    window.parent.postMessage({ type: 'studio-lou-height', height }, '*');
+    const el = document.querySelector('.quiz-wrap');
+    const height = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
+    window.parent.postMessage({ type: 'studio-lou-height', height: Math.ceil(height) }, '*');
   }
 
   function showScreen(id) {
@@ -619,6 +620,9 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
 
     document.getElementById('progressTrack').style.display = 'none';
     showScreen('result');
+    // Re-measure after results are fully painted
+    setTimeout(reportHeight, 200);
+    setTimeout(reportHeight, 600);
   }
 
   // ── INIT ──
