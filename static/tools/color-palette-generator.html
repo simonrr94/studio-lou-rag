@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Color Palette Generator — Studio Lou</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 1800px;
+      background: #fdfaf5;
+      font-family: 'DM Sans', sans-serif;
+      color: #433E3C;
+    }
+
+    .wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* Header */
+    .header {
+      margin-bottom: 40px;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #582b36;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: #433E3C;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 15px;
+      color: #6b6560;
+      line-height: 1.6;
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: #d0c9bc;
+      margin: 32px 0;
+    }
+
+    /* Form */
+    .form-grid {
+      display: grid;
+      gap: 24px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #433E3C;
+      margin-bottom: 8px;
+      letter-spacing: 0.02em;
+    }
+
+    .field select,
+    .field input[type="text"] {
+      width: 100%;
+      padding: 13px 16px;
+      border-radius: 12px;
+      border: 1px solid #d0c9bc;
+      background: #ffffff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: #433E3C;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .field select:focus,
+    .field input[type="text"]:focus {
+      border-color: #A6BE47;
+    }
+
+    .select-wrap {
+      position: relative;
+    }
+
+    .select-wrap::after {
+      content: '↓';
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #6b6560;
+      font-size: 13px;
+      pointer-events: none;
+    }
+
+    /* Color amount pills */
+    .pill-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 5px 14px;
+      border-radius: 99px;
+      border: 1px solid #d0c9bc;
+      background: #ffffff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: #433E3C;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .pill.active {
+      background: #f5eef0;
+      border-color: #582b36;
+      color: #582b36;
+      font-weight: 600;
+    }
+
+    /* Generate button */
+    .btn {
+      display: inline-block;
+      padding: 13px 36px;
+      border-radius: 50px;
+      background: #A6BE47;
+      color: #ffffff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+      margin-top: 8px;
+    }
+
+    .btn:hover { background: #94aa3a; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Loading */
+    .loading {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 0;
+      color: #6b6560;
+      font-size: 14px;
+    }
+
+    .loading.visible { display: flex; }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #d0c9bc;
+      border-top-color: #A6BE47;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results */
+    .results { display: none; }
+    .results.visible { display: block; }
+
+    .palette-intro {
+      background: #f5f0e8;
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 28px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #433E3C;
+      border-left: 3px solid #582b36;
+    }
+
+    /* Swatch cards */
+    .swatch-stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .swatch-card {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid #d0c9bc;
+      background: #ffffff;
+    }
+
+    .swatch-color {
+      min-height: 140px;
+    }
+
+    .swatch-info {
+      padding: 20px 24px;
+    }
+
+    .swatch-role {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #582b36;
+      margin-bottom: 6px;
+    }
+
+    .swatch-name {
+      font-size: 17px;
+      font-weight: 700;
+      color: #433E3C;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+
+    .paint-refs {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .paint-ref {
+      font-size: 12px;
+      color: #6b6560;
+      font-weight: 500;
+    }
+
+    .paint-ref span {
+      font-weight: 600;
+      color: #433E3C;
+    }
+
+    .swatch-why {
+      font-size: 13px;
+      color: #6b6560;
+      line-height: 1.6;
+      padding-top: 12px;
+      border-top: 1px solid #d0c9bc;
+    }
+
+    /* Error */
+    .error-msg {
+      display: none;
+      background: #fff0f2;
+      border: 1px solid #f0c0c8;
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 14px;
+      color: #582b36;
+      margin-top: 16px;
+    }
+
+    .error-msg.visible { display: block; }
+
+    /* Reset */
+    .reset-btn {
+      display: inline-block;
+      margin-top: 32px;
+      padding: 10px 24px;
+      border-radius: 50px;
+      border: 1px solid #d0c9bc;
+      background: transparent;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: #6b6560;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .reset-btn:hover {
+      border-color: #433E3C;
+      color: #433E3C;
+    }
+
+    .sample-note {
+      font-size: 12px;
+      color: #6b6560;
+      margin-top: 20px;
+      line-height: 1.6;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <div class="eyebrow">Studio Lou · Color Tool</div>
+    <h1>Find your room's palette</h1>
+    <p class="subtitle">Answer four questions and we'll recommend a complete paint palette — primary wall, secondary surface, accent, and trim — with specific Sherwin-Williams and Benjamin Moore color numbers.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Form -->
+  <div id="form-section" class="form-grid">
+
+    <div class="field">
+      <label for="room">Which room is this for?</label>
+      <div class="select-wrap">
+        <select id="room">
+          <option value="" disabled selected>Select a room</option>
+          <option value="living room">Living room</option>
+          <option value="bedroom">Bedroom</option>
+          <option value="kitchen">Kitchen</option>
+          <option value="home office">Home office</option>
+          <option value="bathroom">Bathroom</option>
+          <option value="dining room">Dining room</option>
+          <option value="entryway or hallway">Entryway or hallway</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>What colors are already fixed in the room?</label>
+      <p style="font-size:12px;color:#6b6560;margin-bottom:10px;">Think flooring, furniture, cabinets — things you're not changing.</p>
+      <div class="pill-group" id="existing-colors">
+        <button class="pill" data-value="mostly neutrals — white, beige, or grey">Mostly neutrals</button>
+        <button class="pill" data-value="warm tones — wood, brown, or tan">Warm tones</button>
+        <button class="pill" data-value="cool tones — grey, blue, or green">Cool tones</button>
+        <button class="pill" data-value="mixed tones, or starting from scratch">Starting from scratch</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>How would you describe the light?</label>
+      <div class="pill-group" id="lighting">
+        <button class="pill" data-value="lots of natural light">Lots of natural light</button>
+        <button class="pill" data-value="moderate natural light">Moderate natural light</button>
+        <button class="pill" data-value="mostly artificial light">Mostly artificial light</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>What feeling do you want the room to have?</label>
+      <div class="pill-group" id="feeling">
+        <button class="pill" data-value="calm and airy">Calm and airy</button>
+        <button class="pill" data-value="warm and cozy">Warm and cozy</button>
+        <button class="pill" data-value="bold and dramatic">Bold and dramatic</button>
+        <button class="pill" data-value="fresh and energizing">Fresh and energizing</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>How much color are you comfortable with?</label>
+      <div class="pill-group" id="color-comfort">
+        <button class="pill" data-value="keep it mostly neutral">Mostly neutral</button>
+        <button class="pill" data-value="a mix of neutral and color">Mix of neutral and color</button>
+        <button class="pill" data-value="I want real, noticeable color">Real color</button>
+      </div>
+    </div>
+
+    <div>
+      <button class="btn" id="generate-btn" onclick="generate()">✦ Generate my palette</button>
+    </div>
+
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <span>Building your palette...</span>
+  </div>
+
+  <!-- Error -->
+  <div class="error-msg" id="error-msg">Something went wrong. Please try again in a moment.</div>
+
+  <!-- Results -->
+  <div class="results" id="results">
+    <div class="divider"></div>
+    <div class="palette-intro" id="palette-intro"></div>
+    <div class="swatch-stack" id="swatch-stack"></div>
+    <p class="sample-note">Paint colors shown are recommendations based on your inputs. Order samples before committing — colors read differently depending on your specific lighting and finishes.</p>
+    <button class="reset-btn" onclick="reset()">Start over</button>
+  </div>
+
+</div>
+
+<script>
+  // Pill selection logic
+  document.querySelectorAll('.pill-group').forEach(group => {
+    group.querySelectorAll('.pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        group.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+      });
+    });
+  });
+
+  function getSelected(groupId) {
+    const active = document.querySelector(`#${groupId} .pill.active`);
+    return active ? active.dataset.value : null;
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = msg || 'Something went wrong. Please try again.';
+    el.classList.add('visible');
+  }
+
+  function clearError() {
+    document.getElementById('error-msg').classList.remove('visible');
+  }
+
+  // Hex color mapping for well-known SW and BM colors
+  // Used to render the swatch block — Claude returns color names and we do our best to approximate
+  // If Claude returns a hex we use that, otherwise we fall back to a neutral
+  function hexForSwatch(hex) {
+    if (hex && /^#[0-9A-Fa-f]{6}$/.test(hex)) return hex;
+    return '#d0c9bc';
+  }
+
+  async function generate() {
+    clearError();
+
+    const room = document.getElementById('room').value;
+    const existing = getSelected('existing-colors');
+    const lighting = getSelected('lighting');
+    const feeling = getSelected('feeling');
+    const comfort = getSelected('color-comfort');
+
+    if (!room || !existing || !lighting || !feeling || !comfort) {
+      showError('Please answer all five questions before generating your palette.');
+      return;
+    }
+
+    document.getElementById('generate-btn').disabled = true;
+    document.getElementById('loading').classList.add('visible');
+    document.getElementById('results').classList.remove('visible');
+
+    const system = `You are an interior designer recommending a paint palette. You have deep knowledge of Sherwin-Williams and Benjamin Moore paint lines. Always respond with valid JSON only — no markdown, no preamble, no explanation outside the JSON structure.
+
+Return this exact structure:
+{
+  "intro": "2-3 sentence paragraph explaining the palette logic for this specific room and situation. Warm, direct, professional — written as advice from a designer who knows what they're doing. Reference the user's specific inputs.",
+  "colors": [
+    {
+      "role": "Primary Wall",
+      "name": "A descriptive name for this color in plain language (e.g. 'Warm greige' or 'Dusty sage')",
+      "sw_name": "Exact Sherwin-Williams paint name",
+      "sw_number": "SW XXXX",
+      "bm_name": "Exact Benjamin Moore paint name",
+      "bm_number": "BM XXXX or OC-XXX or HC-XXX",
+      "hex": "#xxxxxx (approximate hex for this color family)",
+      "why": "One specific sentence explaining why this color works for this person's exact situation."
+    },
+    {
+      "role": "Secondary Surface",
+      "name": "...",
+      "sw_name": "...",
+      "sw_number": "...",
+      "bm_name": "...",
+      "bm_number": "...",
+      "hex": "...",
+      "why": "..."
+    },
+    {
+      "role": "Accent",
+      "name": "...",
+      "sw_name": "...",
+      "sw_number": "...",
+      "bm_name": "...",
+      "bm_number": "...",
+      "hex": "...",
+      "why": "..."
+    },
+    {
+      "role": "Trim",
+      "name": "...",
+      "sw_name": "...",
+      "sw_number": "...",
+      "bm_name": "...",
+      "bm_number": "...",
+      "hex": "...",
+      "why": "..."
+    }
+  ]
+}
+
+Rules:
+- Only recommend real, currently available paint colors from Sherwin-Williams and Benjamin Moore
+- The four colors must work together as a cohesive palette
+- Be specific to the user's inputs — don't give generic advice
+- The intro should name what the palette achieves, not just describe the colors
+- Never use em dashes
+- Trim is almost always a clean white or soft white — pick the right one for this palette's warmth level`;
+
+    const userPrompt = `Room: ${room}
+Existing fixed colors: ${existing}
+Lighting: ${lighting}
+Desired feeling: ${feeling}
+Color comfort level: ${comfort}
+
+Recommend a complete 4-color paint palette for this room.`;
+
+    try {
+      const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system,
+          messages: [{ role: 'user', content: userPrompt }],
+          max_tokens: 1000
+        })
+      });
+
+      if (!res.ok) throw new Error('API error');
+
+      const data = await res.json();
+      const raw = data.content[0].text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(raw);
+
+      renderResults(parsed);
+
+    } catch (e) {
+      console.error(e);
+      showError('Something went wrong generating your palette. Please try again.');
+    } finally {
+      document.getElementById('generate-btn').disabled = false;
+      document.getElementById('loading').classList.remove('visible');
+    }
+  }
+
+  function renderResults(data) {
+    document.getElementById('palette-intro').textContent = data.intro;
+
+    const stack = document.getElementById('swatch-stack');
+    stack.innerHTML = '';
+
+    data.colors.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'swatch-card';
+
+      const swatchColor = document.createElement('div');
+      swatchColor.className = 'swatch-color';
+      swatchColor.style.backgroundColor = hexForSwatch(c.hex);
+
+      const info = document.createElement('div');
+      info.className = 'swatch-info';
+      info.innerHTML = `
+        <div class="swatch-role">${c.role}</div>
+        <div class="swatch-name">${c.name}</div>
+        <div class="paint-refs">
+          <div class="paint-ref">Sherwin-Williams — <span>${c.sw_name} ${c.sw_number}</span></div>
+          <div class="paint-ref">Benjamin Moore — <span>${c.bm_name} ${c.bm_number}</span></div>
+        </div>
+        <div class="swatch-why">${c.why}</div>
+      `;
+
+      card.appendChild(swatchColor);
+      card.appendChild(info);
+      stack.appendChild(card);
+    });
+
+    document.getElementById('results').classList.add('visible');
+
+    // Scroll to results
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function reset() {
+    document.getElementById('results').classList.remove('visible');
+    document.getElementById('room').value = '';
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    document.getElementById('generate-btn').disabled = false;
+    clearError();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+</body>
+</html>

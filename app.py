@@ -637,6 +637,10 @@ def marketing_audit():
 def design_style_quiz():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "design-style-quiz.html")
 
+@app.route("/tools/color-palette-generator")
+def color_palette_generator():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "color-palette-generator.html")
+
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)
