@@ -10,6 +10,7 @@
 
     html, body {
       min-height: auto;
+      height: auto;
       background: #FAF9F6;
       font-family: 'DM Sans', sans-serif;
       color: #433E3C;
@@ -446,20 +447,30 @@
 
   // ── HELPERS ──
   function reportHeight() {
-    const el = document.querySelector('.quiz-wrap');
-    const height = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
-    window.parent.postMessage({ type: 'studio-lou-height', height: Math.ceil(height) }, '*');
+    const height = Math.max(
+      document.body.scrollHeight,
+      document.body.offsetHeight,
+      document.documentElement.scrollHeight,
+      document.documentElement.offsetHeight
+    );
+    window.parent.postMessage({ type: 'studio-lou-height', height: height + 32 }, '*');
   }
+
+  // Watch for any DOM changes and report updated height
+  const heightObserver = new MutationObserver(function() {
+    setTimeout(reportHeight, 50);
+  });
+
+  window.addEventListener('load', function() {
+    heightObserver.observe(document.body, { childList: true, subtree: true });
+    setTimeout(reportHeight, 100);
+  });
 
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById('screen-' + id).classList.add('active');
-    // Let the DOM update before measuring
-    setTimeout(reportHeight, 50);
+    setTimeout(reportHeight, 100);
   }
-
-  // Report height on initial load
-  window.addEventListener('load', () => setTimeout(reportHeight, 100));
 
   function updateProgress() {
     const pct = ((currentQ) / 8) * 100;
