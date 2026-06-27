@@ -42,11 +42,35 @@
     .output-actions { display: flex; gap: 10px; margin-top: 20px; }
     .btn-download { font-family: 'DM Sans', sans-serif; flex: 1; padding: 11px; font-size: 14px; background: #582b36; color: #fff; border: none; border-radius: 10px; cursor: pointer; font-weight: 500; }
     .btn-reset { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 18px; border: 1px solid #d0c9bc; border-radius: 10px; background: #fff; color: #433E3C; cursor: pointer; margin-top: 10px; }
+
+    /* ── EMAIL GATE ── */
+    .email-gate { display: none; margin-top: 32px; padding: 32px 28px; background: #f5f0e8; border-radius: 16px; }
+    .gate-headline { font-size: 22px; font-weight: 700; color: #433E3C; margin-bottom: 8px; }
+    .gate-sub { font-size: 15px; color: #6b6560; line-height: 1.6; margin-bottom: 24px; }
+    .gate-input { font-family: 'DM Sans', sans-serif; width: 100%; font-size: 15px; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 13px 16px; outline: none; background: #ffffff; color: #433E3C; margin-bottom: 10px; }
+    .gate-input:focus { border-color: #582b36; }
+    .gate-note { font-size: 12px; color: #6b6560; margin-bottom: 20px; }
+    .gate-error { background: #fde8e8; border: 1px solid #f5a0a0; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #7a1f1f; margin-bottom: 12px; display: none; }
+    .btn-skip { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #6b6560; background: none; border: none; cursor: pointer; margin-top: 10px; text-decoration: underline; display: block; }
+
+    /* ── CTA BLOCK ── */
+    .cta-block { background: #582b36; border-radius: 16px; padding: 28px; text-align: center; margin-top: 24px; }
+    .cta-block h3 { font-size: 18px; font-weight: 700; color: #fdfaf5; margin-bottom: 8px; }
+    .cta-block p { font-size: 14px; color: rgba(253,250,245,0.75); line-height: 1.6; margin-bottom: 20px; }
+    .btn-cta { display: inline-block; padding: 13px 32px; background: #A6BE47; color: #433E3C; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700; border: none; border-radius: 50px; cursor: pointer; text-decoration: none; }
   </style>
 </head>
 <body>
 <div class="wrap">
 
+  <span class="section-label">About you</span>
+
+  <div class="field">
+    <label>Firm name</label>
+    <input id="firmName" type="text" placeholder="e.g. Johnson Interiors" />
+  </div>
+
+  <hr />
   <span class="section-label">About your firm</span>
 
   <div class="field">
@@ -180,7 +204,23 @@
     <div class="output-actions">
       <button class="btn-download" onclick="downloadPDF()">↓ Download PDF report</button>
     </div>
+    <div class="cta-block">
+      <h3>Want help acting on this?</h3>
+      <p>Studio Lou works with interior design firms on positioning, content strategy, and building marketing systems that actually bring in clients.</p>
+      <a href="https://www.studiolouinteriors.com/contact" target="_blank" class="btn-cta">Work with Studio Lou →</a>
+    </div>
     <button class="btn-reset" onclick="resetTool()">Start over</button>
+  </div>
+
+  <!-- EMAIL GATE -->
+  <div class="email-gate" id="emailGate">
+    <h2 class="gate-headline">Your audit is ready.</h2>
+    <p class="gate-sub">Enter your email and we'll show your results here — plus keep a copy on file in case you want to revisit.</p>
+    <div class="gate-error" id="gateError">Please enter a valid email address.</div>
+    <input type="email" class="gate-input" id="gateEmail" placeholder="your@email.com" />
+    <p class="gate-note">No spam, ever.</p>
+    <button class="btn-primary" id="gateSubmitBtn" onclick="submitGate()">See my results →</button>
+    <button class="btn-skip" onclick="skipGate()">Skip and see results</button>
   </div>
 
 </div>
@@ -191,6 +231,7 @@ const GRADE_BG = { A: '#e6f3e6', B: '#f0f5e0', C: '#fef3e0', D: '#fde8e8' };
 
 const radioState = { website: '', google: '', email: '', lead: '' };
 let currentAudit = null;
+let pendingAudit = null;
 
 function toggleCheck(el) { el.classList.toggle('active'); }
 
@@ -276,13 +317,60 @@ Rules: grades A B C or D only. Be honest and direct. No em dashes. Return ONLY t
     const raw = data.content?.[0]?.text || '';
     const clean = raw.replace(/```json|```/g, '').trim();
     currentAudit = JSON.parse(clean);
-    renderAudit(currentAudit);
+    pendingAudit = currentAudit;
+    document.getElementById('emailGate').style.display = 'block';
+    document.getElementById('emailGate').scrollIntoView({ behavior: 'smooth' });
   } catch(e) {
     showError('Audit failed: ' + e.message);
   } finally {
     btn.disabled = false;
     document.getElementById('loading').style.display = 'none';
   }
+}
+
+function submitGate() {
+  const email = document.getElementById('gateEmail').value.trim();
+  const gateError = document.getElementById('gateError');
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    gateError.style.display = 'block';
+    return;
+  }
+  gateError.style.display = 'none';
+  if (email && pendingAudit) {
+    const sections = pendingAudit.sections || [];
+    const overall = overallGrade(sections.map(s => s.grade));
+    logToSheet({
+      email,
+      firmName: document.getElementById('firmName').value.trim(),
+      firmType: document.getElementById('firmType').value,
+      idealClient: document.getElementById('idealClient').value.trim(),
+      overallGrade: overall
+    });
+  }
+  showResults();
+}
+
+function skipGate() {
+  showResults();
+}
+
+function showResults() {
+  document.getElementById('emailGate').style.display = 'none';
+  if (pendingAudit) {
+    currentAudit = pendingAudit;
+    renderAudit(currentAudit);
+  }
+}
+
+function logToSheet(payload) {
+  const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyHXqukGMvT_iIK4nKflnJBTaQoRPSuZZS4-AXnOmcBMscsDVfY4Z2iCdSnxH_SPeSQTw/exec';
+  if (SHEET_URL === 'PASTE_MARKETING_AUDIT_SHEET_URL_HERE') return;
+  fetch(SHEET_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(() => {});
 }
 
 function renderAudit(data) {
@@ -319,6 +407,7 @@ function renderAudit(data) {
 }
 
 function resetTool() {
+  document.getElementById('firmName').value = '';
   document.getElementById('firmType').value = '';
   document.getElementById('idealClient').value = '';
   document.getElementById('frequency').value = '';
@@ -327,7 +416,11 @@ function resetTool() {
   document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
   Object.keys(radioState).forEach(k => radioState[k] = '');
   currentAudit = null;
+  pendingAudit = null;
   document.getElementById('output').style.display = 'none';
+  document.getElementById('emailGate').style.display = 'none';
+  document.getElementById('gateEmail').value = '';
+  document.getElementById('gateError').style.display = 'none';
   hideError();
 }
 
