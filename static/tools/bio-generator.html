@@ -9,223 +9,169 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { min-height: 1800px; }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: #FAF9F6;
-      color: #433E3C;
-      padding: 40px 24px 80px;
-    }
+    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; color: #433E3C; padding: 32px 24px 80px; }
     .wrap { max-width: 720px; margin: 0 auto; }
-    .form-group { margin-bottom: 16px; }
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: #6b6560;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 6px;
-    }
-    input, select {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 16px;
-      padding: 12px 16px;
-      border-radius: 12px;
-      border: 1px solid #d0c9bc;
-      background: #ffffff;
-      color: #433E3C;
-      width: 100%;
-      outline: none;
-      appearance: none;
-      -webkit-appearance: none;
-    }
+    /* Step system */
+    .step { display: none; }
+    .step.active { display: block; }
+    .progress-wrap { margin-bottom: 28px; }
+    .progress-label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
+    .progress-track { height: 2px; background: #e8e2d9; border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #582b36; border-radius: 99px; transition: width 0.35s ease; }
+    .step-question { font-size: 22px; font-weight: 700; color: #433E3C; line-height: 1.3; margin-bottom: 8px; }
+    .step-hint { font-size: 14px; color: #6b6560; line-height: 1.6; margin-bottom: 22px; }
+    .step-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 32px; }
+    .back-link { background: none; border: none; font-size: 14px; color: #6b6560; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; text-decoration: underline; }
+    .back-link:hover { color: #433E3C; }
+    .back-link.invisible { visibility: hidden; pointer-events: none; }
+    .next-btn { padding: 11px 28px; background: #A6BE47; color: #fff; font-size: 15px; font-weight: 600; font-family: 'DM Sans', sans-serif; border: none; border-radius: 50px; cursor: pointer; transition: opacity 0.2s; }
+    .next-btn:hover { opacity: 0.88; }
+    .next-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .validation-hint { display: none; font-size: 13px; color: #582b36; margin-top: 8px; }
+    /* Inputs */
+    label { display: block; font-size: 12px; font-weight: 600; color: #6b6560; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    input, select { font-family: 'DM Sans', sans-serif; font-size: 16px; padding: 12px 16px; border-radius: 12px; border: 1px solid #d0c9bc; background: #fff; color: #433E3C; width: 100%; outline: none; appearance: none; -webkit-appearance: none; }
     .select-wrap { position: relative; }
-    .select-wrap::after {
-      content: "▾";
-      position: absolute;
-      right: 14px;
-      top: 50%;
-      transform: translateY(-50%);
-      pointer-events: none;
-      color: #6b6560;
-    }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-    .platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-    .chip {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
-      padding: 5px 14px;
-      border: 1px solid #d0c9bc;
-      border-radius: 99px;
-      cursor: pointer;
-      background: #ffffff;
-      color: #433E3C;
-      user-select: none;
-      transition: all 0.15s;
-    }
-    .chip.selected { background: #f5eef0; color: #582b36; border-color: #582b36; }
-    .btn-primary {
-      font-family: 'DM Sans', sans-serif;
-      padding: 13px 36px;
-      background: #A6BE47;
-      color: #ffffff;
-      border: none;
-      border-radius: 50px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 8px;
-    }
-    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-    .error {
-      margin-top: 16px;
-      padding: 12px 16px;
-      background: #fdecea;
-      color: #c0392b;
-      border-radius: 10px;
-      font-size: 15px;
-      display: none;
-    }
+    .select-wrap::after { content: "▾"; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #6b6560; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-group { margin-bottom: 0; }
+    .platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; margin-bottom: 16px; }
+    .chip { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 5px 14px; border: 1px solid #d0c9bc; border-radius: 99px; cursor: pointer; background: #fff; color: #433E3C; user-select: none; transition: all 0.15s; }
+    .chip.selected { background: #f5eef0; color: #582b36; border-color: #582b36; font-weight: 600; }
+    /* Loading */
+    .quiz-loading { display: none; text-align: center; padding: 64px 0; }
+    .quiz-spinner { width: 32px; height: 32px; border: 3px solid #d7e8bc; border-top-color: #A6BE47; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .quiz-loading-text { font-size: 14px; color: #6b6560; }
+    /* Error */
+    .error { margin-top: 16px; padding: 12px 16px; background: #fdecea; color: #c0392b; border-radius: 10px; font-size: 15px; display: none; }
+    /* Output */
     .output { margin-top: 40px; padding-top: 32px; border-top: 1px solid #e8e0d5; display: none; }
     .output-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
     .output-header h2 { font-size: 20px; font-weight: 600; }
     .output-actions { display: flex; gap: 8px; }
-    .btn-secondary {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      color: #433E3C;
-      background: none;
-      border: 1px solid #d0c9bc;
-      border-radius: 50px;
-      padding: 6px 16px;
-      cursor: pointer;
-    }
-    .btn-download {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      color: #ffffff;
-      background: #A6BE47;
-      border: none;
-      border-radius: 50px;
-      padding: 6px 16px;
-      cursor: pointer;
-      font-weight: 600;
-    }
+    .btn-secondary { font-family: 'DM Sans', sans-serif; font-size: 14px; color: #433E3C; background: none; border: 1px solid #d0c9bc; border-radius: 50px; padding: 6px 16px; cursor: pointer; }
+    .btn-download { font-family: 'DM Sans', sans-serif; font-size: 14px; color: #fff; background: #A6BE47; border: none; border-radius: 50px; padding: 6px 16px; cursor: pointer; font-weight: 600; }
     .bio-blocks { display: flex; flex-direction: column; gap: 14px; }
-    .bio-block {
-      background: #f5f0e8;
-      border: 1px solid #e8e0d5;
-      border-radius: 14px;
-      padding: 18px 20px;
-    }
-    .bio-block-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-    .bio-block-label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: #582b36;
-    }
-    .bio-limit {
-      font-size: 11px;
-      color: #6b6560;
-      font-weight: 400;
-    }
-    .btn-copy-bio {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 12px;
-      color: #6b6560;
-      background: none;
-      border: 1px solid #d0c9bc;
-      border-radius: 20px;
-      padding: 3px 10px;
-      cursor: pointer;
-    }
-    .bio-sublabel {
-      font-size: 11px;
-      color: #6b6560;
-      margin-bottom: 4px;
-      font-weight: 500;
-    }
-    .bio-content {
-      font-size: 15px;
-      line-height: 1.75;
-      color: #433E3C;
-      white-space: pre-wrap;
-    }
-    .bio-divider {
-      border: none;
-      border-top: 1px solid #e8e0d5;
-      margin: 12px 0;
-    }
+    .bio-block { background: #f5f0e8; border: 1px solid #e8e0d5; border-radius: 14px; padding: 18px 20px; }
+    .bio-block-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .bio-block-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #582b36; }
+    .bio-limit { font-size: 11px; color: #6b6560; font-weight: 400; }
+    .btn-copy-bio { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #6b6560; background: none; border: 1px solid #d0c9bc; border-radius: 20px; padding: 3px 10px; cursor: pointer; }
+    .bio-sublabel { font-size: 11px; color: #6b6560; margin-bottom: 4px; font-weight: 500; }
+    .bio-content { font-size: 15px; line-height: 1.75; color: #433E3C; white-space: pre-wrap; }
+    .bio-divider { border: none; border-top: 1px solid #e8e0d5; margin: 12px 0; }
+    .restart-wrap { text-align: center; margin-top: 24px; }
+    .restart-btn { background: none; border: none; font-size: 13px; color: #6b6560; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
   </style>
 </head>
 <body>
 <div class="wrap">
 
-  <div class="form-group">
-    <label>Firm type</label>
-    <div class="select-wrap">
-      <select id="firmType" onchange="handleFirmType(this.value)">
-        <option value="">Select firm type</option>
-        <option value="residential">Residential design firm</option>
-        <option value="hospitality">Hospitality design firm</option>
-        <option value="commercial">Commercial / workplace design firm</option>
-      </select>
+  <div id="quizArea">
+    <div class="progress-wrap">
+      <div class="progress-label" id="progressLabel">STEP 1 OF 6</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:16.6%"></div></div>
+    </div>
+
+    <!-- Step 1: Firm type -->
+    <div class="step active" id="step1">
+      <div class="step-question">What type of firm is this for?</div>
+      <div class="step-hint">This shapes which platforms we recommend and how we write your bios.</div>
+      <div class="form-group">
+        <div class="select-wrap">
+          <select id="firmType">
+            <option value="">Select firm type</option>
+            <option value="residential">Residential design firm</option>
+            <option value="hospitality">Hospitality design firm</option>
+            <option value="commercial">Commercial / workplace design firm</option>
+          </select>
+        </div>
+      </div>
+      <div class="validation-hint" id="hint1">Please select a firm type to continue.</div>
+      <div class="step-nav">
+        <button class="back-link invisible">← Back</button>
+        <button class="next-btn" onclick="goNext(1)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Name + Location -->
+    <div class="step" id="step2">
+      <div class="step-question">What's your firm name and where are you based?</div>
+      <div class="step-hint">Both are optional but help us write more specific, accurate bios.</div>
+      <div class="grid">
+        <div class="form-group"><label>Firm name</label><input id="firmName" type="text" placeholder="e.g. Studio Lou, Amber Interiors" /></div>
+        <div class="form-group"><label>Location</label><input id="location" type="text" placeholder="e.g. Austin TX, Los Angeles" /></div>
+      </div>
+      <div class="step-nav">
+        <button class="back-link" onclick="goBack(2)">← Back</button>
+        <button class="next-btn" onclick="goNext(2)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Design style -->
+    <div class="step" id="step3">
+      <div class="step-question">How would you describe your design style?</div>
+      <div class="step-hint">A few words or a phrase — this is how it'll appear in your bios.</div>
+      <div class="form-group"><label>Design style</label><input id="designStyle" type="text" placeholder="e.g. modern organic, coastal, transitional, maximalist" /></div>
+      <div class="validation-hint" id="hint3">Please describe your design style to continue.</div>
+      <div class="step-nav">
+        <button class="back-link" onclick="goBack(3)">← Back</button>
+        <button class="next-btn" onclick="goNext(3)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Ideal client -->
+    <div class="step" id="step4">
+      <div class="step-question">Who is your ideal client?</div>
+      <div class="step-hint">Optional, but the more specific you are, the sharper your bios will be.</div>
+      <div class="form-group"><label>Ideal client</label><input id="idealClient" type="text" placeholder="e.g. high-end homeowners, boutique hotel developers" /></div>
+      <div class="step-nav">
+        <button class="back-link" onclick="goBack(4)">← Back</button>
+        <button class="next-btn" onclick="goNext(4)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 5: Specialties -->
+    <div class="step" id="step5">
+      <div class="step-question">What are your specialties or services?</div>
+      <div class="step-hint">List anything you want highlighted — service types, project types, room types.</div>
+      <div class="form-group"><label>Specialties / services</label><input id="specialties" type="text" placeholder="e.g. full-service design, e-design, kitchen + bath, new construction" /></div>
+      <div class="step-nav">
+        <button class="back-link" onclick="goBack(5)">← Back</button>
+        <button class="next-btn" onclick="goNext(5)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 6: Brand personality + Platforms -->
+    <div class="step" id="step6">
+      <div class="step-question">How do you want to come across?</div>
+      <div class="step-hint">Describe your brand personality, then select the platforms you need bios for.</div>
+      <div class="form-group" style="margin-bottom:20px;"><label>Brand personality</label><input id="brandVoice" type="text" placeholder="e.g. warm and approachable, elevated and editorial, bold and witty" /></div>
+      <label id="platformLabel">Platforms</label>
+      <div class="platforms" id="platforms">
+        <div class="chip" data-platform="Instagram" onclick="togglePlatform(this)">Instagram</div>
+        <div class="chip" data-platform="Pinterest" onclick="togglePlatform(this)">Pinterest</div>
+        <div class="chip" data-platform="LinkedIn" onclick="togglePlatform(this)">LinkedIn</div>
+        <div class="chip" data-platform="TikTok" onclick="togglePlatform(this)">TikTok</div>
+        <div class="chip" data-platform="Houzz" onclick="togglePlatform(this)">Houzz</div>
+      </div>
+      <div class="validation-hint" id="hint6">Please select at least one platform.</div>
+      <div class="error" id="error"></div>
+      <div class="step-nav">
+        <button class="back-link" onclick="goBack(6)">← Back</button>
+        <button class="next-btn" id="generateBtn" onclick="generate()">✦ Generate bios</button>
+      </div>
     </div>
   </div>
 
-  <div class="grid">
-    <div class="form-group" style="margin-bottom:0">
-      <label>Firm name</label>
-      <input id="firmName" type="text" placeholder="e.g. Studio Lou, Amber Interiors" />
-    </div>
-    <div class="form-group" style="margin-bottom:0">
-      <label>Location</label>
-      <input id="location" type="text" placeholder="e.g. Austin TX, Los Angeles, NYC" />
-    </div>
+  <!-- Loading -->
+  <div class="quiz-loading" id="quizLoading">
+    <div class="quiz-spinner"></div>
+    <div class="quiz-loading-text">Writing your bios...</div>
   </div>
 
-  <div class="form-group" style="margin-top:16px">
-    <label>Design style</label>
-    <input id="designStyle" type="text" placeholder="e.g. modern organic, coastal, transitional, maximalist" />
-  </div>
-
-  <div class="form-group">
-    <label>Ideal client</label>
-    <input id="idealClient" type="text" placeholder="e.g. high-end homeowners, boutique hotel developers" />
-  </div>
-
-  <div class="form-group">
-    <label>Specialties / services</label>
-    <input id="specialties" type="text" placeholder="e.g. full-service design, e-design, kitchen + bath, new construction" />
-  </div>
-
-  <div class="form-group">
-    <label>Brand personality / how you want to be perceived</label>
-    <input id="brandVoice" type="text" placeholder="e.g. warm and approachable, elevated and editorial, bold and witty" />
-  </div>
-
-  <div class="form-group">
-    <label id="platformLabel">Platforms</label>
-    <div class="platforms" id="platforms">
-      <div class="chip" data-platform="Instagram" onclick="togglePlatform(this)">Instagram</div>
-      <div class="chip" data-platform="Pinterest" onclick="togglePlatform(this)">Pinterest</div>
-      <div class="chip" data-platform="LinkedIn" onclick="togglePlatform(this)">LinkedIn</div>
-      <div class="chip" data-platform="TikTok" onclick="togglePlatform(this)">TikTok</div>
-      <div class="chip" data-platform="Houzz" onclick="togglePlatform(this)">Houzz</div>
-    </div>
-  </div>
-
-  <button class="btn-primary" id="generateBtn" onclick="generate()">✦ Generate bios</button>
-
-  <div class="error" id="error"></div>
-
+  <!-- Output -->
   <div class="output" id="output">
     <div class="output-header">
       <h2>Your bios</h2>
@@ -235,61 +181,52 @@
       </div>
     </div>
     <div class="bio-blocks" id="bioBlocks"></div>
+    <div class="restart-wrap"><button class="restart-btn" onclick="restartTool()">← Start over</button></div>
   </div>
 
 </div>
-
 <script>
-const FIRM_DEFAULTS = {
-  residential: ["Instagram", "Pinterest"],
-  hospitality: ["LinkedIn", "Houzz", "Instagram"],
-  commercial: ["LinkedIn", "Houzz"]
-};
-
-const PLATFORM_LIMITS = {
-  Instagram: "150 characters max",
-  Pinterest: "160 characters max",
-  TikTok: "80 characters max",
-  LinkedIn: "headline + summary, 220 characters each",
-  Houzz: "250 characters max"
-};
-
-const PLATFORM_ICONS = {
-  Instagram: "📷", Pinterest: "📌", LinkedIn: "💼", TikTok: "🎵", Houzz: "🏠"
-};
-
+const TOTAL_STEPS = 6;
+const FIRM_DEFAULTS = { residential: ['Instagram','Pinterest'], hospitality: ['LinkedIn','Houzz','Instagram'], commercial: ['LinkedIn','Houzz'] };
+const PLATFORM_LIMITS = { Instagram: '150 characters max', Pinterest: '160 characters max', TikTok: '80 characters max', LinkedIn: 'headline + summary, 220 characters each', Houzz: '250 characters max' };
+const PLATFORM_ICONS = { Instagram: '📷', Pinterest: '📌', LinkedIn: '💼', TikTok: '🎵', Houzz: '🏠' };
 let currentBios = null;
 let currentPlatforms = [];
 
-function handleFirmType(val) {
+function updateProgress(step) {
+  document.getElementById('progressLabel').textContent = 'STEP ' + step + ' OF ' + TOTAL_STEPS;
+  document.getElementById('progressFill').style.width = (step / TOTAL_STEPS * 100) + '%';
+}
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+  updateProgress(n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function goNext(current) {
+  if (current === 1) {
+    if (!document.getElementById('firmType').value) { showHint('hint1'); return; }
+    applyFirmDefaults();
+  }
+  if (current === 3 && !document.getElementById('designStyle').value.trim()) { showHint('hint3'); return; }
+  hideAllHints();
+  showStep(current + 1);
+}
+function goBack(current) { hideAllHints(); showStep(current - 1); }
+function showHint(id) { document.getElementById(id).style.display = 'block'; }
+function hideAllHints() { document.querySelectorAll('.validation-hint').forEach(h => h.style.display = 'none'); }
+function applyFirmDefaults() {
+  const val = document.getElementById('firmType').value;
   const defaults = FIRM_DEFAULTS[val] || [];
-  document.querySelectorAll('.chip').forEach(chip => {
-    chip.classList.toggle('selected', defaults.includes(chip.dataset.platform));
-  });
-  document.getElementById('platformLabel').textContent = val
-    ? 'Platforms · recommended pre-selected for your firm type'
-    : 'Platforms';
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('selected', defaults.includes(c.dataset.platform)));
+  document.getElementById('platformLabel').textContent = val ? 'Platforms \u00b7 recommended pre-selected for your firm type' : 'Platforms';
 }
-
-function togglePlatform(el) {
-  el.classList.toggle('selected');
-}
-
-function getSelectedPlatforms() {
-  return [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.platform);
-}
-
-function showError(msg) {
-  const el = document.getElementById('error');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-function hideError() {
-  document.getElementById('error').style.display = 'none';
-}
+function togglePlatform(el) { el.classList.toggle('selected'); }
+function getSelectedPlatforms() { return [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.platform); }
 
 async function generate() {
+  const platforms = getSelectedPlatforms();
+  if (!platforms.length) { showHint('hint6'); return; }
   const firmType = document.getElementById('firmType').value;
   const firmName = document.getElementById('firmName').value.trim();
   const location = document.getElementById('location').value.trim();
@@ -297,239 +234,120 @@ async function generate() {
   const idealClient = document.getElementById('idealClient').value.trim();
   const specialties = document.getElementById('specialties').value.trim();
   const brandVoice = document.getElementById('brandVoice').value.trim();
-  const platforms = getSelectedPlatforms();
-
-  if (!firmType) { showError('Please select a firm type.'); return; }
-  if (!designStyle) { showError('Please enter your design style.'); return; }
-  if (!platforms.length) { showError('Please select at least one platform.'); return; }
-  hideError();
-
   currentPlatforms = platforms;
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
-  btn.textContent = 'Writing your bios...';
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('quizArea').style.display = 'none';
+  document.getElementById('quizLoading').style.display = 'block';
 
   const platformInstructions = platforms.map(p => {
-    const rules = {
-      Instagram: `Instagram bio (STRICT 150 character max):\n- Lead with design style or specialty, not "interior designer"\n- Include location naturally\n- End with soft CTA (e.g. "DM to inquire")\n- No hashtags in bio`,
-      Pinterest: `Pinterest bio (STRICT 160 character max):\n- SEO-first, use keywords homeowners search\n- Include location\n- Conversational but keyword-rich\n- No hashtags`,
-      LinkedIn: `LinkedIn -- return as object with "headline" and "summary" keys:\nHeadline (STRICT 220 char max): jobTitle | specialty | location. Punchy, keyword-rich.\nSummary (STRICT 220 char max): 2-3 sentences, professional tone, first person, end with how to work together.`,
-      TikTok: `TikTok bio (STRICT 80 character max):\n- Casual, punchy, personality-forward\n- One clear line about what you do`,
-      Houzz: `Houzz bio (STRICT 250 character max):\n- Professional, project-focused\n- Mention firm type, specialty, location, project types`
-    };
+    const rules = { Instagram: 'Instagram bio (STRICT 150 character max):\n- Lead with design style or specialty, not "interior designer"\n- Include location naturally\n- End with soft CTA (e.g. "DM to inquire")\n- No hashtags in bio', Pinterest: 'Pinterest bio (STRICT 160 character max):\n- SEO-first, use keywords homeowners search\n- Include location\n- Conversational but keyword-rich\n- No hashtags', LinkedIn: 'LinkedIn -- return as object with "headline" and "summary" keys:\nHeadline (STRICT 220 char max): jobTitle | specialty | location. Punchy, keyword-rich.\nSummary (STRICT 220 char max): 2-3 sentences, professional tone, first person, end with how to work together.', TikTok: 'TikTok bio (STRICT 80 character max):\n- Casual, punchy, personality-forward\n- One clear line about what you do', Houzz: 'Houzz bio (STRICT 250 character max):\n- Professional, project-focused\n- Mention firm type, specialty, location, project types' };
     return rules[p];
   }).join('\n\n');
-
-  const jsonStructure = platforms.map(p =>
-    p === 'LinkedIn' ? '"LinkedIn":{"headline":"...","summary":"..."}' : `"${p}":"..."`
-  ).join(',');
-
-  const system = `You are an expert copywriter for interior design firms. Write platform-native bios that are specific and compelling.
-
-CRITICAL: Every bio MUST fit within its character limit. Never use em dashes. Never start with "I am an interior designer."
-
-Lead with the most distinctive thing about the firm. Be specific not generic. Honor the brand personality described.
-
-PLATFORM INSTRUCTIONS:
-${platformInstructions}
-
-Respond with ONLY a raw JSON object, no markdown:
-{${jsonStructure}}`;
+  const jsonStructure = platforms.map(p => p === 'LinkedIn' ? '"LinkedIn":{"headline":"...","summary":"..."}' : '"' + p + '":"..."').join(',');
+  const system = 'You are an expert copywriter for interior design firms. Write platform-native bios that are specific and compelling.\n\nCRITICAL: Every bio MUST fit within its character limit. Never use em dashes. Never start with "I am an interior designer."\n\nLead with the most distinctive thing about the firm. Be specific not generic. Honor the brand personality described.\n\nPLATFORM INSTRUCTIONS:\n' + platformInstructions + '\n\nRespond with ONLY a raw JSON object, no markdown:\n{' + jsonStructure + '}';
 
   try {
-    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system,
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: `Generate platform bios:\n\nFirm name: ${firmName || 'not specified'}\nFirm type: ${firmType}\nDesign style: ${designStyle}\nLocation: ${location || 'not specified'}\nIdeal client: ${idealClient || 'not specified'}\nSpecialties: ${specialties || 'not specified'}\nBrand personality: ${brandVoice || 'not specified'}\nPlatforms: ${platforms.join(', ')}`
-        }]
-      })
-    });
-
+    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system, max_tokens: 1000, messages: [{ role: 'user', content: 'Generate platform bios:\n\nFirm name: ' + (firmName || 'not specified') + '\nFirm type: ' + firmType + '\nDesign style: ' + designStyle + '\nLocation: ' + (location || 'not specified') + '\nIdeal client: ' + (idealClient || 'not specified') + '\nSpecialties: ' + (specialties || 'not specified') + '\nBrand personality: ' + (brandVoice || 'not specified') + '\nPlatforms: ' + platforms.join(', ') }] }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error?.message || 'API error ' + res.status);
+    if (!res.ok) throw new Error(data?.error?.message || 'API error');
     const raw = data.content?.[0]?.text || '';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    currentBios = JSON.parse(clean);
+    currentBios = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    document.getElementById('quizLoading').style.display = 'none';
     renderBios(currentBios, platforms);
   } catch(e) {
-    showError('Error: ' + e.message);
-  } finally {
+    document.getElementById('quizLoading').style.display = 'none';
+    document.getElementById('quizArea').style.display = 'block';
     btn.disabled = false;
-    btn.textContent = '✦ Generate bios';
+    const err = document.getElementById('error');
+    err.textContent = 'Something went wrong. Please try again.';
+    err.style.display = 'block';
+    showStep(6);
   }
 }
 
 function renderBios(bios, platforms) {
   const container = document.getElementById('bioBlocks');
   container.innerHTML = '';
-
   platforms.filter(p => bios[p]).forEach(platform => {
     const block = document.createElement('div');
     block.className = 'bio-block';
-
     const isLinkedIn = platform === 'LinkedIn' && typeof bios[platform] === 'object';
-    const bioText = isLinkedIn
-      ? `${bios[platform].headline}\n\n${bios[platform].summary}`
-      : bios[platform];
-
-    let content = '';
-    if (isLinkedIn) {
-      content = `
-        <div class="bio-sublabel">Headline</div>
-        <div class="bio-content">${bios[platform].headline}</div>
-        <hr class="bio-divider" />
-        <div class="bio-sublabel">Summary</div>
-        <div class="bio-content">${bios[platform].summary}</div>
-      `;
-    } else {
-      content = `<div class="bio-content">${bios[platform]}</div>`;
-    }
-
-    block.innerHTML = `
-      <div class="bio-block-header">
-        <div>
-          <span class="bio-block-label">${PLATFORM_ICONS[platform]} ${platform}</span>
-          <span class="bio-limit"> · ${PLATFORM_LIMITS[platform]}</span>
-        </div>
-        <button class="btn-copy-bio" onclick="copyBio('${platform}', this)">Copy</button>
-      </div>
-      ${content}
-    `;
-
-    block.querySelector('.btn-copy-bio').addEventListener('click', function() {
-      navigator.clipboard.writeText(bioText);
-      this.textContent = '✓';
-      setTimeout(() => this.textContent = 'Copy', 2000);
-    });
-
+    const bioText = isLinkedIn ? bios[platform].headline + '\n\n' + bios[platform].summary : bios[platform];
+    const content = isLinkedIn ? '<div class="bio-sublabel">Headline</div><div class="bio-content">' + bios[platform].headline + '</div><hr class="bio-divider" /><div class="bio-sublabel">Summary</div><div class="bio-content">' + bios[platform].summary + '</div>' : '<div class="bio-content">' + bios[platform] + '</div>';
+    block.innerHTML = '<div class="bio-block-header"><div><span class="bio-block-label">' + PLATFORM_ICONS[platform] + ' ' + platform + '</span><span class="bio-limit"> \u00b7 ' + PLATFORM_LIMITS[platform] + '</span></div><button class="btn-copy-bio">Copy</button></div>' + content;
+    block.querySelector('.btn-copy-bio').addEventListener('click', function() { navigator.clipboard.writeText(bioText); this.textContent = '\u2713'; setTimeout(() => this.textContent = 'Copy', 2000); });
     container.appendChild(block);
   });
-
   document.getElementById('output').style.display = 'block';
   document.getElementById('output').scrollIntoView({ behavior: 'smooth' });
 }
 
 function copyAll() {
   if (!currentBios) return;
-  const text = currentPlatforms.filter(p => currentBios[p]).map(p => {
-    if (p === 'LinkedIn' && typeof currentBios[p] === 'object') {
-      return `LinkedIn Headline\n${currentBios[p].headline}\n\nLinkedIn Summary\n${currentBios[p].summary}`;
-    }
-    return `${p}\n${currentBios[p]}`;
-  }).join('\n\n---\n\n');
+  const text = currentPlatforms.filter(p => currentBios[p]).map(p => p === 'LinkedIn' && typeof currentBios[p] === 'object' ? 'LinkedIn Headline\n' + currentBios[p].headline + '\n\nLinkedIn Summary\n' + currentBios[p].summary : p + '\n' + currentBios[p]).join('\n\n---\n\n');
   navigator.clipboard.writeText(text);
-  const btn = event.target;
-  btn.textContent = '✓ Copied';
-  setTimeout(() => btn.textContent = 'Copy all', 2000);
+  const btn = event.target; btn.textContent = '\u2713 Copied'; setTimeout(() => btn.textContent = 'Copy all', 2000);
+}
+
+function restartTool() {
+  currentBios = null; currentPlatforms = [];
+  document.getElementById('firmType').value = '';
+  ['firmName','location','designStyle','idealClient','specialties','brandVoice'].forEach(id => document.getElementById(id).value = '');
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  document.getElementById('generateBtn').disabled = false;
+  document.getElementById('output').style.display = 'none';
+  document.getElementById('quizArea').style.display = 'block';
+  showStep(1);
 }
 
 function downloadPDF() {
   if (!currentBios) return;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const pageW = doc.internal.pageSize.getWidth();
-  const margin = 48;
-  const contentW = pageW - margin * 2;
+  const pageW = doc.internal.pageSize.getWidth(), margin = 48, contentW = pageW - margin * 2;
   let y = 0;
-
   const firmName = document.getElementById('firmName').value.trim();
   const firmType = document.getElementById('firmType').value;
   const location = document.getElementById('location').value.trim();
   const designStyle = document.getElementById('designStyle').value.trim();
-
-  // Header
-  doc.setFillColor(215, 232, 188);
-  doc.rect(0, 0, pageW, 64, 'F');
-  doc.setFillColor(88, 43, 54);
-  doc.rect(0, 64, pageW, 3, 'F');
-  doc.setFillColor(88, 43, 54);
-  doc.roundedRect(margin, 14, 36, 36, 4, 4, 'F');
-  doc.setTextColor(215, 232, 188);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('SL', margin + 18, 37, { align: 'center' });
-  doc.setTextColor(88, 43, 54);
-  doc.setFontSize(16);
-  doc.text('Platform Bios', margin + 48, 30);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 80, 80);
-  doc.text(`${firmName || 'Interior Design Firm'} · Studio Lou`, margin + 48, 46);
-  doc.setFontSize(9);
-  doc.setTextColor(140, 120, 120);
-  doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageW - margin, 46, { align: 'right' });
-
-  y = 90;
-  doc.setFillColor(245, 242, 238);
-  doc.roundedRect(margin, y, contentW, 36, 4, 4, 'F');
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(88, 43, 54);
-  const meta = [firmType && `Firm: ${firmType}`, location && `Location: ${location}`, designStyle && `Style: ${designStyle}`].filter(Boolean).join('   ·   ');
-  doc.text(meta, margin + 12, y + 22);
-  y += 52;
-
-  currentPlatforms.filter(p => currentBios[p]).forEach(platform => {
-    if (y > 650) { doc.addPage(); y = margin; }
-
-    doc.setFillColor(88, 43, 54);
-    doc.roundedRect(margin, y, contentW, 22, 3, 3, 'F');
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(215, 232, 188);
-    doc.text(platform.toUpperCase(), margin + 10, y + 14);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(200, 220, 180);
-    doc.text(PLATFORM_LIMITS[platform], pageW - margin - 10, y + 14, { align: 'right' });
-    y += 36;
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(40, 30, 30);
-
-    if (platform === 'LinkedIn' && typeof currentBios[platform] === 'object') {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(88, 43, 54);
-      doc.text('HEADLINE', margin + 4, y);
-      y += 14;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(40, 30, 30);
-      doc.splitTextToSize(currentBios[platform].headline, contentW - 8).forEach(l => { doc.text(l, margin + 4, y); y += 14; });
-      y += 8;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(88, 43, 54);
-      doc.text('SUMMARY', margin + 4, y);
-      y += 14;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(40, 30, 30);
-      doc.splitTextToSize(currentBios[platform].summary, contentW - 8).forEach(l => { doc.text(l, margin + 4, y); y += 14; });
-    } else {
-      doc.splitTextToSize(currentBios[platform], contentW - 8).forEach(l => {
-        if (y > 720) { doc.addPage(); y = margin; }
-        doc.text(l, margin + 4, y);
-        y += 14;
-      });
-    }
-    y += 20;
+  doc.setFillColor(215,232,188); doc.rect(0,0,pageW,64,'F');
+  doc.setFillColor(88,43,54); doc.rect(0,64,pageW,3,'F');
+  doc.setFillColor(88,43,54); doc.roundedRect(margin,14,36,36,4,4,'F');
+  doc.setTextColor(215,232,188); doc.setFontSize(14); doc.setFont('helvetica','bold');
+  doc.text('SL',margin+18,37,{align:'center'});
+  doc.setTextColor(88,43,54); doc.setFontSize(16); doc.text('Platform Bios',margin+48,30);
+  doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(100,80,80);
+  doc.text((firmName||'Interior Design Firm')+' \u00b7 Studio Lou',margin+48,46);
+  doc.setFontSize(9); doc.setTextColor(140,120,120);
+  doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),pageW-margin,46,{align:'right'});
+  y=90; doc.setFillColor(245,242,238); doc.roundedRect(margin,y,contentW,36,4,4,'F');
+  doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(88,43,54);
+  const meta=[firmType&&'Firm: '+firmType,location&&'Location: '+location,designStyle&&'Style: '+designStyle].filter(Boolean).join('   \u00b7   ');
+  doc.text(meta,margin+12,y+22); y+=52;
+  currentPlatforms.filter(p=>currentBios[p]).forEach(platform=>{
+    if(y>650){doc.addPage();y=margin;}
+    doc.setFillColor(88,43,54); doc.roundedRect(margin,y,contentW,22,3,3,'F');
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(215,232,188);
+    doc.text(platform.toUpperCase(),margin+10,y+14);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(200,220,180);
+    doc.text(PLATFORM_LIMITS[platform],pageW-margin-10,y+14,{align:'right'}); y+=36;
+    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(40,30,30);
+    if(platform==='LinkedIn'&&typeof currentBios[platform]==='object'){
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(88,43,54); doc.text('HEADLINE',margin+4,y); y+=14;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(40,30,30);
+      doc.splitTextToSize(currentBios[platform].headline,contentW-8).forEach(l=>{doc.text(l,margin+4,y);y+=14;}); y+=8;
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(88,43,54); doc.text('SUMMARY',margin+4,y); y+=14;
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(40,30,30);
+      doc.splitTextToSize(currentBios[platform].summary,contentW-8).forEach(l=>{doc.text(l,margin+4,y);y+=14;});
+    } else { doc.splitTextToSize(currentBios[platform],contentW-8).forEach(l=>{if(y>720){doc.addPage();y=margin;}doc.text(l,margin+4,y);y+=14;}); }
+    y+=20;
   });
-
-  doc.setFillColor(215, 232, 188);
-  doc.rect(0, doc.internal.pageSize.getHeight() - 28, pageW, 28, 'F');
-  doc.setFontSize(8);
-  doc.setTextColor(88, 43, 54);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Generated by Studio Lou · studiolouinteriors.com', pageW / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-  doc.save(`studio-lou-bios-${Date.now()}.pdf`);
+  doc.setFillColor(215,232,188); doc.rect(0,doc.internal.pageSize.getHeight()-28,pageW,28,'F');
+  doc.setFontSize(8); doc.setTextColor(88,43,54); doc.setFont('helvetica','normal');
+  doc.text('Generated by Studio Lou \u00b7 studiolouinteriors.com',pageW/2,doc.internal.pageSize.getHeight()-10,{align:'center'});
+  doc.save('studio-lou-bios-'+Date.now()+'.pdf');
 }
 </script>
 </body>

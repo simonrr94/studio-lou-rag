@@ -335,8 +335,6 @@
     <input type="email" class="email-input" id="emailInput" placeholder="your@email.com" />
     <p class="email-note">No spam, ever. Just your results.</p>
     <button class="btn-primary" id="submitBtn" onclick="submitQuiz()">See my results →</button>
-    <br>
-    <button class="btn-secondary" onclick="skipEmail()">Skip and see results</button>
   </div>
 
   <!-- ── SCREEN: LOADING ── -->
@@ -508,17 +506,18 @@
   }
 
   // ── EMAIL + SUBMIT ──
-  function skipEmail() {
-    document.getElementById('emailInput').value = '';
-    submitQuiz();
-  }
-
   async function submitQuiz() {
     const email = document.getElementById('emailInput').value.trim();
     const emailError = document.getElementById('emailError');
 
-    // Validate only if they typed something
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // Email is required
+    if (!email) {
+      emailError.textContent = 'Please enter your email address to see your results.';
+      emailError.style.display = 'block';
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      emailError.textContent = 'Please enter a valid email address.';
       emailError.style.display = 'block';
       return;
     }
@@ -577,15 +576,13 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
       return;
     }
 
-    // Log to Google Sheet
-    if (email) {
-      logToSheet({
+    // Log to Google Sheet (email now required so always log)
+    logToSheet({
         email,
         answers,
         primaryStyle: resultData.primaryStyle,
         secondaryInfluence: resultData.secondaryInfluence
-      });
-    }
+    });
 
     // Render result
     document.getElementById('resultPrimary').textContent = resultData.primaryStyle;
