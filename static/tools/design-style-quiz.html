@@ -9,7 +9,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      min-height: 1800px;
+      min-height: auto;
       background: #FAF9F6;
       font-family: 'DM Sans', sans-serif;
       color: #433E3C;
@@ -640,6 +640,34 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
       body: JSON.stringify(body)
     }).catch(() => {}); // Silent fail — don't block the result screen
   }
+
+  // ── DYNAMIC HEIGHT REPORTING ──
+  // Polls every 250ms and posts to parent only when height actually changes.
+  // This is more reliable than event-based reporting because it catches all DOM
+  // changes (CSS transitions, image loads, font swaps) without us having to hook
+  // into every state change.
+  (function() {
+    let lastHeight = 0;
+    function measure() {
+      const h = Math.max(
+        document.body.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.scrollHeight,
+        document.documentElement.offsetHeight
+      );
+      if (h !== lastHeight && h > 0) {
+        lastHeight = h;
+        window.parent.postMessage({
+          type: 'studio-lou-height',
+          height: h
+        }, '*');
+      }
+    }
+    // Initial measurement once everything paints
+    window.addEventListener('load', () => setTimeout(measure, 100));
+    // Continuous polling catches every state change
+    setInterval(measure, 250);
+  })();
 </script>
 </body>
 </html>
