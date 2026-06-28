@@ -641,6 +641,10 @@ def design_style_quiz():
 def color_palette_generator():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "color-palette-generator.html")
 
+@app.route("/tools/room-layout-helper")
+def room_layout_helper():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "room-layout-helper.html")
+
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)

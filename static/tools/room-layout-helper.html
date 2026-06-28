@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room Layout Helper — Studio Lou</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 1800px;
+      background: #FAF9F6;
+      font-family: 'DM Sans', sans-serif;
+      color: #433E3C;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* Header */
+    .tool-eyebrow {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #582b36;
+      margin-bottom: 10px;
+    }
+
+    .tool-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #433E3C;
+      line-height: 1.2;
+      margin-bottom: 10px;
+    }
+
+    .tool-subtitle {
+      font-size: 15px;
+      color: #6b6560;
+      line-height: 1.6;
+      max-width: 560px;
+      margin-bottom: 40px;
+    }
+
+    /* Form sections */
+    .form-section {
+      margin-bottom: 36px;
+    }
+
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #582b36;
+      margin-bottom: 14px;
+    }
+
+    .field-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #433E3C;
+      margin-bottom: 6px;
+    }
+
+    .field-hint {
+      font-size: 13px;
+      color: #6b6560;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    .section-divider {
+      border: none;
+      border-top: 1px solid #d0c9bc;
+      margin-bottom: 36px;
+    }
+
+    /* Chips */
+    .chip-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      font-size: 13px;
+      padding: 5px 14px;
+      border-radius: 99px;
+      border: 1px solid #d0c9bc;
+      background: #ffffff;
+      color: #433E3C;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+    }
+
+    .chip:hover {
+      border-color: #582b36;
+      color: #582b36;
+    }
+
+    .chip.active {
+      background: #f5eef0;
+      border-color: #582b36;
+      color: #582b36;
+      font-weight: 600;
+    }
+
+    /* Dimensions */
+    .dimensions-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .dimension-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dimension-input {
+      width: 80px;
+      padding: 10px 12px;
+      font-size: 15px;
+      font-family: 'DM Sans', sans-serif;
+      color: #433E3C;
+      border: 1px solid #d0c9bc;
+      border-radius: 12px;
+      background: #ffffff;
+      text-align: center;
+    }
+
+    .dimension-input:focus {
+      outline: none;
+      border-color: #582b36;
+    }
+
+    .dimension-unit {
+      font-size: 14px;
+      color: #6b6560;
+    }
+
+    .dimension-x {
+      font-size: 20px;
+      color: #d0c9bc;
+      font-weight: 300;
+    }
+
+    /* Textareas */
+    .text-area {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-family: 'DM Sans', sans-serif;
+      color: #433E3C;
+      border: 1px solid #d0c9bc;
+      border-radius: 12px;
+      background: #ffffff;
+      resize: vertical;
+      min-height: 80px;
+      line-height: 1.6;
+    }
+
+    .text-area:focus {
+      outline: none;
+      border-color: #582b36;
+    }
+
+    .field-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Validation */
+    .validation-hint {
+      display: none;
+      font-size: 13px;
+      color: #582b36;
+      margin-top: 8px;
+    }
+
+    /* Generate button */
+    .generate-btn {
+      display: block;
+      width: 100%;
+      padding: 13px 36px;
+      background: #A6BE47;
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+      margin-top: 8px;
+    }
+
+    .generate-btn:hover { opacity: 0.88; }
+    .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Error */
+    .error-message {
+      display: none;
+      background: #fdf0f2;
+      border: 1px solid #f0c8cf;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 14px;
+      color: #582b36;
+      margin-top: 16px;
+    }
+
+    /* Loading */
+    .loading-state {
+      display: none;
+      text-align: center;
+      padding: 56px 0;
+    }
+
+    .loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #d7e8bc;
+      border-top-color: #A6BE47;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-size: 14px;
+      color: #6b6560;
+    }
+
+    /* Results */
+    .results-section {
+      display: none;
+      margin-top: 8px;
+    }
+
+    .results-heading {
+      font-size: 20px;
+      font-weight: 700;
+      color: #433E3C;
+      margin-bottom: 6px;
+    }
+
+    .results-subheading {
+      font-size: 14px;
+      color: #6b6560;
+      margin-bottom: 28px;
+    }
+
+    /* Layout cards */
+    .layout-card {
+      background: #ffffff;
+      border: 1px solid #d0c9bc;
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .layout-card-header {
+      padding: 18px 22px 16px;
+      border-bottom: 1px solid #f0ebe3;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .layout-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #582b36;
+      background: #f5eef0;
+      border: 1px solid #e8d5da;
+      border-radius: 99px;
+      padding: 3px 10px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+
+    .layout-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #433E3C;
+      line-height: 1.3;
+    }
+
+    .layout-summary {
+      font-size: 14px;
+      color: #6b6560;
+      line-height: 1.6;
+      margin-top: 4px;
+    }
+
+    .layout-card-body {
+      padding: 20px 22px 22px;
+    }
+
+    .placement-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6b6560;
+      margin-bottom: 8px;
+    }
+
+    .placement-text {
+      font-size: 14px;
+      color: #433E3C;
+      line-height: 1.7;
+      margin-bottom: 20px;
+    }
+
+    .pros-cons-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 480px) {
+      .pros-cons-grid { grid-template-columns: 1fr; }
+    }
+
+    .pros-block {
+      background: #f6fae8;
+      border: 1px solid #d7e8bc;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .cons-block {
+      background: #fdf5f6;
+      border: 1px solid #e8d5da;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .pros-cons-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .pros-label { color: #5a7a2e; }
+    .cons-label { color: #582b36; }
+
+    .pros-list, .cons-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .pros-list li, .cons-list li {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #433E3C;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .pros-list li::before {
+      content: '✓';
+      color: #A6BE47;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .cons-list li::before {
+      content: '✕';
+      color: #582b36;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .best-for {
+      background: #f5eef0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #582b36;
+      line-height: 1.6;
+    }
+
+    .best-for strong { font-weight: 700; }
+
+    /* CTA block */
+    .cta-block {
+      background: #f5f0e8;
+      border-radius: 16px;
+      padding: 32px 28px;
+      margin-top: 36px;
+      text-align: center;
+    }
+
+    .cta-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #433E3C;
+      margin-bottom: 12px;
+    }
+
+    .cta-body {
+      font-size: 14px;
+      color: #6b6560;
+      line-height: 1.7;
+      margin-bottom: 20px;
+      max-width: 460px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .cta-link {
+      display: inline-block;
+      padding: 13px 36px;
+      background: #582b36;
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      border-radius: 50px;
+      text-decoration: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .cta-link:hover { opacity: 0.85; }
+
+    /* Reset */
+    .reset-wrap {
+      text-align: center;
+      margin-top: 24px;
+    }
+
+    .reset-btn {
+      background: none;
+      border: none;
+      font-size: 13px;
+      color: #6b6560;
+      cursor: pointer;
+      text-decoration: underline;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .reset-btn:hover { color: #433E3C; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div class="tool-eyebrow">Homeowner Tools</div>
+    <h1 class="tool-title">Room Layout Helper</h1>
+    <p class="tool-subtitle">Tell us about your room and what you're working with. We'll give you 2–3 layout options with honest pros and cons so you can move forward with confidence.</p>
+
+    <!-- Form -->
+    <div id="formArea">
+
+      <!-- Room type -->
+      <div class="form-section">
+        <div class="section-label">The Room</div>
+        <div class="field-label">What type of room is this?</div>
+        <div class="chip-group" id="roomTypeChips">
+          <button class="chip" data-value="Living Room" onclick="selectSingle(this, 'roomType')">Living Room</button>
+          <button class="chip" data-value="Bedroom" onclick="selectSingle(this, 'roomType')">Bedroom</button>
+          <button class="chip" data-value="Dining Room" onclick="selectSingle(this, 'roomType')">Dining Room</button>
+          <button class="chip" data-value="Home Office" onclick="selectSingle(this, 'roomType')">Home Office</button>
+          <button class="chip" data-value="Guest Room" onclick="selectSingle(this, 'roomType')">Guest Room</button>
+          <button class="chip" data-value="Studio / Flex Space" onclick="selectSingle(this, 'roomType')">Studio / Flex Space</button>
+        </div>
+        <div class="validation-hint" id="roomTypeHint">Please select a room type to continue.</div>
+      </div>
+
+      <hr class="section-divider">
+
+      <!-- Dimensions -->
+      <div class="form-section">
+        <div class="field-label">Room dimensions</div>
+        <div class="field-hint">Approximate is fine — even rough estimates help us suggest better layouts.</div>
+        <div class="dimensions-row">
+          <div class="dimension-input-wrap">
+            <input type="number" class="dimension-input" id="roomLength" placeholder="12" min="1" max="200">
+            <span class="dimension-unit">ft</span>
+          </div>
+          <span class="dimension-x">×</span>
+          <div class="dimension-input-wrap">
+            <input type="number" class="dimension-input" id="roomWidth" placeholder="15" min="1" max="200">
+            <span class="dimension-unit">ft</span>
+          </div>
+        </div>
+      </div>
+
+      <hr class="section-divider">
+
+      <!-- Windows & Doors -->
+      <div class="form-section">
+        <div class="section-label">Windows &amp; Doors</div>
+        <div class="field-label">Where are your windows and doors?</div>
+        <div class="field-hint">Describe their location as best you can — this helps us account for natural light and foot traffic.</div>
+        <textarea class="text-area" id="windowDoors" placeholder="e.g. One large window on the north wall, a smaller window on the east wall, entry door on the south wall near the corner."></textarea>
+      </div>
+
+      <hr class="section-divider">
+
+      <!-- Furniture -->
+      <div class="form-section">
+        <div class="section-label">Your Furniture</div>
+        <div class="field-stack">
+          <div>
+            <div class="field-label">What do you already have?</div>
+            <div class="field-hint">List the pieces you're keeping, even if they're not in the room yet.</div>
+            <textarea class="text-area" id="existingFurniture" placeholder="e.g. Queen bed, 2 nightstands, a tall 6-drawer dresser, upholstered armchair, small side table."></textarea>
+          </div>
+          <div>
+            <div class="field-label">What would you like to add?</div>
+            <div class="field-hint">Leave blank if you're working with what you have.</div>
+            <textarea class="text-area" id="newFurniture" placeholder="e.g. A bench at the foot of the bed, a floor lamp, maybe a small writing desk if space allows."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <hr class="section-divider">
+
+      <!-- Lifestyle -->
+      <div class="form-section">
+        <div class="section-label">How You Use This Room</div>
+        <div class="field-label">Select everything that applies.</div>
+        <div class="chip-group" id="lifestyleChips" style="margin-bottom: 16px;">
+          <button class="chip" data-value="Work from home" onclick="toggleChip(this)">Work from home</button>
+          <button class="chip" data-value="Frequently entertain" onclick="toggleChip(this)">Frequently entertain</button>
+          <button class="chip" data-value="Have kids" onclick="toggleChip(this)">Have kids</button>
+          <button class="chip" data-value="Have pets" onclick="toggleChip(this)">Have pets</button>
+          <button class="chip" data-value="Need a reading / quiet zone" onclick="toggleChip(this)">Need a reading / quiet zone</button>
+          <button class="chip" data-value="Do yoga or exercise" onclick="toggleChip(this)">Do yoga or exercise</button>
+          <button class="chip" data-value="Host overnight guests" onclick="toggleChip(this)">Host overnight guests</button>
+          <button class="chip" data-value="Watch TV / movie nights" onclick="toggleChip(this)">Watch TV / movie nights</button>
+        </div>
+        <div class="field-label">Anything else we should know?</div>
+        <textarea class="text-area" id="lifestyleNotes" placeholder="e.g. Two people work from this room on different schedules. Storage is a priority. We want the space to feel calm, not cluttered."></textarea>
+      </div>
+
+      <!-- Generate -->
+      <button class="generate-btn" id="generateBtn" onclick="generateLayouts()">✦ Get my layout options</button>
+      <div class="error-message" id="errorMessage">Something went wrong generating your layout options. Please try again in a moment.</div>
+
+    </div>
+
+    <!-- Loading -->
+    <div class="loading-state" id="loadingState">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Thinking through your space...</div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-section" id="resultsSection">
+      <div class="results-heading">Your layout options</div>
+      <div class="results-subheading" id="resultsSubheading"></div>
+      <div id="layoutCards"></div>
+
+      <div class="cta-block">
+        <div class="cta-title">Want help making this happen?</div>
+        <div class="cta-body">A good plan is a start — but pulling a room together takes more than a layout. Studio Lou's virtual design services take you from here to a space that actually looks and feels the way you want it to. We handle the sourcing, the decisions, and the details.</div>
+        <a href="https://www.studiolouinteriors.com/contact" target="_blank" class="cta-link">Get in touch with Studio Lou</a>
+      </div>
+
+      <div class="reset-wrap">
+        <button class="reset-btn" onclick="resetTool()">← Start over with a different room</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const state = { roomType: null, lifestyle: [] };
+
+    function selectSingle(el, key) {
+      el.closest('.chip-group').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      state[key] = el.dataset.value;
+      document.getElementById('roomTypeHint').style.display = 'none';
+    }
+
+    function toggleChip(el) {
+      const val = el.dataset.value;
+      if (el.classList.contains('active')) {
+        el.classList.remove('active');
+        state.lifestyle = state.lifestyle.filter(v => v !== val);
+      } else {
+        el.classList.add('active');
+        state.lifestyle.push(val);
+      }
+    }
+
+    function validate() {
+      if (!state.roomType) {
+        const hint = document.getElementById('roomTypeHint');
+        hint.style.display = 'block';
+        document.getElementById('roomTypeChips').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
+      return true;
+    }
+
+    async function generateLayouts() {
+      if (!validate()) return;
+
+      const length = document.getElementById('roomLength').value;
+      const width = document.getElementById('roomWidth').value;
+      const windowDoors = document.getElementById('windowDoors').value.trim();
+      const existing = document.getElementById('existingFurniture').value.trim();
+      const newFurniture = document.getElementById('newFurniture').value.trim();
+      const lifestyleNotes = document.getElementById('lifestyleNotes').value.trim();
+
+      const btn = document.getElementById('generateBtn');
+      const loading = document.getElementById('loadingState');
+      const error = document.getElementById('errorMessage');
+
+      btn.disabled = true;
+      error.style.display = 'none';
+      document.getElementById('formArea').style.display = 'none';
+      loading.style.display = 'block';
+
+      const dimensionStr = (length && width) ? `${length} ft × ${width} ft` : null;
+      const lifestyleStr = state.lifestyle.length > 0 ? state.lifestyle.join(', ') : null;
+
+      const prompt = `You are an expert interior designer helping a homeowner think through the best layout options for their space. Based on the room details below, provide exactly 2–3 distinct, named layout options with honest pros and cons.
+
+Room details:
+- Type: ${state.roomType}
+- Dimensions: ${dimensionStr || 'Not provided — give advice in relative terms'}
+- Windows and doors: ${windowDoors || 'Not specified'}
+- Existing furniture to keep: ${existing || 'Not specified'}
+- Furniture to add: ${newFurniture || 'None mentioned'}
+- Lifestyle / usage: ${lifestyleStr || 'Not specified'}
+- Additional context: ${lifestyleNotes || 'None'}
+
+Return ONLY a valid JSON object. No markdown, no backticks, no commentary before or after. Use this exact structure:
+
+{
+  "layouts": [
+    {
+      "name": "An evocative, specific name (e.g. The Social Hub, The Symmetrical Retreat, The Corner Command)",
+      "summary": "One sentence describing the overall approach and feel of this layout.",
+      "placement": "2–3 sentences of specific furniture placement advice, referencing actual walls, windows, and doors mentioned above.",
+      "pros": ["Concrete pro 1", "Concrete pro 2", "Concrete pro 3"],
+      "cons": ["Honest trade-off 1", "Honest trade-off 2"],
+      "best_for": "One sentence starting with 'This works best if...' that tells the homeowner when to choose this option."
+    }
+  ]
+}
+
+Rules:
+- Give each layout a distinctive evocative name, not a generic label like Option A or Layout 1
+- Make placement advice specific to the actual furniture pieces and room constraints mentioned
+- Pros and cons must be practical and honest, not generic cheerleader language
+- Each layout must be meaningfully different from the others — different anchor pieces, different orientation, different zone logic
+- If lifestyle needs were mentioned (pets, kids, WFH, etc.), at least one layout should directly address them
+- If dimensions were not provided, still give useful relative placement guidance`;
+
+      try {
+        const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system: 'You are an expert interior designer. Respond only with valid JSON. No markdown, no backticks, no text before or after the JSON object.',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 1000
+          })
+        });
+
+        const data = await res.json();
+        const raw = data.content[0].text.trim().replace(/```json|```/g, '').trim();
+        const parsed = JSON.parse(raw);
+
+        loading.style.display = 'none';
+        renderResults(parsed.layouts, dimensionStr);
+
+      } catch (err) {
+        loading.style.display = 'none';
+        document.getElementById('formArea').style.display = 'block';
+        btn.disabled = false;
+        error.style.display = 'block';
+        console.error(err);
+      }
+    }
+
+    function renderResults(layouts, dimensionStr) {
+      const subheading = document.getElementById('resultsSubheading');
+      const count = layouts.length;
+      const dim = dimensionStr ? ` (${dimensionStr})` : '';
+      subheading.textContent = `${count} layout ${count === 1 ? 'option' : 'options'} for your ${state.roomType.toLowerCase()}${dim}.`;
+
+      const cards = document.getElementById('layoutCards');
+      cards.innerHTML = '';
+
+      layouts.forEach((layout, i) => {
+        const prosHTML = (layout.pros || []).map(p => `<li>${escapeHTML(p)}</li>`).join('');
+        const consHTML = (layout.cons || []).map(c => `<li>${escapeHTML(c)}</li>`).join('');
+
+        const card = document.createElement('div');
+        card.className = 'layout-card';
+        card.innerHTML = `
+          <div class="layout-card-header">
+            <span class="layout-badge">Option ${i + 1}</span>
+            <div>
+              <div class="layout-name">${escapeHTML(layout.name)}</div>
+              <div class="layout-summary">${escapeHTML(layout.summary)}</div>
+            </div>
+          </div>
+          <div class="layout-card-body">
+            <div class="placement-label">Furniture placement</div>
+            <div class="placement-text">${escapeHTML(layout.placement)}</div>
+            <div class="pros-cons-grid">
+              <div class="pros-block">
+                <div class="pros-cons-label pros-label">What works</div>
+                <ul class="pros-list">${prosHTML}</ul>
+              </div>
+              <div class="cons-block">
+                <div class="pros-cons-label cons-label">Trade-offs</div>
+                <ul class="cons-list">${consHTML}</ul>
+              </div>
+            </div>
+            <div class="best-for"><strong>Best for:</strong> ${escapeHTML(layout.best_for)}</div>
+          </div>
+        `;
+        cards.appendChild(card);
+      });
+
+      const section = document.getElementById('resultsSection');
+      section.style.display = 'block';
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function resetTool() {
+      state.roomType = null;
+      state.lifestyle = [];
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      ['roomLength', 'roomWidth'].forEach(id => document.getElementById(id).value = '');
+      ['windowDoors', 'existingFurniture', 'newFurniture', 'lifestyleNotes'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('generateBtn').disabled = false;
+      document.getElementById('errorMessage').style.display = 'none';
+      document.getElementById('roomTypeHint').style.display = 'none';
+      document.getElementById('resultsSection').style.display = 'none';
+      document.getElementById('formArea').style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>
