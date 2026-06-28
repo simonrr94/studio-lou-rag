@@ -9,7 +9,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      min-height: auto;
+      min-height: 1800px;
       background: #FAF9F6;
       font-family: 'DM Sans', sans-serif;
       color: #433E3C;
@@ -643,36 +643,6 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
       body: JSON.stringify(body)
     }).catch(() => {}); // Silent fail — don't block the result screen
   }
-
-  // ── DYNAMIC HEIGHT REPORTING ──
-  // Polls every 250ms and posts to parent only when height actually changes.
-  // Uses getBoundingClientRect for fractional accuracy + Math.ceil so we never
-  // round down (which would clip the last sub-pixel of rounded corners).
-  (function() {
-    let lastHeight = 0;
-    function measure() {
-      // getBoundingClientRect returns sub-pixel accurate height
-      const bodyRect = document.body.getBoundingClientRect();
-      const htmlRect = document.documentElement.getBoundingClientRect();
-      const h = Math.ceil(Math.max(
-        bodyRect.bottom,
-        htmlRect.bottom,
-        document.body.scrollHeight,
-        document.documentElement.scrollHeight
-      ));
-      if (h !== lastHeight && h > 0) {
-        lastHeight = h;
-        window.parent.postMessage({
-          type: 'studio-lou-height',
-          height: h
-        }, '*');
-      }
-    }
-    // Initial measurement once everything paints
-    window.addEventListener('load', () => setTimeout(measure, 100));
-    // Continuous polling catches every state change
-    setInterval(measure, 250);
-  })();
 </script>
 </body>
 </html>
