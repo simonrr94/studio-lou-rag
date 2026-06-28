@@ -18,67 +18,59 @@
     .container {
       max-width: 720px;
       margin: 0 auto;
-      padding: 48px 24px 80px;
+      padding: 32px 24px 80px;
     }
 
-    /* Header */
-    .tool-eyebrow {
+    /* Progress bar */
+    .progress-wrap {
+      margin-bottom: 28px;
+    }
+
+    .progress-label {
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #582b36;
+      color: #6b6560;
       margin-bottom: 10px;
     }
 
-    .tool-title {
-      font-size: 28px;
+    .progress-track {
+      height: 2px;
+      background: #e8e2d9;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #582b36;
+      border-radius: 99px;
+      transition: width 0.35s ease;
+    }
+
+    /* Step */
+    .step {
+      display: none;
+    }
+
+    .step.active {
+      display: block;
+    }
+
+    .step-question {
+      font-size: 22px;
       font-weight: 700;
       color: #433E3C;
-      line-height: 1.2;
-      margin-bottom: 10px;
+      line-height: 1.3;
+      margin-bottom: 8px;
     }
 
-    .tool-subtitle {
-      font-size: 15px;
+    .step-hint {
+      font-size: 14px;
       color: #6b6560;
       line-height: 1.6;
-      max-width: 560px;
-      margin-bottom: 40px;
-    }
-
-    /* Form sections */
-    .form-section {
-      margin-bottom: 36px;
-    }
-
-    .section-label {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #582b36;
-      margin-bottom: 14px;
-    }
-
-    .field-label {
-      font-size: 14px;
-      font-weight: 600;
-      color: #433E3C;
-      margin-bottom: 6px;
-    }
-
-    .field-hint {
-      font-size: 13px;
-      color: #6b6560;
-      margin-bottom: 10px;
-      line-height: 1.5;
-    }
-
-    .section-divider {
-      border: none;
-      border-top: 1px solid #d0c9bc;
-      margin-bottom: 36px;
+      margin-bottom: 22px;
     }
 
     /* Chips */
@@ -86,6 +78,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+      margin-bottom: 22px;
     }
 
     .chip {
@@ -119,6 +112,7 @@
       align-items: center;
       gap: 12px;
       flex-wrap: wrap;
+      margin-bottom: 22px;
     }
 
     .dimension-input-wrap {
@@ -166,7 +160,7 @@
       border-radius: 12px;
       background: #ffffff;
       resize: vertical;
-      min-height: 80px;
+      min-height: 88px;
       line-height: 1.6;
     }
 
@@ -175,25 +169,51 @@
       border-color: #582b36;
     }
 
+    .field-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #433E3C;
+      margin-bottom: 6px;
+    }
+
+    .field-hint {
+      font-size: 13px;
+      color: #6b6560;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
     .field-stack {
       display: flex;
       flex-direction: column;
       gap: 18px;
+      margin-bottom: 22px;
     }
 
-    /* Validation */
-    .validation-hint {
-      display: none;
-      font-size: 13px;
-      color: #582b36;
-      margin-top: 8px;
+    /* Navigation */
+    .step-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 32px;
     }
 
-    /* Generate button */
-    .generate-btn {
-      display: block;
-      width: 100%;
-      padding: 13px 36px;
+    .back-btn {
+      background: none;
+      border: none;
+      font-size: 14px;
+      color: #6b6560;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      padding: 0;
+      text-decoration: underline;
+    }
+
+    .back-btn:hover { color: #433E3C; }
+    .back-btn.hidden { visibility: hidden; pointer-events: none; }
+
+    .next-btn, .generate-btn {
+      padding: 11px 28px;
       background: #A6BE47;
       color: #ffffff;
       font-size: 15px;
@@ -203,29 +223,24 @@
       border-radius: 50px;
       cursor: pointer;
       transition: opacity 0.2s ease;
-      margin-top: 8px;
     }
 
-    .generate-btn:hover { opacity: 0.88; }
-    .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .next-btn:hover, .generate-btn:hover { opacity: 0.88; }
+    .next-btn:disabled, .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Error */
-    .error-message {
+    /* Validation */
+    .validation-hint {
       display: none;
-      background: #fdf0f2;
-      border: 1px solid #f0c8cf;
-      border-radius: 12px;
-      padding: 14px 18px;
-      font-size: 14px;
+      font-size: 13px;
       color: #582b36;
-      margin-top: 16px;
+      margin-top: 10px;
     }
 
     /* Loading */
     .loading-state {
       display: none;
       text-align: center;
-      padding: 56px 0;
+      padding: 64px 0;
     }
 
     .loading-spinner {
@@ -245,10 +260,21 @@
       color: #6b6560;
     }
 
+    /* Error */
+    .error-message {
+      display: none;
+      background: #fdf0f2;
+      border: 1px solid #f0c8cf;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 14px;
+      color: #582b36;
+      margin-top: 16px;
+    }
+
     /* Results */
     .results-section {
       display: none;
-      margin-top: 8px;
     }
 
     .results-heading {
@@ -448,7 +474,6 @@
 
     .cta-link:hover { opacity: 0.85; }
 
-    /* Reset */
     .reset-wrap {
       text-align: center;
       margin-top: 24px;
@@ -470,18 +495,21 @@
 <body>
   <div class="container">
 
-    <!-- Header -->
-    <div class="tool-eyebrow">Homeowner Tools</div>
-    <h1 class="tool-title">Room Layout Helper</h1>
-    <p class="tool-subtitle">Tell us about your room and what you're working with. We'll give you 2–3 layout options with honest pros and cons so you can move forward with confidence.</p>
+    <!-- Quiz area -->
+    <div id="quizArea">
 
-    <!-- Form -->
-    <div id="formArea">
+      <!-- Progress -->
+      <div class="progress-wrap">
+        <div class="progress-label" id="progressLabel">STEP 1 OF 5</div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill" style="width: 20%;"></div>
+        </div>
+      </div>
 
-      <!-- Room type -->
-      <div class="form-section">
-        <div class="section-label">The Room</div>
-        <div class="field-label">What type of room is this?</div>
+      <!-- Step 1: Room type -->
+      <div class="step active" id="step1">
+        <div class="step-question">What type of room is this?</div>
+        <div class="step-hint">Pick the one that best describes how you use this space.</div>
         <div class="chip-group" id="roomTypeChips">
           <button class="chip" data-value="Living Room" onclick="selectSingle(this, 'roomType')">Living Room</button>
           <button class="chip" data-value="Bedroom" onclick="selectSingle(this, 'roomType')">Bedroom</button>
@@ -490,15 +518,17 @@
           <button class="chip" data-value="Guest Room" onclick="selectSingle(this, 'roomType')">Guest Room</button>
           <button class="chip" data-value="Studio / Flex Space" onclick="selectSingle(this, 'roomType')">Studio / Flex Space</button>
         </div>
-        <div class="validation-hint" id="roomTypeHint">Please select a room type to continue.</div>
+        <div class="validation-hint" id="step1Hint">Please select a room type to continue.</div>
+        <div class="step-nav">
+          <button class="back-btn hidden">← Back</button>
+          <button class="next-btn" onclick="goNext(1)">Next →</button>
+        </div>
       </div>
 
-      <hr class="section-divider">
-
-      <!-- Dimensions -->
-      <div class="form-section">
-        <div class="field-label">Room dimensions</div>
-        <div class="field-hint">Approximate is fine — even rough estimates help us suggest better layouts.</div>
+      <!-- Step 2: Dimensions -->
+      <div class="step" id="step2">
+        <div class="step-question">How big is the room?</div>
+        <div class="step-hint">Approximate is fine — even rough estimates help us suggest better layouts. Skip this if you're not sure.</div>
         <div class="dimensions-row">
           <div class="dimension-input-wrap">
             <input type="number" class="dimension-input" id="roomLength" placeholder="12" min="1" max="200">
@@ -510,44 +540,49 @@
             <span class="dimension-unit">ft</span>
           </div>
         </div>
+        <div class="step-nav">
+          <button class="back-btn" onclick="goBack(2)">← Back</button>
+          <button class="next-btn" onclick="goNext(2)">Next →</button>
+        </div>
       </div>
 
-      <hr class="section-divider">
-
-      <!-- Windows & Doors -->
-      <div class="form-section">
-        <div class="section-label">Windows &amp; Doors</div>
-        <div class="field-label">Where are your windows and doors?</div>
-        <div class="field-hint">Describe their location as best you can — this helps us account for natural light and foot traffic.</div>
+      <!-- Step 3: Windows & Doors -->
+      <div class="step" id="step3">
+        <div class="step-question">Where are your windows and doors?</div>
+        <div class="step-hint">Describe their location as best you can. This helps us account for natural light and foot traffic. Skip this if you're not sure.</div>
         <textarea class="text-area" id="windowDoors" placeholder="e.g. One large window on the north wall, a smaller window on the east wall, entry door on the south wall near the corner."></textarea>
+        <div class="step-nav">
+          <button class="back-btn" onclick="goBack(3)">← Back</button>
+          <button class="next-btn" onclick="goNext(3)">Next →</button>
+        </div>
       </div>
 
-      <hr class="section-divider">
-
-      <!-- Furniture -->
-      <div class="form-section">
-        <div class="section-label">Your Furniture</div>
+      <!-- Step 4: Furniture -->
+      <div class="step" id="step4">
+        <div class="step-question">What are you working with, furniture-wise?</div>
+        <div class="step-hint">Tell us what you're keeping and anything you'd like to bring in. Leave either field blank if it doesn't apply.</div>
         <div class="field-stack">
           <div>
             <div class="field-label">What do you already have?</div>
             <div class="field-hint">List the pieces you're keeping, even if they're not in the room yet.</div>
-            <textarea class="text-area" id="existingFurniture" placeholder="e.g. Queen bed, 2 nightstands, a tall 6-drawer dresser, upholstered armchair, small side table."></textarea>
+            <textarea class="text-area" id="existingFurniture" placeholder="e.g. Queen bed, 2 nightstands, a tall 6-drawer dresser, upholstered armchair."></textarea>
           </div>
           <div>
             <div class="field-label">What would you like to add?</div>
-            <div class="field-hint">Leave blank if you're working with what you have.</div>
             <textarea class="text-area" id="newFurniture" placeholder="e.g. A bench at the foot of the bed, a floor lamp, maybe a small writing desk if space allows."></textarea>
           </div>
         </div>
+        <div class="step-nav">
+          <button class="back-btn" onclick="goBack(4)">← Back</button>
+          <button class="next-btn" onclick="goNext(4)">Next →</button>
+        </div>
       </div>
 
-      <hr class="section-divider">
-
-      <!-- Lifestyle -->
-      <div class="form-section">
-        <div class="section-label">How You Use This Room</div>
-        <div class="field-label">Select everything that applies.</div>
-        <div class="chip-group" id="lifestyleChips" style="margin-bottom: 16px;">
+      <!-- Step 5: Lifestyle -->
+      <div class="step" id="step5">
+        <div class="step-question">How do you use this room?</div>
+        <div class="step-hint">Select everything that applies, then add any extra context below.</div>
+        <div class="chip-group" id="lifestyleChips">
           <button class="chip" data-value="Work from home" onclick="toggleChip(this)">Work from home</button>
           <button class="chip" data-value="Frequently entertain" onclick="toggleChip(this)">Frequently entertain</button>
           <button class="chip" data-value="Have kids" onclick="toggleChip(this)">Have kids</button>
@@ -558,12 +593,13 @@
           <button class="chip" data-value="Watch TV / movie nights" onclick="toggleChip(this)">Watch TV / movie nights</button>
         </div>
         <div class="field-label">Anything else we should know?</div>
-        <textarea class="text-area" id="lifestyleNotes" placeholder="e.g. Two people work from this room on different schedules. Storage is a priority. We want the space to feel calm, not cluttered."></textarea>
+        <textarea class="text-area" id="lifestyleNotes" placeholder="e.g. Two people work from this room on different schedules. Storage is a priority. We want the space to feel calm, not cluttered." style="margin-bottom: 0;"></textarea>
+        <div class="step-nav">
+          <button class="back-btn" onclick="goBack(5)">← Back</button>
+          <button class="generate-btn" id="generateBtn" onclick="generateLayouts()">✦ Get my layout options</button>
+        </div>
+        <div class="error-message" id="errorMessage">Something went wrong generating your layout options. Please try again in a moment.</div>
       </div>
-
-      <!-- Generate -->
-      <button class="generate-btn" id="generateBtn" onclick="generateLayouts()">✦ Get my layout options</button>
-      <div class="error-message" id="errorMessage">Something went wrong generating your layout options. Please try again in a moment.</div>
 
     </div>
 
@@ -593,13 +629,38 @@
   </div>
 
   <script>
+    const TOTAL_STEPS = 5;
     const state = { roomType: null, lifestyle: [] };
+
+    function updateProgress(step) {
+      document.getElementById('progressLabel').textContent = `STEP ${step} OF ${TOTAL_STEPS}`;
+      document.getElementById('progressFill').style.width = `${(step / TOTAL_STEPS) * 100}%`;
+    }
+
+    function showStep(n) {
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      document.getElementById('step' + n).classList.add('active');
+      updateProgress(n);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function goNext(current) {
+      if (current === 1 && !state.roomType) {
+        document.getElementById('step1Hint').style.display = 'block';
+        return;
+      }
+      showStep(current + 1);
+    }
+
+    function goBack(current) {
+      showStep(current - 1);
+    }
 
     function selectSingle(el, key) {
       el.closest('.chip-group').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
       el.classList.add('active');
       state[key] = el.dataset.value;
-      document.getElementById('roomTypeHint').style.display = 'none';
+      document.getElementById('step1Hint').style.display = 'none';
     }
 
     function toggleChip(el) {
@@ -613,19 +674,7 @@
       }
     }
 
-    function validate() {
-      if (!state.roomType) {
-        const hint = document.getElementById('roomTypeHint');
-        hint.style.display = 'block';
-        document.getElementById('roomTypeChips').scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return false;
-      }
-      return true;
-    }
-
     async function generateLayouts() {
-      if (!validate()) return;
-
       const length = document.getElementById('roomLength').value;
       const width = document.getElementById('roomWidth').value;
       const windowDoors = document.getElementById('windowDoors').value.trim();
@@ -639,7 +688,7 @@
 
       btn.disabled = true;
       error.style.display = 'none';
-      document.getElementById('formArea').style.display = 'none';
+      document.getElementById('quizArea').style.display = 'none';
       loading.style.display = 'block';
 
       const dimensionStr = (length && width) ? `${length} ft × ${width} ft` : null;
@@ -675,7 +724,7 @@ Rules:
 - Give each layout a distinctive evocative name, not a generic label like Option A or Layout 1
 - Make placement advice specific to the actual furniture pieces and room constraints mentioned
 - Pros and cons must be practical and honest, not generic cheerleader language
-- Each layout must be meaningfully different from the others — different anchor pieces, different orientation, different zone logic
+- Each layout must be meaningfully different from the others
 - If lifestyle needs were mentioned (pets, kids, WFH, etc.), at least one layout should directly address them
 - If dimensions were not provided, still give useful relative placement guidance`;
 
@@ -699,7 +748,7 @@ Rules:
 
       } catch (err) {
         loading.style.display = 'none';
-        document.getElementById('formArea').style.display = 'block';
+        document.getElementById('quizArea').style.display = 'block';
         btn.disabled = false;
         error.style.display = 'block';
         console.error(err);
@@ -708,9 +757,8 @@ Rules:
 
     function renderResults(layouts, dimensionStr) {
       const subheading = document.getElementById('resultsSubheading');
-      const count = layouts.length;
       const dim = dimensionStr ? ` (${dimensionStr})` : '';
-      subheading.textContent = `${count} layout ${count === 1 ? 'option' : 'options'} for your ${state.roomType.toLowerCase()}${dim}.`;
+      subheading.textContent = `${layouts.length} layout ${layouts.length === 1 ? 'option' : 'options'} for your ${state.roomType.toLowerCase()}${dim}.`;
 
       const cards = document.getElementById('layoutCards');
       cards.innerHTML = '';
@@ -766,10 +814,10 @@ Rules:
       ['windowDoors', 'existingFurniture', 'newFurniture', 'lifestyleNotes'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('generateBtn').disabled = false;
       document.getElementById('errorMessage').style.display = 'none';
-      document.getElementById('roomTypeHint').style.display = 'none';
+      document.getElementById('step1Hint').style.display = 'none';
       document.getElementById('resultsSection').style.display = 'none';
-      document.getElementById('formArea').style.display = 'block';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.getElementById('quizArea').style.display = 'block';
+      showStep(1);
     }
   </script>
 </body>
