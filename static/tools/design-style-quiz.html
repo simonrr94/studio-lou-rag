@@ -188,11 +188,14 @@
     }
 
     @media (max-width: 480px) {
+      /* mobile overrides go here if needed */
+    }
+
     .btn-primary {
       display: inline-block;
       padding: 13px 36px;
       background: #A6BE47;
-      color: #433E3C;
+      color: #ffffff;
       font-family: 'DM Sans', sans-serif;
       font-size: 15px;
       font-weight: 600;
@@ -659,7 +662,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
         lastHeight = h;
         window.parent.postMessage({
           type: 'studio-lou-height',
-          height: h
+          height: h + 24
         }, '*');
       }
     }
