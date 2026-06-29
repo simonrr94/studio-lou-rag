@@ -335,6 +335,8 @@
     <input type="email" class="email-input" id="emailInput" placeholder="your@email.com" />
     <p class="email-note">No spam, ever. Just your results.</p>
     <button class="btn-primary" id="submitBtn" onclick="submitQuiz()">See my results →</button>
+    <br>
+    <button class="btn-secondary" onclick="skipEmail()">Skip and see results</button>
   </div>
 
   <!-- ── SCREEN: LOADING ── -->
@@ -363,6 +365,15 @@
 </div>
 
 <script>
+  function trackUsage(toolName) {
+    fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
+    }).catch(() => {});
+  }
+
   // ── QUESTIONS ──
   const QUESTIONS = [
     {
@@ -506,18 +517,17 @@
   }
 
   // ── EMAIL + SUBMIT ──
+  function skipEmail() {
+    document.getElementById('emailInput').value = '';
+    submitQuiz();
+  }
+
   async function submitQuiz() {
     const email = document.getElementById('emailInput').value.trim();
     const emailError = document.getElementById('emailError');
 
-    // Email is required
-    if (!email) {
-      emailError.textContent = 'Please enter your email address to see your results.';
-      emailError.style.display = 'block';
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      emailError.textContent = 'Please enter a valid email address.';
+    // Validate only if they typed something
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       emailError.style.display = 'block';
       return;
     }
@@ -576,13 +586,15 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
       return;
     }
 
-    // Log to Google Sheet (email now required so always log)
-    logToSheet({
+    // Log to Google Sheet
+    if (email) {
+      logToSheet({
         email,
         answers,
         primaryStyle: resultData.primaryStyle,
         secondaryInfluence: resultData.secondaryInfluence
-    });
+      });
+    }
 
     // Render result
     document.getElementById('resultPrimary').textContent = resultData.primaryStyle;
@@ -609,6 +621,7 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
 
     document.getElementById('progressTrack').style.display = 'none';
     showScreen('result');
+    trackUsage('design-style-quiz');
   }
 
   // ── INIT ──

@@ -189,6 +189,14 @@
 
 </div>
 <script>
+function trackUsage(toolName) {
+  fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
+  }).catch(() => {});
+}
 const TOTAL_STEPS = 6;
 
 function updateProgress(step) {
@@ -271,6 +279,7 @@ Rules: Only recommend real, currently available paint colors from Sherwin-Willia
     const parsed = JSON.parse(data.content[0].text.replace(/```json|```/g, '').trim());
     document.getElementById('quizLoading').style.display = 'none';
     renderResults(parsed);
+    trackUsage('color-palette-generator');
   } catch(e) {
     document.getElementById('quizLoading').style.display = 'none';
     document.getElementById('quizArea').style.display = 'block';
