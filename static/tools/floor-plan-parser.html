@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Floor Plan Parser · Studio Lou</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 1800px;
+      font-family: 'DM Sans', sans-serif;
+      background: #FAF9F6;
+      color: #433E3C;
+    }
+
+    .wrap {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    h1 {
+      font-size: 26px;
+      font-weight: 600;
+      color: #433E3C;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 15px;
+      color: #6b6560;
+      margin-bottom: 32px;
+    }
+
+    /* Upload zone */
+    .upload-zone {
+      border: 1.5px dashed #d0c9bc;
+      border-radius: 16px;
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      background: #f5f0e8;
+      transition: border-color .15s, background .15s;
+      margin-bottom: 24px;
+    }
+    .upload-zone:hover { border-color: #A6BE47; background: #f0ece4; }
+    .upload-zone input { display: none; }
+    .upload-icon { font-size: 36px; margin-bottom: 12px; }
+    .upload-zone p { font-size: 15px; color: #6b6560; }
+    .upload-zone small { font-size: 13px; color: #9a948e; display: block; margin-top: 4px; }
+
+    /* Status */
+    .status {
+      font-size: 14px;
+      color: #6b6560;
+      padding: 12px 0;
+      min-height: 40px;
+    }
+    .status.error { color: #9b2335; }
+    .status.loading { color: #582b36; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #d0c9bc;
+      border-top-color: #582b36;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 24px;
+      border-radius: 50px;
+      border: 1.5px solid #433E3C;
+      background: transparent;
+      color: #433E3C;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .12s, color .12s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: #433E3C; color: #fdfaf5; }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+
+    .btn-primary {
+      background: #A6BE47;
+      border-color: #A6BE47;
+      color: #433E3C;
+    }
+    .btn-primary:hover { background: #93ab38; border-color: #93ab38; color: #433E3C; }
+
+    .btn-sm {
+      padding: 7px 16px;
+      font-size: 13px;
+    }
+
+    /* Style controls */
+    .style-panel {
+      background: #f5f0e8;
+      border: 1px solid #d0c9bc;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .style-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #6b6560;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-right: 4px;
+    }
+    .style-group { display: flex; align-items: center; gap: 8px; }
+    .style-group label { font-size: 13px; color: #6b6560; }
+    input[type="color"] {
+      width: 28px; height: 28px;
+      border: 1px solid #d0c9bc;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 1px;
+      background: #fff;
+    }
+    .toggle-group { display: flex; gap: 12px; flex-wrap: wrap; }
+    .toggle-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #6b6560; }
+    .toggle-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: #A6BE47; cursor: pointer; }
+
+    /* Canvas */
+    .canvas-wrap {
+      border: 1px solid #d0c9bc;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #ece8e1;
+      margin-bottom: 24px;
+    }
+    #floorCanvas {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* Rooms */
+    .section-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #9a948e;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 12px;
+    }
+
+    .rooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .room-card {
+      background: #f5f0e8;
+      border: 1px solid #d0c9bc;
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .room-card h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #582b36;
+      margin-bottom: 10px;
+    }
+
+    .dim-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 7px;
+    }
+    .dim-row label {
+      font-size: 12px;
+      color: #6b6560;
+      width: 34px;
+      flex-shrink: 0;
+    }
+    .dim-row input[type="number"] {
+      flex: 1;
+      height: 32px;
+      border: 1px solid #d0c9bc;
+      border-radius: 12px;
+      background: #ffffff;
+      color: #433E3C;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      padding: 0 10px;
+    }
+    .dim-row input[type="number"]:focus {
+      outline: none;
+      border-color: #A6BE47;
+    }
+    .dim-row span { font-size: 12px; color: #9a948e; width: 18px; }
+
+    /* Export */
+    .export-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Hidden area shown after extraction */
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Floor Plan Parser</h1>
+  <p class="subtitle">Upload a floor plan to extract room dimensions and generate an annotated architectural drawing.</p>
+
+  <div class="upload-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="image/*,.pdf">
+    <div class="upload-icon">🏠</div>
+    <p>Drop a floor plan image here, or click to upload</p>
+    <small>PNG, JPG, or PDF supported</small>
+  </div>
+
+  <div class="status" id="statusArea"></div>
+
+  <div id="mainArea" class="hidden">
+
+    <div class="style-panel">
+      <span class="style-label">Annotation style</span>
+      <div class="style-group">
+        <label for="lineColor">Line</label>
+        <input type="color" id="lineColor" value="#1a5fa8">
+      </div>
+      <div class="style-group">
+        <label for="textColor">Text</label>
+        <input type="color" id="textColor" value="#1a5fa8">
+      </div>
+      <div class="style-group">
+        <span class="style-label" style="margin-right:8px">Walls</span>
+        <div class="toggle-group">
+          <div class="toggle-item"><input type="checkbox" id="showTop" checked><label for="showTop">Top</label></div>
+          <div class="toggle-item"><input type="checkbox" id="showRight" checked><label for="showRight">Right</label></div>
+          <div class="toggle-item"><input type="checkbox" id="showBottom"><label for="showBottom">Bottom</label></div>
+          <div class="toggle-item"><input type="checkbox" id="showLeft"><label for="showLeft">Left</label></div>
+        </div>
+      </div>
+      <button class="btn btn-sm" id="btnReparse">↺ Re-parse</button>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="floorCanvas"></canvas>
+    </div>
+
+    <div class="section-label">Rooms — edit any dimension to update the overlay</div>
+    <div class="rooms-grid" id="roomsGrid"></div>
+
+    <div class="section-label">Export</div>
+    <div class="export-row">
+      <button class="btn btn-primary" id="btnPng">Download PNG</button>
+      <button class="btn" id="btnPdf">Download PDF</button>
+      <button class="btn" id="btnJson">Download JSON</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function trackUsage(toolName) {
+  fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
+  }).catch(() => {});
+}
+  // pdf.js worker
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  const VISION_URL = 'https://studio-lou-rag.onrender.com/api/vision';
+
+  const EXTRACT_PROMPT = `You are analyzing a floor plan image. Extract every labeled room or space.
+
+For each room return:
+- name: room label as shown
+- width: numeric width in feet (estimate from scale bar or relative proportions)
+- length: numeric length in feet
+- bbox: approximate bounding box as percentage of image dimensions — {x, y, w, h} where x/y are the top-left corner (0–100 each), and w/h are width and height as percentages (0–100 each). Be as accurate as possible by examining where each room's walls fall in the image.
+
+Respond with ONLY valid JSON, no markdown fences, no explanation:
+{
+  "unit": "ft",
+  "rooms": [
+    {"name": "...", "width": 0, "length": 0, "bbox": {"x": 0, "y": 0, "w": 0, "h": 0}}
+  ]
+}`;
+
+  let imageEl = null;
+  let imageB64 = null;
+  let imageMime = 'image/jpeg';
+  let rooms = [];
+
+  function $(id) { return document.getElementById(id); }
+
+  function setStatus(msg, type) {
+    const el = $('statusArea');
+    el.className = 'status' + (type ? ' ' + type : '');
+    if (!msg) { el.innerHTML = ''; return; }
+    if (type === 'loading') {
+      el.innerHTML = '<span class="spinner"></span>' + msg;
+    } else {
+      el.textContent = msg;
+    }
+  }
+
+  // --- Upload / drag-drop ---
+  $('dropZone').addEventListener('click', () => $('fileInput').click());
+  $('dropZone').addEventListener('dragover', e => {
+    e.preventDefault();
+    $('dropZone').style.borderColor = '#A6BE47';
+  });
+  $('dropZone').addEventListener('dragleave', () => {
+    $('dropZone').style.borderColor = '';
+  });
+  $('dropZone').addEventListener('drop', e => {
+    e.preventDefault();
+    $('dropZone').style.borderColor = '';
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  $('fileInput').addEventListener('change', e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  async function handleFile(file) {
+    $('mainArea').classList.add('hidden');
+    setStatus('Reading file...', 'loading');
+
+    if (file.type === 'application/pdf') {
+      await handlePdf(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        imageMime = file.type || 'image/jpeg';
+        imageB64 = ev.target.result.split(',')[1];
+        const img = new Image();
+        img.onload = () => { imageEl = img; parseFloorPlan(); };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  async function handlePdf(file) {
+    if (!window.pdfjsLib) {
+      setStatus('PDF.js failed to load — please upload a PNG or JPG instead.', 'error');
+      return;
+    }
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdfDoc.getPage(1);
+      const viewport = page.getViewport({ scale: 2 });
+      const offscreen = document.createElement('canvas');
+      offscreen.width = viewport.width;
+      offscreen.height = viewport.height;
+      const ctx = offscreen.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      imageMime = 'image/jpeg';
+      imageB64 = offscreen.toDataURL('image/jpeg', 0.92).split(',')[1];
+      const img = new Image();
+      img.onload = () => { imageEl = img; parseFloorPlan(); };
+      img.src = 'data:image/jpeg;base64,' + imageB64;
+    } catch (e) {
+      setStatus('PDF render error: ' + e.message, 'error');
+    }
+  }
+
+  async function parseFloorPlan() {
+    setStatus('Extracting rooms and coordinates — this may take 10–20 seconds...', 'loading');
+    try {
+      const res = await fetch(VISION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: imageB64,
+          media_type: imageMime,
+          prompt: EXTRACT_PROMPT
+        })
+      });
+      if (!res.ok) throw new Error('Server returned ' + res.status);
+      const data = await res.json();
+      const text = data.content[0].text;
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+
+      rooms = (parsed.rooms || []).map((r, i) => ({
+        ...r,
+        id: i,
+        width: parseFloat(r.width) || 10,
+        length: parseFloat(r.length) || 10,
+        bbox: r.bbox || { x: 5 + i * 8, y: 5, w: 18, h: 18 }
+      }));
+
+      setStatus('');
+      $('mainArea').classList.remove('hidden');
+      renderCards();
+      drawCanvas();
+      trackUsage('floor-plan-parser');
+    } catch (e) {
+      setStatus('Extraction failed: ' + e.message + '. Check the Render server is awake and try again.', 'error');
+    }
+  }
+
+  // --- Room cards ---
+  function renderCards() {
+    const grid = $('roomsGrid');
+    grid.innerHTML = '';
+    rooms.forEach(room => {
+      const card = document.createElement('div');
+      card.className = 'room-card';
+      card.innerHTML = `
+        <h4>${room.name}</h4>
+        <div class="dim-row">
+          <label>Width</label>
+          <input type="number" step="0.5" min="0" value="${room.width.toFixed(1)}"
+            data-id="${room.id}" data-field="width">
+          <span>ft</span>
+        </div>
+        <div class="dim-row">
+          <label>Length</label>
+          <input type="number" step="0.5" min="0" value="${room.length.toFixed(1)}"
+            data-id="${room.id}" data-field="length">
+          <span>ft</span>
+        </div>`;
+      grid.appendChild(card);
+    });
+    grid.querySelectorAll('input[type="number"]').forEach(inp => {
+      inp.addEventListener('input', e => {
+        const id = parseInt(e.target.dataset.id);
+        const field = e.target.dataset.field;
+        const room = rooms.find(r => r.id === id);
+        if (room) {
+          room[field] = parseFloat(e.target.value) || 0;
+          drawCanvas();
+        }
+      });
+    });
+  }
+
+  // --- Canvas drawing ---
+  function drawCanvas() {
+    if (!imageEl) return;
+    const canvas = $('floorCanvas');
+    canvas.width = imageEl.naturalWidth;
+    canvas.height = imageEl.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imageEl, 0, 0);
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const lineColor = $('lineColor').value;
+    const textColor = $('textColor').value;
+    const showTop = $('showTop').checked;
+    const showRight = $('showRight').checked;
+    const showBottom = $('showBottom').checked;
+    const showLeft = $('showLeft').checked;
+
+    const scale = Math.min(W, H) / 900;
+    const offset = 28 * scale;
+    const tickLen = 8 * scale;
+    const lw = 1.5 * scale;
+    const fontSize = Math.max(11, Math.round(13 * scale));
+
+    ctx.strokeStyle = lineColor;
+    ctx.fillStyle = textColor;
+    ctx.lineWidth = lw;
+
+    rooms.forEach(room => {
+      const b = room.bbox;
+      const rx = (b.x / 100) * W;
+      const ry = (b.y / 100) * H;
+      const rw = (b.w / 100) * W;
+      const rh = (b.h / 100) * H;
+
+      if (showTop)    drawHorizDim(ctx, rx, ry - offset,       rw, formatDim(room.width),  lineColor, textColor, tickLen, lw, fontSize);
+      if (showBottom) drawHorizDim(ctx, rx, ry + rh + offset,  rw, formatDim(room.width),  lineColor, textColor, tickLen, lw, fontSize);
+      if (showLeft)   drawVertDim(ctx,  rx - offset,      ry,  rh, formatDim(room.length), lineColor, textColor, tickLen, lw, fontSize);
+      if (showRight)  drawVertDim(ctx,  rx + rw + offset, ry,  rh, formatDim(room.length), lineColor, textColor, tickLen, lw, fontSize);
+    });
+  }
+
+  function formatDim(val) {
+    return parseFloat(val).toFixed(1) + ' ft';
+  }
+
+  function drawHorizDim(ctx, x, y, w, label, lineC, textC, tickLen, lw, fontSize) {
+    ctx.save();
+    ctx.strokeStyle = lineC;
+    ctx.fillStyle = textC;
+    ctx.lineWidth = lw;
+    ctx.font = '500 ' + fontSize + 'px "DM Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + w, y);
+    ctx.stroke();
+
+    [x, x + w].forEach(tx => {
+      ctx.beginPath();
+      ctx.moveTo(tx, y - tickLen);
+      ctx.lineTo(tx, y + tickLen);
+      ctx.stroke();
+    });
+
+    const mid = x + w / 2;
+    const pad = 5;
+    const tw = ctx.measureText(label).width + pad * 2;
+    ctx.fillStyle = 'rgba(253,250,245,0.88)';
+    ctx.fillRect(mid - tw / 2, y - fontSize / 2 - 3, tw, fontSize + 6);
+    ctx.fillStyle = textC;
+    ctx.fillText(label, mid, y);
+    ctx.restore();
+  }
+
+  function drawVertDim(ctx, x, y, h, label, lineC, textC, tickLen, lw, fontSize) {
+    ctx.save();
+    ctx.strokeStyle = lineC;
+    ctx.fillStyle = textC;
+    ctx.lineWidth = lw;
+    ctx.font = '500 ' + fontSize + 'px "DM Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y + h);
+    ctx.stroke();
+
+    [y, y + h].forEach(ty => {
+      ctx.beginPath();
+      ctx.moveTo(x - tickLen, ty);
+      ctx.lineTo(x + tickLen, ty);
+      ctx.stroke();
+    });
+
+    const mid = y + h / 2;
+    ctx.translate(x, mid);
+    ctx.rotate(-Math.PI / 2);
+    const pad = 5;
+    const tw = ctx.measureText(label).width + pad * 2;
+    ctx.fillStyle = 'rgba(253,250,245,0.88)';
+    ctx.fillRect(-tw / 2, -fontSize / 2 - 3, tw, fontSize + 6);
+    ctx.fillStyle = textC;
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  // --- Style controls ---
+  ['lineColor', 'textColor', 'showTop', 'showRight', 'showBottom', 'showLeft'].forEach(id => {
+    $(id).addEventListener('change', drawCanvas);
+  });
+
+  $('btnReparse').addEventListener('click', () => {
+    if (imageB64) parseFloorPlan();
+  });
+
+  // --- Export ---
+  $('btnPng').addEventListener('click', () => {
+    const canvas = $('floorCanvas');
+    canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'floor-plan-annotated.png';
+      a.click();
+    }, 'image/png');
+  });
+
+  $('btnPdf').addEventListener('click', () => {
+    const canvas = $('floorCanvas');
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const { jsPDF } = window.jspdf;
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const landscape = cw > ch;
+    const doc = new jsPDF({
+      orientation: landscape ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [cw, ch]
+    });
+    doc.addImage(imgData, 'JPEG', 0, 0, cw, ch);
+    doc.save('floor-plan-annotated.pdf');
+  });
+
+  $('btnJson').addEventListener('click', () => {
+    const exportData = {
+      generated: new Date().toISOString(),
+      unit: 'ft',
+      rooms: rooms.map(r => ({
+        name: r.name,
+        width: r.width,
+        length: r.length,
+        area_sqft: parseFloat((r.width * r.length).toFixed(1)),
+        bbox_percent: r.bbox
+      }))
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'floor-plan-data.json';
+    a.click();
+  });
+</script>
+</body>
+</html>

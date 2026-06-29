@@ -629,6 +629,14 @@
   </div>
 
   <script>
+function trackUsage(toolName) {
+  fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
+  }).catch(() => {});
+}
     const TOTAL_STEPS = 5;
     const state = { roomType: null, lifestyle: [] };
 
@@ -745,6 +753,7 @@ Rules:
 
         loading.style.display = 'none';
         renderResults(parsed.layouts, dimensionStr);
+        trackUsage('room-layout-helper');
 
       } catch (err) {
         loading.style.display = 'none';
