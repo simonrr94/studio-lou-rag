@@ -137,11 +137,12 @@
       <div class="step-nav"><button class="back-link" onclick="goBack(3)">← Back</button><button class="next-btn" onclick="goNext(3)">Next →</button></div>
     </div>
 
-    <!-- Step 4: Content mix -->
+    <!-- Step 4: Content mix + Pillars + Episodic -->
     <div class="step" id="step4">
-      <div class="step-question">What do you post most?</div>
-      <div class="step-hint">Select everything that regularly appears in your content. This helps us assess your content strategy.</div>
+      <div class="step-question">What does your content look like?</div>
+      <div class="step-hint">A few quick questions about what you post, what it does, and how it's structured over time.</div>
       <div class="field">
+        <label>What do you post most? <span style="font-weight:400;color:#aaa">(select all that apply)</span></label>
         <div class="pills" id="contentPills">
           <div class="pill" onclick="toggleCheck(this)">Project photos</div>
           <div class="pill" onclick="toggleCheck(this)">Behind the scenes</div>
@@ -149,6 +150,24 @@
           <div class="pill" onclick="toggleCheck(this)">Process and mood boards</div>
           <div class="pill" onclick="toggleCheck(this)">Personal or lifestyle</div>
           <div class="pill" onclick="toggleCheck(this)">Promotional or service offers</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Which of these does your content actually do? <span style="font-weight:400;color:#aaa">(select all that apply)</span></label>
+        <div class="pills" id="pillarPills">
+          <div class="pill" onclick="toggleCheck(this)">Educational — teach something useful</div>
+          <div class="pill" onclick="toggleCheck(this)">Inspirational — show what's possible</div>
+          <div class="pill" onclick="toggleCheck(this)">Relatable — share real moments, struggles, opinions</div>
+          <div class="pill" onclick="toggleCheck(this)">Entertaining — fun, surprising, scroll-stopping</div>
+          <div class="pill" onclick="toggleCheck(this)">Community — spark conversation, engage your audience</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Do you run any recurring series or episodic content?</label>
+        <div class="pills" id="episodicPills">
+          <div class="pill" onclick="selectRadio('episodic',this)">Yes, I have ongoing series people come back for</div>
+          <div class="pill" onclick="selectRadio('episodic',this)">Sort of — I repeat formats but not consistently</div>
+          <div class="pill" onclick="selectRadio('episodic',this)">No, every post is one-off</div>
         </div>
       </div>
       <div class="step-nav"><button class="back-link" onclick="goBack(4)">← Back</button><button class="next-btn" onclick="goNext(4)">Next →</button></div>
@@ -244,7 +263,7 @@
 const TOTAL_STEPS = 7;
 const GRADE_TEXT = { A:'#2a5c2a', B:'#5a6e00', C:'#7a5000', D:'#7a1f1f' };
 const GRADE_BG   = { A:'#e6f3e6', B:'#f0f5e0', C:'#fef3e0', D:'#fde8e8' };
-const radioState = { website:'', google:'', email:'', lead:'' };
+const radioState = { website:'', google:'', email:'', lead:'', episodic:'' };
 let currentAudit = null, pendingAudit = null;
 
 function updateProgress(step) {
@@ -271,7 +290,7 @@ function showHint(id) { document.getElementById(id).style.display = 'block'; }
 function hideAllHints() { document.querySelectorAll('.validation-hint').forEach(h => h.style.display = 'none'); }
 function toggleCheck(el) { el.classList.toggle('active'); }
 function selectRadio(group, el) {
-  const groupMap = { website:'websitePills', google:'googlePills', email:'emailPills', lead:'leadPills' };
+  const groupMap = { website:'websitePills', google:'googlePills', email:'emailPills', lead:'leadPills', episodic:'episodicPills' };
   document.querySelectorAll('#'+groupMap[group]+' .pill').forEach(p=>p.classList.remove('active'));
   el.classList.add('active'); radioState[group] = el.textContent;
 }
@@ -288,6 +307,7 @@ async function runAudit() {
   const platforms = getChecked('platformPills');
   const frequency = document.getElementById('frequency').value;
   const contentMix = getChecked('contentPills');
+  const contentPillars = getChecked('pillarPills');
   const bio = document.getElementById('bio').value.trim();
   const challenge = document.getElementById('challenge').value.trim();
   document.getElementById('generateBtn').disabled = true;
@@ -295,7 +315,7 @@ async function runAudit() {
   document.getElementById('quizArea').style.display = 'none';
   document.getElementById('quizLoading').style.display = 'block';
 
-  const prompt = 'You are a marketing strategist specializing in interior design firms. Audit this firm\'s marketing presence and return ONLY valid JSON.\n\nFirm details:\n- Type: '+firmType+'\n- Ideal client: '+(idealClient||'not specified')+'\n- Active platforms: '+platforms.join(', ')+'\n- Posting frequency: '+frequency+'\n- Content mix: '+(contentMix.join(', ')||'not specified')+'\n- Bio/positioning: '+(bio||'not provided')+'\n- Website status: '+(radioState.website||'not answered')+'\n- Google Business profile: '+(radioState.google||'not answered')+'\n- Email list/newsletter: '+(radioState.email||'not answered')+'\n- Lead capture on site: '+(radioState.lead||'not answered')+'\n- Biggest challenge: '+(challenge||'not specified')+'\n\nReturn this exact JSON schema with exactly 4 sections:\n{"sections":[{"title":"Positioning clarity","grade":"B","summary":"2-3 sentence honest assessment referencing what they told you.","recommendation":"1-2 specific actionable next steps."},{"title":"Platform and content strategy","grade":"A","summary":"...","recommendation":"..."},{"title":"Website and discoverability","grade":"C","summary":"Assess their website status, Google Business profile, and local findability.","recommendation":"..."},{"title":"Email and lead capture","grade":"D","summary":"Assess their email list and lead capture setup.","recommendation":"..."}]}\n\nRules: grades A B C or D only. Be honest and direct. No em dashes. Return ONLY the JSON object.';
+  const prompt = 'You are a marketing strategist specializing in interior design firms. Audit this firm\'s marketing presence and return ONLY valid JSON.\n\nFirm details:\n- Type: '+firmType+'\n- Ideal client: '+(idealClient||'not specified')+'\n- Active platforms: '+platforms.join(', ')+'\n- Posting frequency: '+frequency+'\n- Content topics they post: '+(contentMix.join(', ')||'not specified')+'\n- Content pillars their work serves (educational / inspirational / relatable / entertaining / community): '+(contentPillars.join(', ')||'not specified')+'\n- Episodic or recurring content: '+(radioState.episodic||'not answered')+'\n- Bio/positioning: '+(bio||'not provided')+'\n- Website status: '+(radioState.website||'not answered')+'\n- Google Business profile: '+(radioState.google||'not answered')+'\n- Email list/newsletter: '+(radioState.email||'not answered')+'\n- Lead capture on site: '+(radioState.lead||'not answered')+'\n- Biggest challenge: '+(challenge||'not specified')+'\n\nFor the "Platform and content strategy" section: evaluate not just what they post (topics) but whether their content hits a healthy mix of the five pillars (educational, inspirational, relatable, entertaining, community) and whether they have any episodic or recurring content anchors. A firm hitting only one or two pillars, or with no recurring series, is likely producing forgettable content even if posting frequency is high. Address gaps directly in the summary and give a specific next step in the recommendation (e.g. "add a weekly series" or "your mix skews inspirational only — add educational and community pillars").\n\nReturn this exact JSON schema with exactly 4 sections:\n{"sections":[{"title":"Positioning clarity","grade":"B","summary":"2-3 sentence honest assessment referencing what they told you.","recommendation":"1-2 specific actionable next steps."},{"title":"Platform and content strategy","grade":"A","summary":"...","recommendation":"..."},{"title":"Website and discoverability","grade":"C","summary":"Assess their website status, Google Business profile, and local findability.","recommendation":"..."},{"title":"Email and lead capture","grade":"D","summary":"Assess their email list and lead capture setup.","recommendation":"..."}]}\n\nRules: grades A B C or D only. Be honest and direct. No em dashes. Return ONLY the JSON object.';
 
   try {
     const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ system:'You are a marketing strategist for interior design firms. Return only valid JSON as instructed.', max_tokens:1200, messages:[{role:'user',content:prompt}] }) });
