@@ -30,8 +30,6 @@
     .select-wrap { position: relative; }
     .select-wrap::after { content: '\2193'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: #6b6560; font-size: 13px; pointer-events: none; }
     select { width: 100%; padding: 13px 16px; border-radius: 12px; border: 1px solid #d0c9bc; background: #fff; font-family: 'DM Sans', sans-serif; font-size: 14px; color: #433E3C; appearance: none; -webkit-appearance: none; outline: none; }
-    input[type="text"] { width: 100%; padding: 13px 16px; border-radius: 12px; border: 1px solid #d0c9bc; background: #fff; font-family: 'DM Sans', sans-serif; font-size: 14px; color: #433E3C; outline: none; box-sizing: border-box; }
-    input[type="text"]:focus { border-color: #A6BE47; }
     .pill-group { display: flex; gap: 10px; flex-wrap: wrap; }
     .pill { padding: 5px 14px; border-radius: 99px; border: 1px solid #d0c9bc; background: #fff; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; color: #433E3C; cursor: pointer; transition: all 0.2s; user-select: none; }
     .pill.active { background: #f5eef0; border-color: #582b36; color: #582b36; font-weight: 600; }
@@ -66,7 +64,7 @@
 
   <div id="quizArea">
     <div class="progress-wrap">
-      <div class="progress-label" id="progressLabel">STEP 1 OF 6</div>
+      <div class="progress-label" id="progressLabel">STEP 1 OF 5</div>
       <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:20%"></div></div>
     </div>
 
@@ -153,20 +151,9 @@
         <button class="pill" data-value="I want real, noticeable color">Real color</button>
       </div>
       <div class="validation-hint" id="hint5">Please select an option to continue.</div>
-      <div class="step-nav">
-        <button class="back-link" onclick="goBack(5)">← Back</button>
-        <button class="next-btn" onclick="goNext(5)">Next →</button>
-      </div>
-    </div>
-
-    <!-- Step 6: Locked color (optional) -->
-    <div class="step" id="step6">
-      <div class="step-question">Any color you want us to build around?</div>
-      <div class="step-hint">Optional. A color from an art piece, an existing wall paint, a hex code from Pinterest — anything you want the palette to work with. Type a description (e.g. "dusty navy"), a hex code (e.g. "#2C3E50"), or a paint name (e.g. "Hale Navy HC-154"). Leave blank to skip.</div>
-      <input type="text" id="locked-color" placeholder="Leave blank to skip" />
       <div class="error-msg" id="error-msg">Something went wrong. Please try again in a moment.</div>
       <div class="step-nav">
-        <button class="back-link" onclick="goBack(6)">← Back</button>
+        <button class="back-link" onclick="goBack(5)">← Back</button>
         <button class="next-btn" id="generate-btn" onclick="generate()">✦ Generate my palette</button>
       </div>
     </div>
@@ -189,15 +176,7 @@
 
 </div>
 <script>
-function trackUsage(toolName) {
-  fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
-  }).catch(() => {});
-}
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
 
 function updateProgress(step) {
   document.getElementById('progressLabel').textContent = 'STEP ' + step + ' OF ' + TOTAL_STEPS;
@@ -230,7 +209,6 @@ function goNext(current) {
   if (current === 2 && !getSelected('existing-colors')) { showHint('hint2'); return; }
   if (current === 3 && !getSelected('lighting')) { showHint('hint3'); return; }
   if (current === 4 && !getSelected('feeling')) { showHint('hint4'); return; }
-  if (current === 5 && !getSelected('color-comfort')) { showHint('hint5'); return; }
   hideAllHints();
   showStep(current + 1);
 }
@@ -245,12 +223,11 @@ function hexForSwatch(hex) {
 
 async function generate() {
   const comfort = getSelected('color-comfort');
-  if (!comfort) { showStep(5); showHint('hint5'); return; }
+  if (!comfort) { showHint('hint5'); return; }
   const room = document.getElementById('room').value;
   const existing = getSelected('existing-colors');
   const lighting = getSelected('lighting');
   const feeling = getSelected('feeling');
-  const lockedColor = document.getElementById('locked-color').value.trim();
   document.getElementById('generate-btn').disabled = true;
   document.getElementById('error-msg').style.display = 'none';
   document.getElementById('quizArea').style.display = 'none';
@@ -269,17 +246,15 @@ Return this exact structure:
   ]
 }
 
-Rules: Only recommend real, currently available paint colors from Sherwin-Williams and Benjamin Moore. The four colors must work together as a cohesive palette. Be specific to the user's inputs. Never use em dashes. Trim is almost always a clean white or soft white. If the user provides a locked-in color, that color MUST be one of the four palette slots — use the hex they give you exactly if they provided one, or your best interpretation if they described it or named a paint. Decide which role (Primary Wall, Secondary Surface, Accent, or Trim) it fits best. Mention in the intro that the palette was built around their color.`;
+Rules: Only recommend real, currently available paint colors from Sherwin-Williams and Benjamin Moore. The four colors must work together as a cohesive palette. Be specific to the user's inputs. Never use em dashes. Trim is almost always a clean white or soft white.`;
 
   try {
-    const lockedLine = lockedColor ? '\nMust include this specific color in the palette: "' + lockedColor + '". Build the rest of the palette around it.' : '';
-    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system, messages: [{ role: 'user', content: 'Room: ' + room + '\nExisting fixed colors: ' + existing + '\nLighting: ' + lighting + '\nDesired feeling: ' + feeling + '\nColor comfort level: ' + comfort + lockedLine + '\n\nRecommend a complete 4-color paint palette for this room.' }], max_tokens: 1000 }) });
+    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system, messages: [{ role: 'user', content: 'Room: ' + room + '\nExisting fixed colors: ' + existing + '\nLighting: ' + lighting + '\nDesired feeling: ' + feeling + '\nColor comfort level: ' + comfort + '\n\nRecommend a complete 4-color paint palette for this room.' }], max_tokens: 1000 }) });
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
     const parsed = JSON.parse(data.content[0].text.replace(/```json|```/g, '').trim());
     document.getElementById('quizLoading').style.display = 'none';
     renderResults(parsed);
-    trackUsage('color-palette-generator');
   } catch(e) {
     document.getElementById('quizLoading').style.display = 'none';
     document.getElementById('quizArea').style.display = 'block';
@@ -311,7 +286,6 @@ function renderResults(data) {
 function resetTool() {
   document.getElementById('results').style.display = 'none';
   document.getElementById('room').value = '';
-  document.getElementById('locked-color').value = '';
   document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
   document.getElementById('generate-btn').disabled = false;
   document.getElementById('error-msg').style.display = 'none';

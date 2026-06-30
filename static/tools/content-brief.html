@@ -8,340 +8,205 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      min-height: 1800px;
-    }
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: #FAF9F6;
-      color: #433E3C;
-      padding: 40px 24px 80px;
-    }
-    .form-group { margin-bottom: 16px; }
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: #6b6560;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 6px;
-    }
-    input, select {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 16px;
-      padding: 12px 16px;
-      border-radius: 12px;
-      border: 1px solid #d0c9bc;
-      background: #ffffff;
-      color: #433E3C;
-      width: 100%;
-      outline: none;
-      appearance: none;
-      -webkit-appearance: none;
-    }
+    html, body { min-height: 1800px; }
+    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; color: #433E3C; padding: 32px 24px 80px; }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    .step { display: none; } .step.active { display: block; }
+    .progress-wrap { margin-bottom: 28px; }
+    .progress-label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
+    .progress-track { height: 2px; background: #e8e2d9; border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #582b36; border-radius: 99px; transition: width 0.35s ease; }
+    .step-question { font-size: 22px; font-weight: 700; color: #433E3C; line-height: 1.3; margin-bottom: 8px; }
+    .step-hint { font-size: 14px; color: #6b6560; line-height: 1.6; margin-bottom: 22px; }
+    .step-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 32px; }
+    .back-link { background: none; border: none; font-size: 14px; color: #6b6560; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; text-decoration: underline; }
+    .back-link:hover { color: #433E3C; }
+    .back-link.invisible { visibility: hidden; pointer-events: none; }
+    .next-btn { padding: 11px 28px; background: #A6BE47; color: #fff; font-size: 15px; font-weight: 600; font-family: 'DM Sans', sans-serif; border: none; border-radius: 50px; cursor: pointer; transition: opacity 0.2s; }
+    .next-btn:hover { opacity: 0.88; } .next-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .validation-hint { display: none; font-size: 13px; color: #582b36; margin-top: 8px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #6b6560; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    input, select { font-family: 'DM Sans', sans-serif; font-size: 16px; padding: 12px 16px; border-radius: 12px; border: 1px solid #d0c9bc; background: #fff; color: #433E3C; width: 100%; outline: none; appearance: none; -webkit-appearance: none; }
     .select-wrap { position: relative; }
-    .select-wrap::after {
-      content: "▾";
-      position: absolute;
-      right: 14px;
-      top: 50%;
-      transform: translateY(-50%);
-      pointer-events: none;
-      color: #6b6560;
-    }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-    .platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-    .chip {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 15px;
-      padding: 8px 18px;
-      border: 1px solid #d0c9bc;
-      border-radius: 50px;
-      cursor: pointer;
-      background: #ffffff;
-      color: #433E3C;
-      user-select: none;
-      transition: all 0.15s;
-    }
-    .chip.selected { background: #582b36; color: #e7dbbf; border-color: #582b36; }
-    .btn-primary {
-      font-family: 'DM Sans', sans-serif;
-      padding: 14px 36px;
-      background: #A6BE47;
-      color: #ffffff;
-      border: none;
-      border-radius: 50px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 8px;
-    }
-    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-    .error {
-      margin-top: 16px;
-      padding: 12px 16px;
-      background: #fdecea;
-      color: #c0392b;
-      border-radius: 10px;
-      font-size: 15px;
-      display: none;
-    }
+    .select-wrap::after { content: "\25BE"; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #6b6560; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .field-group { margin-bottom: 0; }
+    .platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; margin-bottom: 16px; }
+    .chip { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 5px 14px; border: 1px solid #d0c9bc; border-radius: 99px; cursor: pointer; background: #fff; color: #433E3C; user-select: none; transition: all 0.15s; }
+    .chip.selected { background: #f5eef0; color: #582b36; border-color: #582b36; font-weight: 600; }
+    .quiz-loading { display: none; text-align: center; padding: 64px 0; }
+    .quiz-spinner { width: 32px; height: 32px; border: 3px solid #d7e8bc; border-top-color: #A6BE47; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .quiz-loading-text { font-size: 14px; color: #6b6560; }
+    .error { margin-top: 16px; padding: 12px 16px; background: #fdecea; color: #c0392b; border-radius: 10px; font-size: 15px; display: none; }
     .output { margin-top: 40px; padding-top: 32px; border-top: 1px solid #e8e0d5; display: none; }
     .output-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
     .output-header h2 { font-size: 20px; font-weight: 600; }
     .output-actions { display: flex; gap: 8px; }
-    .btn-secondary {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      color: #433E3C;
-      background: none;
-      border: 1px solid #d0c9bc;
-      border-radius: 50px;
-      padding: 6px 16px;
-      cursor: pointer;
-    }
-    .btn-download {
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      color: #ffffff;
-      background: #A6BE47;
-      border: none;
-      border-radius: 50px;
-      padding: 6px 16px;
-      cursor: pointer;
-      font-weight: 600;
-    }
+    .btn-secondary { font-family: 'DM Sans', sans-serif; font-size: 14px; color: #433E3C; background: none; border: 1px solid #d0c9bc; border-radius: 50px; padding: 6px 16px; cursor: pointer; }
+    .btn-download { font-family: 'DM Sans', sans-serif; font-size: 14px; color: #fff; background: #A6BE47; border: none; border-radius: 50px; padding: 6px 16px; cursor: pointer; font-weight: 600; }
     .blocks { display: flex; flex-direction: column; gap: 14px; }
-    .block {
-      background: #f5f0e8;
-      border: 1px solid #e8e0d5;
-      border-radius: 14px;
-      padding: 18px 20px;
-    }
-    .block-label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: #582b36;
-      margin-bottom: 10px;
-    }
-    .block-content {
-      font-size: 15px;
-      line-height: 1.75;
-      white-space: pre-wrap;
-      color: #433E3C;
-    }
-    .wrap { max-width: 720px; margin: 0 auto; }
+    .block { background: #f5f0e8; border: 1px solid #e8e0d5; border-radius: 14px; padding: 18px 20px; }
+    .block-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #582b36; margin-bottom: 10px; }
+    .block-content { font-size: 15px; line-height: 1.75; white-space: pre-wrap; color: #433E3C; }
+    .restart-wrap { text-align: center; margin-top: 24px; }
+    .restart-btn { background: none; border: none; font-size: 13px; color: #6b6560; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
   </style>
 </head>
 <body>
 <div class="wrap">
 
-  <div class="form-group">
-    <label>Firm type</label>
-    <div class="select-wrap">
-      <select id="firmType" onchange="handleFirmType(this.value)">
-        <option value="">Select firm type</option>
-        <option value="residential">Residential design firm</option>
-        <option value="hospitality">Hospitality design firm</option>
-        <option value="commercial">Commercial / workplace design firm</option>
-      </select>
+  <div id="quizArea">
+    <div class="progress-wrap">
+      <div class="progress-label" id="progressLabel">STEP 1 OF 5</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:20%"></div></div>
+    </div>
+
+    <!-- Step 1: Firm type -->
+    <div class="step active" id="step1">
+      <div class="step-question">What type of firm are you?</div>
+      <div class="step-hint">This shapes the platform strategy and content angles we'll recommend.</div>
+      <div class="select-wrap"><select id="firmType"><option value="">Select firm type</option><option value="residential">Residential design firm</option><option value="hospitality">Hospitality design firm</option><option value="commercial">Commercial / workplace design firm</option></select></div>
+      <div class="validation-hint" id="hint1">Please select a firm type to continue.</div>
+      <div class="step-nav"><button class="back-link invisible">← Back</button><button class="next-btn" onclick="goNext(1)">Next →</button></div>
+    </div>
+
+    <!-- Step 2: Content topic -->
+    <div class="step" id="step2">
+      <div class="step-question">What's this content about?</div>
+      <div class="step-hint">Give us the topic or focus — a project reveal, a behind-the-scenes moment, a sourcing story, anything.</div>
+      <div class="field-group"><label>Content topic / focus</label><input id="topic" type="text" placeholder="e.g. master suite reveal, sourcing trip to High Point, boutique hotel lobby project" /></div>
+      <div class="validation-hint" id="hint2">Please enter a content topic to continue.</div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(2)">← Back</button><button class="next-btn" onclick="goNext(2)">Next →</button></div>
+    </div>
+
+    <!-- Step 3: Project type + Design style -->
+    <div class="step" id="step3">
+      <div class="step-question">Tell us about the project.</div>
+      <div class="step-hint">Both fields are optional — add what's relevant.</div>
+      <div class="grid">
+        <div class="field-group"><label>Project type</label><input id="projectType" type="text" placeholder="e.g. full home renovation, hotel lobby" /></div>
+        <div class="field-group"><label>Design style</label><input id="designStyle" type="text" placeholder="e.g. modern organic, coastal, transitional" /></div>
+      </div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(3)">← Back</button><button class="next-btn" onclick="goNext(3)">Next →</button></div>
+    </div>
+
+    <!-- Step 4: Ideal client -->
+    <div class="step" id="step4">
+      <div class="step-question">Who is your ideal client?</div>
+      <div class="step-hint">Optional, but helps us write content angles that speak to the right audience.</div>
+      <div class="field-group"><label>Ideal client</label><input id="idealClient" type="text" placeholder="e.g. high-end homeowners in Austin, boutique hotel developers" /></div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(4)">← Back</button><button class="next-btn" onclick="goNext(4)">Next →</button></div>
+    </div>
+
+    <!-- Step 5: Platforms -->
+    <div class="step" id="step5">
+      <div class="step-question">Which platforms are you creating content for?</div>
+      <div class="step-hint">We've pre-selected the best channels for your firm type — adjust as needed.</div>
+      <label id="platformLabel">Platforms</label>
+      <div class="platforms" id="platforms">
+        <div class="chip" data-platform="Instagram" onclick="togglePlatform(this)">Instagram</div>
+        <div class="chip" data-platform="Pinterest" onclick="togglePlatform(this)">Pinterest</div>
+        <div class="chip" data-platform="LinkedIn" onclick="togglePlatform(this)">LinkedIn</div>
+        <div class="chip" data-platform="TikTok" onclick="togglePlatform(this)">TikTok</div>
+        <div class="chip" data-platform="Houzz" onclick="togglePlatform(this)">Houzz</div>
+      </div>
+      <div class="validation-hint" id="hint5">Please select at least one platform.</div>
+      <div class="error" id="error"></div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(5)">← Back</button><button class="next-btn" id="generateBtn" onclick="generate()">✦ Generate brief</button></div>
     </div>
   </div>
 
-  <div class="form-group">
-    <label>Content topic / focus</label>
-    <input id="topic" type="text" placeholder="e.g. master suite reveal, sourcing trip to High Point, boutique hotel lobby project" />
-  </div>
-
-  <div class="grid">
-    <div class="form-group" style="margin-bottom:0">
-      <label>Project type</label>
-      <input id="projectType" type="text" placeholder="e.g. full home renovation, hotel lobby" />
-    </div>
-    <div class="form-group" style="margin-bottom:0">
-      <label>Design style</label>
-      <input id="designStyle" type="text" placeholder="e.g. modern organic, coastal, transitional" />
-    </div>
-  </div>
-
-  <div class="form-group" style="margin-top:16px">
-    <label>Ideal client</label>
-    <input id="idealClient" type="text" placeholder="e.g. high-end homeowners in Austin, boutique hotel developers" />
-  </div>
-
-  <div class="form-group">
-    <label id="platformLabel">Platforms</label>
-    <div class="platforms" id="platforms">
-      <div class="chip" data-platform="Instagram" onclick="togglePlatform(this)">Instagram</div>
-      <div class="chip" data-platform="Pinterest" onclick="togglePlatform(this)">Pinterest</div>
-      <div class="chip" data-platform="LinkedIn" onclick="togglePlatform(this)">LinkedIn</div>
-      <div class="chip" data-platform="TikTok" onclick="togglePlatform(this)">TikTok</div>
-      <div class="chip" data-platform="Houzz" onclick="togglePlatform(this)">Houzz</div>
-    </div>
-  </div>
-
-  <button class="btn-primary" id="generateBtn" onclick="generate()">✦ Generate brief</button>
-
-  <div class="error" id="error"></div>
+  <div class="quiz-loading" id="quizLoading"><div class="quiz-spinner"></div><div class="quiz-loading-text">Generating your brief...</div></div>
 
   <div class="output" id="output">
-    <div class="output-header">
-      <h2>Content brief</h2>
-      <div class="output-actions">
-        <button class="btn-secondary" onclick="copyAll()">Copy all</button>
-        <button class="btn-download" onclick="downloadPDF()">↓ Download PDF</button>
-      </div>
-    </div>
+    <div class="output-header"><h2>Content brief</h2><div class="output-actions"><button class="btn-secondary" onclick="copyAll()">Copy all</button><button class="btn-download" onclick="downloadPDF()">&#8595; Download PDF</button></div></div>
     <div class="blocks" id="blocks"></div>
+    <div class="restart-wrap"><button class="restart-btn" onclick="restartTool()">&#8592; Start over</button></div>
   </div>
 
 </div>
-
 <script>
-function trackUsage(toolName) {
-  fetch("https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec", {
-    method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tool: toolName, referrer: document.referrer || "" })
-  }).catch(() => {});
-}
-const FIRM_DEFAULTS = {
-  residential: ["Instagram", "Pinterest"],
-  hospitality: ["LinkedIn", "Houzz", "Instagram"],
-  commercial: ["LinkedIn", "Houzz"]
-};
-
+const TOTAL_STEPS = 5;
+const FIRM_DEFAULTS = { residential: ['Instagram','Pinterest'], hospitality: ['LinkedIn','Houzz','Instagram'], commercial: ['LinkedIn','Houzz'] };
 const BLOCK_META = [
-  { key: "platform_cadence", label: "📅 Platform + posting cadence" },
-  { key: "caption_hooks", label: "💬 Caption angles + hook ideas" },
-  { key: "content_types", label: "🗂 Content types + formats" },
-  { key: "seo_keywords", label: "🔍 SEO, keywords + hashtags" },
-  { key: "visual_direction", label: "🖼 Visual direction notes" },
+  { key: 'platform_cadence', label: '\uD83D\uDCC5 Platform + posting cadence' },
+  { key: 'caption_hooks', label: '\uD83D\uDCAC Caption angles + hook ideas' },
+  { key: 'content_types', label: '\uD83D\uDDC2 Content types + formats' },
+  { key: 'seo_keywords', label: '\uD83D\uDD0D SEO, keywords + hashtags' },
+  { key: 'visual_direction', label: '\uD83D\uDDBC Visual direction notes' }
 ];
-
 let currentBrief = null;
 
-function handleFirmType(val) {
+function updateProgress(step) {
+  document.getElementById('progressLabel').textContent = 'STEP ' + step + ' OF ' + TOTAL_STEPS;
+  document.getElementById('progressFill').style.width = (step / TOTAL_STEPS * 100) + '%';
+}
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+  updateProgress(n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function goNext(current) {
+  if (current === 1) { if (!document.getElementById('firmType').value) { showHint('hint1'); return; } applyFirmDefaults(); }
+  if (current === 2 && !document.getElementById('topic').value.trim()) { showHint('hint2'); return; }
+  hideAllHints(); showStep(current + 1);
+}
+function goBack(current) { hideAllHints(); showStep(current - 1); }
+function showHint(id) { document.getElementById(id).style.display = 'block'; }
+function hideAllHints() { document.querySelectorAll('.validation-hint').forEach(h => h.style.display = 'none'); }
+function applyFirmDefaults() {
+  const val = document.getElementById('firmType').value;
   const defaults = FIRM_DEFAULTS[val] || [];
-  document.querySelectorAll('.chip').forEach(chip => {
-    chip.classList.toggle('selected', defaults.includes(chip.dataset.platform));
-  });
-  const label = document.getElementById('platformLabel');
-  label.textContent = val ? 'Platforms · recommended pre-selected for your firm type' : 'Platforms';
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('selected', defaults.includes(c.dataset.platform)));
+  document.getElementById('platformLabel').textContent = val ? 'Platforms \u00b7 recommended pre-selected for your firm type' : 'Platforms';
 }
-
-function togglePlatform(el) {
-  el.classList.toggle('selected');
-}
-
-function getSelectedPlatforms() {
-  return [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.platform);
-}
-
-function showError(msg) {
-  const el = document.getElementById('error');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-function hideError() {
-  document.getElementById('error').style.display = 'none';
-}
+function togglePlatform(el) { el.classList.toggle('selected'); }
+function getSelectedPlatforms() { return [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.platform); }
 
 async function generate() {
-  const topic = document.getElementById('topic').value.trim();
+  const platforms = getSelectedPlatforms();
+  if (!platforms.length) { showHint('hint5'); return; }
   const firmType = document.getElementById('firmType').value;
+  const topic = document.getElementById('topic').value.trim();
   const projectType = document.getElementById('projectType').value.trim();
   const idealClient = document.getElementById('idealClient').value.trim();
   const designStyle = document.getElementById('designStyle').value.trim();
-  const platforms = getSelectedPlatforms();
-
-  if (!topic) { showError('Please enter a content topic or project focus.'); return; }
-  if (!firmType) { showError('Please select a firm type.'); return; }
-  hideError();
-
-  const btn = document.getElementById('generateBtn');
-  btn.disabled = true;
-  btn.textContent = 'Generating your brief...';
-  document.getElementById('output').style.display = 'none';
-
-  const platformList = platforms.length ? platforms.join(', ') : 'Instagram, Pinterest';
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('quizArea').style.display = 'none';
+  document.getElementById('quizLoading').style.display = 'block';
 
   const platformGuidance = {
-    residential: `- Instagram: primary portfolio channel. 3-4x/week. Project reveals, before/afters, process shots, Reels for reach. Location + style keywords in captions. Max 5 hashtags.\n- Pinterest: primary discovery. 5-10x/week. SEO-first titles and descriptions.\n- LinkedIn: credibility layer. 1-2x/week. Professional case studies.\n- TikTok: cold reach. 2-3x/week. Before/after reveals, casual tone.\n- Houzz: discovery for renovation clients. Portfolio updated by room and style.`,
-    hospitality: `- LinkedIn: PRIMARY channel. Developers, hotel groups, operators, architects. 3x/week. Case study format.\n- Houzz: PRIMARY for project discovery. Portfolio by project type and sector.\n- Instagram: secondary. 2-3x/week. High-production imagery. Max 5 hashtags.\n- Pinterest: ambient discovery. Keyword-rich descriptions.`,
-    commercial: `- LinkedIn: PRIMARY channel. Developers, property managers, corporate real estate. 3x/week. Case studies, thought leadership.\n- Houzz: project discovery by commercial sector.\n- Instagram: secondary. 2-3x/week. Process and completed project imagery.`
+    residential: '- Instagram: primary portfolio channel. 3-4x/week. Project reveals, before/afters, process shots, Reels for reach. Location + style keywords in captions. Max 5 hashtags.\n- Pinterest: primary discovery. 5-10x/week. SEO-first titles and descriptions.\n- LinkedIn: credibility layer. 1-2x/week. Professional case studies.\n- TikTok: cold reach. 2-3x/week. Before/after reveals, casual tone.\n- Houzz: discovery for renovation clients. Portfolio updated by room and style.',
+    hospitality: '- LinkedIn: PRIMARY channel. Developers, hotel groups, operators, architects. 3x/week. Case study format.\n- Houzz: PRIMARY for project discovery. Portfolio by project type and sector.\n- Instagram: secondary. 2-3x/week. High-production imagery. Max 5 hashtags.\n- Pinterest: ambient discovery. Keyword-rich descriptions.',
+    commercial: '- LinkedIn: PRIMARY channel. Developers, property managers, corporate real estate. 3x/week. Case studies, thought leadership.\n- Houzz: project discovery by commercial sector.\n- Instagram: secondary. 2-3x/week. Process and completed project imagery.'
   };
 
-  const system = `You are an expert content strategist for interior design firms. You understand residential, hospitality, and commercial design businesses deeply.
-
-KEY PRINCIPLES:
-- Residential firms market to homeowners: visual storytelling, before/afters, process documentation drive inquiries.
-- Hospitality and commercial firms market to developers, operators, architects: case studies and credibility matter most.
-- Content should be project-based and specific, not generic tips.
-- Instagram functions as a search engine -- location and style keywords matter.
-- Pinterest is SEO-first.
-- Houzz is critical for project-based discovery.
-
-PLATFORM GUIDANCE:
-${platformGuidance[firmType] || ''}
-
-CONTENT TYPES THAT BUILD TRUST:
-1. Process documentation -- material selections, site visits, work in progress
-2. Before/after reveals -- highest engagement
-3. Material and finish flat lays -- aspirational, saveable
-4. Project case studies -- scope, constraints, outcome
-5. Behind-the-scenes -- sourcing trips, studio days
-6. Local and lifestyle context -- neighborhood guides, vendor spotlights
-
-Respond with ONLY a raw JSON object, no markdown. Every value must be a plain string, not a nested object. Use line breaks (\n) to separate multiple points within each field. Do not nest objects inside the values:
-{"platform_cadence":"...","caption_hooks":"...","content_types":"...","seo_keywords":"...","visual_direction":"..."}
-
-For seo_keywords: primary keyword, 4-6 secondary keywords, Pinterest keyword clusters (phrase-based, no #), platform-specific hashtags. Instagram max 5, LinkedIn 3-5 professional, TikTok 3-5. Houzz and Pinterest keywords only.`;
+  const system = 'You are an expert content strategist for interior design firms.\n\nPLATFORM GUIDANCE:\n' + (platformGuidance[firmType] || '') + '\n\nRespond with ONLY a raw JSON object, no markdown. Every value must be a plain string. Use line breaks (\\n) to separate points within each field:\n{"platform_cadence":"...","caption_hooks":"...","content_types":"...","seo_keywords":"...","visual_direction":"..."}\n\nFor seo_keywords: primary keyword, 4-6 secondary keywords, Pinterest keyword clusters (phrase-based, no #), platform-specific hashtags. Instagram max 5, LinkedIn 3-5, TikTok 3-5. Houzz and Pinterest keywords only.';
 
   try {
-    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system,
-        max_tokens: 2000,
-        messages: [{
-          role: 'user',
-          content: `Generate a content brief:\n\nFirm type: ${firmType}\nTopic: ${topic}\nProject type: ${projectType || 'not specified'}\nIdeal client: ${idealClient || 'not specified'}\nDesign style: ${designStyle || 'not specified'}\nPlatforms: ${platformList}\n\nBe specific and actionable for ${firmType} design firms.`
-        }]
-      })
-    });
-
+    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system, max_tokens: 2000, messages: [{ role: 'user', content: 'Generate a content brief:\n\nFirm type: ' + firmType + '\nTopic: ' + topic + '\nProject type: ' + (projectType || 'not specified') + '\nIdeal client: ' + (idealClient || 'not specified') + '\nDesign style: ' + (designStyle || 'not specified') + '\nPlatforms: ' + platforms.join(', ') }] }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error?.message || 'API error ' + res.status);
-    const raw = data.content?.[0]?.text || '';
-    console.log('Raw API response:', raw);
-    const clean = raw.replace(/```json|```/g, '').trim();
-    currentBrief = JSON.parse(clean);
-    console.log('Parsed brief:', currentBrief);
+    if (!res.ok) throw new Error(data?.error?.message || 'API error');
+    currentBrief = JSON.parse(data.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
+    document.getElementById('quizLoading').style.display = 'none';
     renderBrief(currentBrief);
-    trackUsage('content-brief');
   } catch(e) {
-    showError('Error: ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '✦ Generate brief';
+    document.getElementById('quizLoading').style.display = 'none';
+    document.getElementById('quizArea').style.display = 'block';
+    document.getElementById('generateBtn').disabled = false;
+    const err = document.getElementById('error'); err.textContent = 'Something went wrong. Please try again.'; err.style.display = 'block';
+    showStep(5);
   }
 }
 
 function flattenValue(val) {
   if (typeof val === 'string') return val;
-  if (typeof val === 'object' && val !== null) {
-    return Object.entries(val).map(([k, v]) => `${k.replace(/_/g, ' ').toUpperCase()}\n${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n\n');
-  }
+  if (typeof val === 'object' && val !== null) return Object.entries(val).map(([k,v]) => k.replace(/_/g,' ').toUpperCase() + '\n' + (typeof v === 'string' ? v : JSON.stringify(v))).join('\n\n');
   return String(val);
 }
-
 function renderBrief(brief) {
   const container = document.getElementById('blocks');
   container.innerHTML = '';
@@ -350,96 +215,67 @@ function renderBrief(brief) {
     const val = flattenValue(brief[key]);
     const div = document.createElement('div');
     div.className = 'block';
-    div.innerHTML = `<div class="block-label">${label}</div><div class="block-content">${val.replace(/\n/g, '<br>')}</div>`;
+    div.innerHTML = '<div class="block-label">' + label + '</div><div class="block-content">' + val.replace(/\n/g, '<br>') + '</div>';
     container.appendChild(div);
   });
   document.getElementById('output').style.display = 'block';
   document.getElementById('output').scrollIntoView({ behavior: 'smooth' });
 }
-
 function copyAll() {
   if (!currentBrief) return;
-  const text = BLOCK_META.filter(m => currentBrief[m.key]).map(m => `${m.label}\n${currentBrief[m.key]}`).join('\n\n');
+  const text = BLOCK_META.filter(m => currentBrief[m.key]).map(m => m.label + '\n' + currentBrief[m.key]).join('\n\n');
   navigator.clipboard.writeText(text);
-  const btn = event.target;
-  btn.textContent = '✓ Copied';
-  setTimeout(() => btn.textContent = 'Copy all', 2000);
+  const btn = event.target; btn.textContent = '\u2713 Copied'; setTimeout(() => btn.textContent = 'Copy all', 2000);
 }
-
+function restartTool() {
+  currentBrief = null;
+  document.getElementById('firmType').value = '';
+  ['topic','projectType','designStyle','idealClient'].forEach(id => document.getElementById(id).value = '');
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  document.getElementById('generateBtn').disabled = false;
+  document.getElementById('output').style.display = 'none';
+  document.getElementById('quizArea').style.display = 'block';
+  showStep(1);
+}
 function downloadPDF() {
   if (!currentBrief) return;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const pageW = doc.internal.pageSize.getWidth();
-  const margin = 48;
-  const contentW = pageW - margin * 2;
+  const pageW = doc.internal.pageSize.getWidth(), margin = 48, contentW = pageW - margin * 2;
   let y = 0;
-
-  doc.setFillColor(215, 232, 188);
-  doc.rect(0, 0, pageW, 64, 'F');
-  doc.setFillColor(88, 43, 54);
-  doc.rect(0, 64, pageW, 3, 'F');
-  doc.setFillColor(88, 43, 54);
-  doc.roundedRect(margin, 14, 36, 36, 4, 4, 'F');
-  doc.setTextColor(215, 232, 188);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('SL', margin + 18, 37, { align: 'center' });
-  doc.setTextColor(88, 43, 54);
-  doc.setFontSize(16);
-  doc.text('Content Brief', margin + 48, 30);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 80, 80);
-  doc.text('Studio Lou · for interior design firms', margin + 48, 46);
-  doc.setFontSize(9);
-  doc.setTextColor(140, 120, 120);
-  doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageW - margin, 46, { align: 'right' });
-
-  y = 90;
+  doc.setFillColor(215,232,188); doc.rect(0,0,pageW,64,'F');
+  doc.setFillColor(88,43,54); doc.rect(0,64,pageW,3,'F');
+  doc.setFillColor(88,43,54); doc.roundedRect(margin,14,36,36,4,4,'F');
+  doc.setTextColor(215,232,188); doc.setFontSize(14); doc.setFont('helvetica','bold');
+  doc.text('SL',margin+18,37,{align:'center'});
+  doc.setTextColor(88,43,54); doc.setFontSize(16); doc.text('Content Brief',margin+48,30);
+  doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(100,80,80);
+  doc.text('Studio Lou \u00b7 for interior design firms',margin+48,46);
+  doc.setFontSize(9); doc.setTextColor(140,120,120);
+  doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),pageW-margin,46,{align:'right'});
+  y=90;
   const firmType = document.getElementById('firmType').value;
   const topic = document.getElementById('topic').value;
   const designStyle = document.getElementById('designStyle').value;
   const platforms = getSelectedPlatforms();
-
-  doc.setFillColor(245, 242, 238);
-  doc.roundedRect(margin, y, contentW, 36, 4, 4, 'F');
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(88, 43, 54);
-  const meta = [firmType && `Firm: ${firmType}`, topic && `Topic: ${topic}`, designStyle && `Style: ${designStyle}`, platforms.length && `Platforms: ${platforms.join(', ')}`].filter(Boolean).join('   ·   ');
-  doc.text(meta, margin + 12, y + 22);
-  y += 52;
-
+  doc.setFillColor(245,242,238); doc.roundedRect(margin,y,contentW,36,4,4,'F');
+  doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(88,43,54);
+  const meta=[firmType&&'Firm: '+firmType,topic&&'Topic: '+topic,designStyle&&'Style: '+designStyle,platforms.length&&'Platforms: '+platforms.join(', ')].filter(Boolean).join('   \u00b7   ');
+  doc.text(meta,margin+12,y+22); y+=52;
   BLOCK_META.forEach(({ key, label }) => {
     if (!currentBrief[key]) return;
-    if (y > 680) { doc.addPage(); y = margin; }
-    doc.setFillColor(88, 43, 54);
-    doc.roundedRect(margin, y, contentW, 22, 3, 3, 'F');
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(215, 232, 188);
-    doc.text(label.replace(/[^\x00-\x7F]/g, '').trim().toUpperCase(), margin + 10, y + 14);
-    y += 36;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(40, 30, 30);
-    const lines = doc.splitTextToSize(flattenValue(currentBrief[key]), contentW - 8);
-    lines.forEach(line => {
-      if (y > 720) { doc.addPage(); y = margin; }
-      doc.text(line, margin + 4, y);
-      y += 14;
-    });
-    y += 16;
+    if (y>680){doc.addPage();y=margin;}
+    doc.setFillColor(88,43,54); doc.roundedRect(margin,y,contentW,22,3,3,'F');
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(215,232,188);
+    doc.text(label.replace(/[^\x00-\x7F]/g,'').trim().toUpperCase(),margin+10,y+14); y+=36;
+    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(40,30,30);
+    const lines = doc.splitTextToSize(flattenValue(currentBrief[key]),contentW-8);
+    lines.forEach(line=>{if(y>720){doc.addPage();y=margin;}doc.text(line,margin+4,y);y+=14;}); y+=16;
   });
-
-  doc.setFillColor(215, 232, 188);
-  doc.rect(0, doc.internal.pageSize.getHeight() - 28, pageW, 28, 'F');
-  doc.setFontSize(8);
-  doc.setTextColor(88, 43, 54);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Generated by Studio Lou · studiolouinteriors.com', pageW / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-  doc.save(`studio-lou-content-brief-${Date.now()}.pdf`);
+  doc.setFillColor(215,232,188); doc.rect(0,doc.internal.pageSize.getHeight()-28,pageW,28,'F');
+  doc.setFontSize(8); doc.setTextColor(88,43,54); doc.setFont('helvetica','normal');
+  doc.text('Generated by Studio Lou \u00b7 studiolouinteriors.com',pageW/2,doc.internal.pageSize.getHeight()-10,{align:'center'});
+  doc.save('studio-lou-content-brief-'+Date.now()+'.pdf');
 }
 </script>
 </body>

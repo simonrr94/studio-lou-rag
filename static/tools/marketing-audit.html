@@ -9,27 +9,51 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { min-height: 1800px; }
-    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; color: #433E3C; padding: 40px 24px 80px; }
+    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; color: #433E3C; padding: 32px 24px 80px; }
     .wrap { max-width: 720px; margin: 0 auto; }
-    .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #aaa; margin-bottom: 12px; display: block; }
-    .field { margin-bottom: 20px; }
+    .step { display: none; } .step.active { display: block; }
+    .progress-wrap { margin-bottom: 28px; }
+    .progress-label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
+    .progress-track { height: 2px; background: #e8e2d9; border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #582b36; border-radius: 99px; transition: width 0.35s ease; }
+    .step-question { font-size: 22px; font-weight: 700; color: #433E3C; line-height: 1.3; margin-bottom: 8px; }
+    .step-hint { font-size: 14px; color: #6b6560; line-height: 1.6; margin-bottom: 22px; }
+    .step-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 32px; }
+    .back-link { background: none; border: none; font-size: 14px; color: #6b6560; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; text-decoration: underline; }
+    .back-link:hover { color: #433E3C; }
+    .back-link.invisible { visibility: hidden; pointer-events: none; }
+    .next-btn { padding: 11px 28px; background: #A6BE47; color: #fff; font-size: 15px; font-weight: 600; font-family: 'DM Sans', sans-serif; border: none; border-radius: 50px; cursor: pointer; transition: opacity 0.2s; }
+    .next-btn:hover { opacity: 0.88; } .next-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .validation-hint { display: none; font-size: 13px; color: #582b36; margin-top: 8px; }
     label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; color: #1a1a1a; }
     input, select, textarea { font-family: 'DM Sans', sans-serif; width: 100%; font-size: 15px; border: 1px solid #d0c9bc; border-radius: 10px; padding: 10px 14px; outline: none; background: #fff; color: #433E3C; appearance: none; -webkit-appearance: none; }
-    textarea { min-height: 72px; resize: vertical; }
+    textarea { min-height: 80px; resize: vertical; }
     .select-wrap { position: relative; }
-    .select-wrap::after { content: "▾"; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #6b6560; }
+    .select-wrap::after { content: "\25BE"; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #6b6560; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .field { margin-bottom: 20px; }
+    .field:last-child { margin-bottom: 0; }
     .pills { display: flex; flex-wrap: wrap; gap: 8px; }
     .pill { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 5px 14px; border-radius: 99px; cursor: pointer; border: 1px solid #d0c9bc; background: #fff; color: #433E3C; user-select: none; transition: all 0.15s; }
-    .pill.active { background: #f5eef0; border-color: #582b36; color: #582b36; }
-    hr { border: none; border-top: 1px solid #e8e0d5; margin: 1.5rem 0; }
-    .btn-primary { font-family: 'DM Sans', sans-serif; width: auto; padding: 13px 36px; font-size: 15px; font-weight: 600; background: #A6BE47; color: #fff; border: none; border-radius: 50px; cursor: pointer; margin-top: 4px; }
-    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-    .error { background: #fde8e8; border: 1px solid #f5a0a0; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #7a1f1f; margin-bottom: 12px; display: none; }
-    .loading { display: none; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; background: #f5f5f5; border: 1px solid #e5e5e5; font-size: 14px; color: #888; margin-top: 16px; }
-    .spinner { width: 16px; height: 16px; border: 2px solid #e5e5e5; border-top-color: #582b36; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+    .pill.active { background: #f5eef0; border-color: #582b36; color: #582b36; font-weight: 600; }
+    /* Loading */
+    .quiz-loading { display: none; text-align: center; padding: 64px 0; }
+    .quiz-spinner { width: 32px; height: 32px; border: 3px solid #d7e8bc; border-top-color: #A6BE47; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .quiz-loading-text { font-size: 14px; color: #6b6560; }
+    /* Error */
+    .error { background: #fde8e8; border: 1px solid #f5a0a0; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #7a1f1f; margin-top: 12px; display: none; }
+    /* Email gate */
+    .email-gate { display: none; background: #f5f0e8; border-radius: 16px; padding: 32px 28px; }
+    .gate-headline { font-size: 22px; font-weight: 700; color: #433E3C; margin-bottom: 8px; }
+    .gate-sub { font-size: 15px; color: #6b6560; line-height: 1.6; margin-bottom: 24px; }
+    .gate-input { font-family: 'DM Sans', sans-serif; width: 100%; font-size: 15px; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 13px 16px; outline: none; background: #fff; color: #433E3C; margin-bottom: 10px; }
+    .gate-input:focus { border-color: #582b36; }
+    .gate-note { font-size: 12px; color: #6b6560; margin-bottom: 20px; }
+    .gate-error { background: #fde8e8; border: 1px solid #f5a0a0; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #7a1f1f; margin-bottom: 12px; display: none; }
+    /* Output */
     .output { display: none; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e8e0d5; }
-    .grade-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+    .grade-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 24px; }
     .grade-card { background: #f5f5f5; border-radius: 10px; padding: 14px 16px; text-align: center; }
     .grade-card-label { font-size: 11px; color: #888; margin-bottom: 4px; }
     .grade-card-value { font-size: 28px; font-weight: 600; }
@@ -41,227 +65,222 @@
     .section-rec { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; font-size: 13px; color: #555; line-height: 1.6; }
     .output-actions { display: flex; gap: 10px; margin-top: 20px; }
     .btn-download { font-family: 'DM Sans', sans-serif; flex: 1; padding: 11px; font-size: 14px; background: #582b36; color: #fff; border: none; border-radius: 10px; cursor: pointer; font-weight: 500; }
-    .btn-reset { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 7px 18px; border: 1px solid #d0c9bc; border-radius: 10px; background: #fff; color: #433E3C; cursor: pointer; margin-top: 10px; }
-
-    /* ── EMAIL GATE ── */
-    .email-gate { display: none; margin-top: 32px; padding: 32px 28px; background: #f5f0e8; border-radius: 16px; }
-    .gate-headline { font-size: 22px; font-weight: 700; color: #433E3C; margin-bottom: 8px; }
-    .gate-sub { font-size: 15px; color: #6b6560; line-height: 1.6; margin-bottom: 24px; }
-    .gate-input { font-family: 'DM Sans', sans-serif; width: 100%; font-size: 15px; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 13px 16px; outline: none; background: #ffffff; color: #433E3C; margin-bottom: 10px; }
-    .gate-input:focus { border-color: #582b36; }
-    .gate-note { font-size: 12px; color: #6b6560; margin-bottom: 20px; }
-    .gate-error { background: #fde8e8; border: 1px solid #f5a0a0; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #7a1f1f; margin-bottom: 12px; display: none; }
-    .btn-skip { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #6b6560; background: none; border: none; cursor: pointer; margin-top: 10px; text-decoration: underline; display: block; }
-
-    /* ── CTA BLOCK ── */
     .cta-block { background: #582b36; border-radius: 16px; padding: 28px; text-align: center; margin-top: 24px; }
     .cta-block h3 { font-size: 18px; font-weight: 700; color: #fdfaf5; margin-bottom: 8px; }
     .cta-block p { font-size: 14px; color: rgba(253,250,245,0.75); line-height: 1.6; margin-bottom: 20px; }
     .btn-cta { display: inline-block; padding: 13px 32px; background: #A6BE47; color: #433E3C; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700; border: none; border-radius: 50px; cursor: pointer; text-decoration: none; }
+    .restart-wrap { text-align: center; margin-top: 16px; }
+    .restart-btn { background: none; border: none; font-size: 13px; color: #6b6560; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
   </style>
 </head>
 <body>
 <div class="wrap">
 
-  <span class="section-label">About you</span>
+  <div id="quizArea">
+    <div class="progress-wrap">
+      <div class="progress-label" id="progressLabel">STEP 1 OF 7</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:14.2%"></div></div>
+    </div>
 
-  <div class="field">
-    <label>Firm name</label>
-    <input id="firmName" type="text" placeholder="e.g. Johnson Interiors" />
-  </div>
+    <!-- Step 1: Firm type + Firm name -->
+    <div class="step active" id="step1">
+      <div class="step-question">Tell us about your firm.</div>
+      <div class="step-hint">Firm type is required — it shapes the entire audit framework.</div>
+      <div class="field">
+        <label>Firm type</label>
+        <div class="select-wrap"><select id="firmType"><option value="">Select one</option><option>Residential design firm</option><option>Commercial / hospitality design firm</option><option>Mixed residential and commercial</option><option>Solo e-design practice</option><option>Staging and styling</option></select></div>
+      </div>
+      <div class="field">
+        <label>Firm name <span style="font-weight:400;color:#aaa">(optional)</span></label>
+        <input id="firmName" type="text" placeholder="e.g. Johnson Interiors" />
+      </div>
+      <div class="validation-hint" id="hint1">Please select a firm type to continue.</div>
+      <div class="step-nav"><button class="back-link invisible">← Back</button><button class="next-btn" onclick="goNext(1)">Next →</button></div>
+    </div>
 
-  <hr />
-  <span class="section-label">About your firm</span>
+    <!-- Step 2: Ideal client + Bio -->
+    <div class="step" id="step2">
+      <div class="step-question">How do you position yourself?</div>
+      <div class="step-hint">Both fields are optional, but the more context you give, the more specific and useful your audit will be.</div>
+      <div class="field">
+        <label>Ideal client</label>
+        <input id="idealClient" type="text" placeholder="e.g. high-end homeowners in Phoenix, boutique hotel developers" />
+      </div>
+      <div class="field">
+        <label>Your bio or positioning statement</label>
+        <textarea id="bio" placeholder="e.g. Phoenix-based interior design studio specializing in warm, layered residential interiors..."></textarea>
+      </div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(2)">← Back</button><button class="next-btn" onclick="goNext(2)">Next →</button></div>
+    </div>
 
-  <div class="field">
-    <label>Firm type</label>
-    <div class="select-wrap">
-      <select id="firmType">
-        <option value="">Select one</option>
-        <option>Residential design firm</option>
-        <option>Commercial / hospitality design firm</option>
-        <option>Mixed residential and commercial</option>
-        <option>Solo e-design practice</option>
-        <option>Staging and styling</option>
-      </select>
+    <!-- Step 3: Platforms + Frequency -->
+    <div class="step" id="step3">
+      <div class="step-question">What's your current presence?</div>
+      <div class="step-hint">Select the platforms you actively post on, then tell us how often.</div>
+      <div class="field">
+        <label>Active platforms</label>
+        <div class="pills" id="platformPills">
+          <div class="pill" onclick="toggleCheck(this)">Instagram</div>
+          <div class="pill" onclick="toggleCheck(this)">Pinterest</div>
+          <div class="pill" onclick="toggleCheck(this)">LinkedIn</div>
+          <div class="pill" onclick="toggleCheck(this)">TikTok</div>
+          <div class="pill" onclick="toggleCheck(this)">Houzz</div>
+          <div class="pill" onclick="toggleCheck(this)">Facebook</div>
+          <div class="pill" onclick="toggleCheck(this)">Blog</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Posting frequency</label>
+        <div class="select-wrap"><select id="frequency"><option value="">Select one</option><option>Daily or near-daily</option><option>3-5 times per week</option><option>1-2 times per week</option><option>A few times per month</option><option>Rarely or inconsistently</option></select></div>
+      </div>
+      <div class="validation-hint" id="hint3">Please select at least one platform and a posting frequency.</div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(3)">← Back</button><button class="next-btn" onclick="goNext(3)">Next →</button></div>
+    </div>
+
+    <!-- Step 4: Content mix -->
+    <div class="step" id="step4">
+      <div class="step-question">What do you post most?</div>
+      <div class="step-hint">Select everything that regularly appears in your content. This helps us assess your content strategy.</div>
+      <div class="field">
+        <div class="pills" id="contentPills">
+          <div class="pill" onclick="toggleCheck(this)">Project photos</div>
+          <div class="pill" onclick="toggleCheck(this)">Behind the scenes</div>
+          <div class="pill" onclick="toggleCheck(this)">Design tips or education</div>
+          <div class="pill" onclick="toggleCheck(this)">Process and mood boards</div>
+          <div class="pill" onclick="toggleCheck(this)">Personal or lifestyle</div>
+          <div class="pill" onclick="toggleCheck(this)">Promotional or service offers</div>
+        </div>
+      </div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(4)">← Back</button><button class="next-btn" onclick="goNext(4)">Next →</button></div>
+    </div>
+
+    <!-- Step 5: Website + Google Business -->
+    <div class="step" id="step5">
+      <div class="step-question">What's your online footprint?</div>
+      <div class="step-hint">These two signals matter a lot for how discoverable you are to new clients.</div>
+      <div class="field">
+        <label>Do you have a website?</label>
+        <div class="pills" id="websitePills">
+          <div class="pill" onclick="selectRadio('website',this)">Yes, and it's up to date</div>
+          <div class="pill" onclick="selectRadio('website',this)">Yes, but it needs work</div>
+          <div class="pill" onclick="selectRadio('website',this)">No website yet</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Google Business profile</label>
+        <div class="pills" id="googlePills">
+          <div class="pill" onclick="selectRadio('google',this)">Yes, claimed and active</div>
+          <div class="pill" onclick="selectRadio('google',this)">Yes but rarely updated</div>
+          <div class="pill" onclick="selectRadio('google',this)">No or not sure</div>
+        </div>
+      </div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(5)">← Back</button><button class="next-btn" onclick="goNext(5)">Next →</button></div>
+    </div>
+
+    <!-- Step 6: Email list + Lead capture -->
+    <div class="step" id="step6">
+      <div class="step-question">How do you capture and nurture leads?</div>
+      <div class="step-hint">This section covers your email list and how your website (if you have one) converts visitors into inquiries.</div>
+      <div class="field">
+        <label>Do you have an email list or newsletter?</label>
+        <div class="pills" id="emailPills">
+          <div class="pill" onclick="selectRadio('email',this)">Yes, I send regularly</div>
+          <div class="pill" onclick="selectRadio('email',this)">Yes but I rarely send</div>
+          <div class="pill" onclick="selectRadio('email',this)">No email list yet</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Lead capture on your website</label>
+        <div class="pills" id="leadPills">
+          <div class="pill" onclick="selectRadio('lead',this)">Yes, multiple ways to capture leads</div>
+          <div class="pill" onclick="selectRadio('lead',this)">Just a basic contact form</div>
+          <div class="pill" onclick="selectRadio('lead',this)">No lead capture</div>
+          <div class="pill" onclick="selectRadio('lead',this)">No website</div>
+        </div>
+      </div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(6)">← Back</button><button class="next-btn" onclick="goNext(6)">Next →</button></div>
+    </div>
+
+    <!-- Step 7: Challenge + Generate -->
+    <div class="step" id="step7">
+      <div class="step-question">What's your biggest marketing challenge right now?</div>
+      <div class="step-hint">Optional, but this helps us make the audit more relevant to where you're actually stuck.</div>
+      <div class="field">
+        <textarea id="challenge" placeholder="e.g. I post consistently but get no inquiries. I don't know which platform to focus on..."></textarea>
+      </div>
+      <div class="error" id="error"></div>
+      <div class="step-nav"><button class="back-link" onclick="goBack(7)">← Back</button><button class="next-btn" id="generateBtn" onclick="runAudit()">✦ Run my marketing audit</button></div>
     </div>
   </div>
 
-  <div class="field">
-    <label>Ideal client</label>
-    <input id="idealClient" type="text" placeholder="e.g. high-end homeowners in Phoenix, boutique hotel developers" />
+  <!-- Loading -->
+  <div class="quiz-loading" id="quizLoading"><div class="quiz-spinner"></div><div class="quiz-loading-text">Auditing your marketing presence...</div></div>
+
+  <!-- Email gate -->
+  <div class="email-gate" id="emailGate">
+    <h2 class="gate-headline">Your audit is ready.</h2>
+    <p class="gate-sub">Enter your email to see your results. We'll keep a copy on file in case you want to revisit.</p>
+    <div class="gate-error" id="gateError"></div>
+    <input type="email" class="gate-input" id="gateEmail" placeholder="your@email.com" />
+    <p class="gate-note">No spam, ever.</p>
+    <button class="next-btn" id="gateSubmitBtn" onclick="submitGate()">See my results →</button>
   </div>
 
-  <hr />
-  <span class="section-label">Your current presence</span>
-
-  <div class="field">
-    <label>Active platforms</label>
-    <div class="pills" id="platformPills">
-      <div class="pill" onclick="toggleCheck(this)">Instagram</div>
-      <div class="pill" onclick="toggleCheck(this)">Pinterest</div>
-      <div class="pill" onclick="toggleCheck(this)">LinkedIn</div>
-      <div class="pill" onclick="toggleCheck(this)">TikTok</div>
-      <div class="pill" onclick="toggleCheck(this)">Houzz</div>
-      <div class="pill" onclick="toggleCheck(this)">Facebook</div>
-      <div class="pill" onclick="toggleCheck(this)">Blog</div>
-    </div>
-  </div>
-
-  <div class="field">
-    <label>Posting frequency</label>
-    <div class="select-wrap">
-      <select id="frequency">
-        <option value="">Select one</option>
-        <option>Daily or near-daily</option>
-        <option>3-5 times per week</option>
-        <option>1-2 times per week</option>
-        <option>A few times per month</option>
-        <option>Rarely or inconsistently</option>
-      </select>
-    </div>
-  </div>
-
-  <div class="field">
-    <label>What do you post most?</label>
-    <div class="pills" id="contentPills">
-      <div class="pill" onclick="toggleCheck(this)">Project photos</div>
-      <div class="pill" onclick="toggleCheck(this)">Behind the scenes</div>
-      <div class="pill" onclick="toggleCheck(this)">Design tips or education</div>
-      <div class="pill" onclick="toggleCheck(this)">Process and mood boards</div>
-      <div class="pill" onclick="toggleCheck(this)">Personal or lifestyle</div>
-      <div class="pill" onclick="toggleCheck(this)">Promotional or service offers</div>
-    </div>
-  </div>
-
-  <div class="field">
-    <label>Your bio or positioning statement</label>
-    <textarea id="bio" placeholder="e.g. 'Phoenix-based interior design studio specializing in warm, layered residential interiors...'"></textarea>
-  </div>
-
-  <hr />
-  <span class="section-label">Website and discoverability</span>
-
-  <div class="field">
-    <label>Do you have a website?</label>
-    <div class="pills" id="websitePills">
-      <div class="pill" onclick="selectRadio('website', this)">Yes, and it's up to date</div>
-      <div class="pill" onclick="selectRadio('website', this)">Yes, but it needs work</div>
-      <div class="pill" onclick="selectRadio('website', this)">No website yet</div>
-    </div>
-  </div>
-
-  <div class="field">
-    <label>Google Business profile</label>
-    <div class="pills" id="googlePills">
-      <div class="pill" onclick="selectRadio('google', this)">Yes, claimed and active</div>
-      <div class="pill" onclick="selectRadio('google', this)">Yes but rarely updated</div>
-      <div class="pill" onclick="selectRadio('google', this)">No or not sure</div>
-    </div>
-  </div>
-
-  <hr />
-  <span class="section-label">Email and lead capture</span>
-
-  <div class="field">
-    <label>Do you have an email list or newsletter?</label>
-    <div class="pills" id="emailPills">
-      <div class="pill" onclick="selectRadio('email', this)">Yes, I send regularly</div>
-      <div class="pill" onclick="selectRadio('email', this)">Yes but I rarely send</div>
-      <div class="pill" onclick="selectRadio('email', this)">No email list yet</div>
-    </div>
-  </div>
-
-  <div class="field">
-    <label>Lead capture on your website</label>
-    <div class="pills" id="leadPills">
-      <div class="pill" onclick="selectRadio('lead', this)">Yes, multiple ways to capture leads</div>
-      <div class="pill" onclick="selectRadio('lead', this)">Just a basic contact form</div>
-      <div class="pill" onclick="selectRadio('lead', this)">No lead capture</div>
-      <div class="pill" onclick="selectRadio('lead', this)">No website</div>
-    </div>
-  </div>
-
-  <hr />
-
-  <div class="field">
-    <label>Biggest marketing challenge <span style="font-weight:400;color:#aaa">(optional)</span></label>
-    <textarea id="challenge" placeholder="e.g. I post consistently but get no inquiries..."></textarea>
-  </div>
-
-  <div class="error" id="error"></div>
-
-  <button class="btn-primary" id="generateBtn" onclick="runAudit()">✦ Run my marketing audit</button>
-
-  <div class="loading" id="loading">
-    <div class="spinner"></div>
-    Auditing your marketing presence...
-  </div>
-
+  <!-- Output -->
   <div class="output" id="output">
     <div class="grade-grid" id="gradeGrid"></div>
     <div id="sectionBlocks"></div>
-    <div class="output-actions">
-      <button class="btn-download" onclick="downloadPDF()">↓ Download PDF report</button>
-    </div>
+    <div class="output-actions"><button class="btn-download" onclick="downloadPDF()">&#8595; Download PDF report</button></div>
     <div class="cta-block">
       <h3>Want help acting on this?</h3>
       <p>Studio Lou works with interior design firms on positioning, content strategy, and building marketing systems that actually bring in clients.</p>
-      <a href="https://www.studiolouinteriors.com/contact" target="_blank" class="btn-cta">Work with Studio Lou →</a>
+      <a href="https://www.studiolouinteriors.com/contact" target="_blank" class="btn-cta">Work with Studio Lou &#8594;</a>
     </div>
-    <button class="btn-reset" onclick="resetTool()">Start over</button>
-  </div>
-
-  <!-- EMAIL GATE -->
-  <div class="email-gate" id="emailGate">
-    <h2 class="gate-headline">Your audit is ready.</h2>
-    <p class="gate-sub">Enter your email and we'll show your results here — plus keep a copy on file in case you want to revisit.</p>
-    <div class="gate-error" id="gateError">Please enter a valid email address.</div>
-    <input type="email" class="gate-input" id="gateEmail" placeholder="your@email.com" />
-    <p class="gate-note">No spam, ever.</p>
-    <button class="btn-primary" id="gateSubmitBtn" onclick="submitGate()">See my results →</button>
-    <button class="btn-skip" onclick="skipGate()">Skip and see results</button>
+    <div class="restart-wrap"><button class="restart-btn" onclick="restartTool()">&#8592; Start over</button></div>
   </div>
 
 </div>
-
 <script>
-function trackUsage(toolName) {
-  fetch("https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec", {
-    method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tool: toolName, referrer: document.referrer || "" })
-  }).catch(() => {});
+const TOTAL_STEPS = 7;
+const GRADE_TEXT = { A:'#2a5c2a', B:'#5a6e00', C:'#7a5000', D:'#7a1f1f' };
+const GRADE_BG   = { A:'#e6f3e6', B:'#f0f5e0', C:'#fef3e0', D:'#fde8e8' };
+const radioState = { website:'', google:'', email:'', lead:'' };
+let currentAudit = null, pendingAudit = null;
+
+function updateProgress(step) {
+  document.getElementById('progressLabel').textContent = 'STEP ' + step + ' OF ' + TOTAL_STEPS;
+  document.getElementById('progressFill').style.width = (step / TOTAL_STEPS * 100) + '%';
 }
-const GRADE_TEXT = { A: '#2a5c2a', B: '#5a6e00', C: '#7a5000', D: '#7a1f1f' };
-const GRADE_BG = { A: '#e6f3e6', B: '#f0f5e0', C: '#fef3e0', D: '#fde8e8' };
-
-const radioState = { website: '', google: '', email: '', lead: '' };
-let currentAudit = null;
-let pendingAudit = null;
-
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+  updateProgress(n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function goNext(current) {
+  if (current === 1 && !document.getElementById('firmType').value) { showHint('hint1'); return; }
+  if (current === 3) {
+    const platforms = getChecked('platformPills');
+    const freq = document.getElementById('frequency').value;
+    if (!platforms.length || !freq) { showHint('hint3'); return; }
+  }
+  hideAllHints(); showStep(current + 1);
+}
+function goBack(current) { hideAllHints(); showStep(current - 1); }
+function showHint(id) { document.getElementById(id).style.display = 'block'; }
+function hideAllHints() { document.querySelectorAll('.validation-hint').forEach(h => h.style.display = 'none'); }
 function toggleCheck(el) { el.classList.toggle('active'); }
-
 function selectRadio(group, el) {
-  const groupMap = { website: 'websitePills', google: 'googlePills', email: 'emailPills', lead: 'leadPills' };
-  document.querySelectorAll(`#${groupMap[group]} .pill`).forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
-  radioState[group] = el.textContent;
+  const groupMap = { website:'websitePills', google:'googlePills', email:'emailPills', lead:'leadPills' };
+  document.querySelectorAll('#'+groupMap[group]+' .pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active'); radioState[group] = el.textContent;
 }
-
-function getChecked(containerId) {
-  return [...document.querySelectorAll(`#${containerId} .pill.active`)].map(p => p.textContent);
-}
-
+function getChecked(containerId) { return [...document.querySelectorAll('#'+containerId+' .pill.active')].map(p=>p.textContent); }
 function overallGrade(grades) {
-  const map = { A: 4, B: 3, C: 2, D: 1 };
-  const avg = grades.reduce((s, g) => s + (map[g] || 2), 0) / grades.length;
-  return avg >= 3.5 ? 'A' : avg >= 2.5 ? 'B' : avg >= 1.5 ? 'C' : 'D';
+  const map={A:4,B:3,C:2,D:1};
+  const avg=grades.reduce((s,g)=>s+(map[g]||2),0)/grades.length;
+  return avg>=3.5?'A':avg>=2.5?'B':avg>=1.5?'C':'D';
 }
-
-function showError(msg) { const el = document.getElementById('error'); el.textContent = msg; el.style.display = 'block'; }
-function hideError() { document.getElementById('error').style.display = 'none'; }
 
 async function runAudit() {
   const firmType = document.getElementById('firmType').value;
@@ -271,238 +290,129 @@ async function runAudit() {
   const contentMix = getChecked('contentPills');
   const bio = document.getElementById('bio').value.trim();
   const challenge = document.getElementById('challenge').value.trim();
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('quizArea').style.display = 'none';
+  document.getElementById('quizLoading').style.display = 'block';
 
-  if (!firmType || !platforms.length || !frequency) {
-    showError('Please fill in firm type, platforms, and posting frequency.');
-    return;
-  }
-  hideError();
-
-  const btn = document.getElementById('generateBtn');
-  btn.disabled = true;
-  document.getElementById('loading').style.display = 'flex';
-  document.getElementById('output').style.display = 'none';
-
-  const prompt = `You are a marketing strategist specializing in interior design firms. Audit this firm's marketing presence and return ONLY valid JSON.
-
-Firm details:
-- Type: ${firmType}
-- Ideal client: ${idealClient || 'not specified'}
-- Active platforms: ${platforms.join(', ')}
-- Posting frequency: ${frequency}
-- Content mix: ${contentMix.join(', ') || 'not specified'}
-- Bio/positioning: ${bio || 'not provided'}
-- Website status: ${radioState.website || 'not answered'}
-- Google Business profile: ${radioState.google || 'not answered'}
-- Email list/newsletter: ${radioState.email || 'not answered'}
-- Lead capture on site: ${radioState.lead || 'not answered'}
-- Biggest challenge: ${challenge || 'not specified'}
-
-Return this exact JSON schema with exactly 4 sections:
-{
-  "sections": [
-    { "title": "Positioning clarity", "grade": "B", "summary": "2-3 sentence honest assessment referencing what they told you.", "recommendation": "1-2 specific actionable next steps." },
-    { "title": "Platform and content strategy", "grade": "A", "summary": "...", "recommendation": "..." },
-    { "title": "Website and discoverability", "grade": "C", "summary": "Assess their website status, Google Business profile, and local findability.", "recommendation": "..." },
-    { "title": "Email and lead capture", "grade": "D", "summary": "Assess their email list and lead capture setup.", "recommendation": "..." }
-  ]
-}
-
-Rules: grades A B C or D only. Be honest and direct. No em dashes. Return ONLY the JSON object.`;
+  const prompt = 'You are a marketing strategist specializing in interior design firms. Audit this firm\'s marketing presence and return ONLY valid JSON.\n\nFirm details:\n- Type: '+firmType+'\n- Ideal client: '+(idealClient||'not specified')+'\n- Active platforms: '+platforms.join(', ')+'\n- Posting frequency: '+frequency+'\n- Content mix: '+(contentMix.join(', ')||'not specified')+'\n- Bio/positioning: '+(bio||'not provided')+'\n- Website status: '+(radioState.website||'not answered')+'\n- Google Business profile: '+(radioState.google||'not answered')+'\n- Email list/newsletter: '+(radioState.email||'not answered')+'\n- Lead capture on site: '+(radioState.lead||'not answered')+'\n- Biggest challenge: '+(challenge||'not specified')+'\n\nReturn this exact JSON schema with exactly 4 sections:\n{"sections":[{"title":"Positioning clarity","grade":"B","summary":"2-3 sentence honest assessment referencing what they told you.","recommendation":"1-2 specific actionable next steps."},{"title":"Platform and content strategy","grade":"A","summary":"...","recommendation":"..."},{"title":"Website and discoverability","grade":"C","summary":"Assess their website status, Google Business profile, and local findability.","recommendation":"..."},{"title":"Email and lead capture","grade":"D","summary":"Assess their email list and lead capture setup.","recommendation":"..."}]}\n\nRules: grades A B C or D only. Be honest and direct. No em dashes. Return ONLY the JSON object.';
 
   try {
-    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system: 'You are a marketing strategist for interior design firms. Return only valid JSON as instructed.',
-        max_tokens: 1200,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
+    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ system:'You are a marketing strategist for interior design firms. Return only valid JSON as instructed.', max_tokens:1200, messages:[{role:'user',content:prompt}] }) });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error?.message || 'API error ' + res.status);
-    const raw = data.content?.[0]?.text || '';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    currentAudit = JSON.parse(clean);
-    pendingAudit = currentAudit;
+    if (!res.ok) throw new Error(data?.error?.message||'API error');
+    pendingAudit = JSON.parse(data.content?.[0]?.text?.replace(/```json|```/g,'').trim()||'{}');
+    document.getElementById('quizLoading').style.display = 'none';
     document.getElementById('emailGate').style.display = 'block';
-    document.getElementById('emailGate').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('emailGate').scrollIntoView({ behavior:'smooth' });
   } catch(e) {
-    showError('Audit failed: ' + e.message);
-  } finally {
-    btn.disabled = false;
-    document.getElementById('loading').style.display = 'none';
+    document.getElementById('quizLoading').style.display = 'none';
+    document.getElementById('quizArea').style.display = 'block';
+    document.getElementById('generateBtn').disabled = false;
+    const err = document.getElementById('error'); err.textContent = 'Audit failed: '+e.message; err.style.display = 'block';
+    showStep(7);
   }
 }
 
 function submitGate() {
   const email = document.getElementById('gateEmail').value.trim();
   const gateError = document.getElementById('gateError');
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    gateError.style.display = 'block';
-    return;
-  }
+  if (!email) { gateError.textContent = 'Please enter your email address to see your results.'; gateError.style.display = 'block'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { gateError.textContent = 'Please enter a valid email address.'; gateError.style.display = 'block'; return; }
   gateError.style.display = 'none';
-  if (email && pendingAudit) {
-    const sections = pendingAudit.sections || [];
-    const overall = overallGrade(sections.map(s => s.grade));
-    logToSheet({
-      email,
-      firmName: document.getElementById('firmName').value.trim(),
-      firmType: document.getElementById('firmType').value,
-      idealClient: document.getElementById('idealClient').value.trim(),
-      overallGrade: overall
-    });
-  }
-  showResults();
-}
-
-function skipGate() {
-  showResults();
-}
-
-function showResults() {
-  document.getElementById('emailGate').style.display = 'none';
+  document.getElementById('gateSubmitBtn').disabled = true;
   if (pendingAudit) {
-    currentAudit = pendingAudit;
-    renderAudit(currentAudit);
-    trackUsage('marketing-audit');
+    const sections = pendingAudit.sections || [];
+    const overall = overallGrade(sections.map(s=>s.grade));
+    logToSheet({ timestamp:new Date().toISOString(), email, firmName:document.getElementById('firmName').value.trim(), firmType:document.getElementById('firmType').value, idealClient:document.getElementById('idealClient').value.trim(), overallGrade:overall });
   }
+  document.getElementById('emailGate').style.display = 'none';
+  if (pendingAudit) { currentAudit = pendingAudit; renderAudit(currentAudit); }
 }
 
 function logToSheet(payload) {
   const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyHXqukGMvT_iIK4nKflnJBTaQoRPSuZZS4-AXnOmcBMscsDVfY4Z2iCdSnxH_SPeSQTw/exec';
-  if (SHEET_URL === 'PASTE_MARKETING_AUDIT_SHEET_URL_HERE') return;
-  fetch(SHEET_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  }).catch(() => {});
+  fetch(SHEET_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }).catch(()=>{});
 }
 
 function renderAudit(data) {
   const sections = data.sections || [];
-  const overall = overallGrade(sections.map(s => s.grade));
-
+  const overall = overallGrade(sections.map(s=>s.grade));
   const gradeGrid = document.getElementById('gradeGrid');
   gradeGrid.innerHTML = '';
-  [{ label: 'Overall', grade: overall }, ...sections.map(s => ({ label: s.title, grade: s.grade }))].forEach(m => {
-    const card = document.createElement('div');
-    card.className = 'grade-card';
-    card.innerHTML = `<div class="grade-card-label">${m.label}</div><div class="grade-card-value" style="color:${GRADE_TEXT[m.grade] || '#333'}">${m.grade}</div>`;
+  [{label:'Overall',grade:overall},...sections.map(s=>({label:s.title,grade:s.grade}))].forEach(m=>{
+    const card=document.createElement('div'); card.className='grade-card';
+    card.innerHTML='<div class="grade-card-label">'+m.label+'</div><div class="grade-card-value" style="color:'+(GRADE_TEXT[m.grade]||'#333')+'">'+m.grade+'</div>';
     gradeGrid.appendChild(card);
   });
-
   const blocksContainer = document.getElementById('sectionBlocks');
   blocksContainer.innerHTML = '';
-  sections.forEach(s => {
-    const block = document.createElement('div');
-    block.className = 'section-block';
-    block.innerHTML = `
-      <div class="section-block-header">
-        <span class="section-block-title">${s.title}</span>
-        <span class="grade-badge" style="background:${GRADE_BG[s.grade]};color:${GRADE_TEXT[s.grade]}">${s.grade}</span>
-      </div>
-      <p class="section-summary">${s.summary}</p>
-      <div class="section-rec"><strong style="color:#582b36">Next step:</strong> ${s.recommendation}</div>
-    `;
+  sections.forEach(s=>{
+    const block=document.createElement('div'); block.className='section-block';
+    block.innerHTML='<div class="section-block-header"><span class="section-block-title">'+s.title+'</span><span class="grade-badge" style="background:'+GRADE_BG[s.grade]+';color:'+GRADE_TEXT[s.grade]+'">'+s.grade+'</span></div><p class="section-summary">'+s.summary+'</p><div class="section-rec"><strong style="color:#582b36">Next step:</strong> '+s.recommendation+'</div>';
     blocksContainer.appendChild(block);
   });
-
   document.getElementById('output').style.display = 'block';
-  document.getElementById('output').scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('output').scrollIntoView({ behavior:'smooth' });
 }
 
-function resetTool() {
-  document.getElementById('firmName').value = '';
-  document.getElementById('firmType').value = '';
-  document.getElementById('idealClient').value = '';
-  document.getElementById('frequency').value = '';
-  document.getElementById('bio').value = '';
-  document.getElementById('challenge').value = '';
-  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-  Object.keys(radioState).forEach(k => radioState[k] = '');
-  currentAudit = null;
-  pendingAudit = null;
-  document.getElementById('output').style.display = 'none';
-  document.getElementById('emailGate').style.display = 'none';
-  document.getElementById('gateEmail').value = '';
-  document.getElementById('gateError').style.display = 'none';
-  hideError();
+function restartTool() {
+  currentAudit=null; pendingAudit=null;
+  document.getElementById('firmName').value=''; document.getElementById('firmType').value='';
+  document.getElementById('idealClient').value=''; document.getElementById('frequency').value='';
+  document.getElementById('bio').value=''; document.getElementById('challenge').value='';
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  Object.keys(radioState).forEach(k=>radioState[k]='');
+  document.getElementById('generateBtn').disabled=false;
+  document.getElementById('gateSubmitBtn').disabled=false;
+  document.getElementById('output').style.display='none';
+  document.getElementById('emailGate').style.display='none';
+  document.getElementById('gateEmail').value='';
+  document.getElementById('gateError').style.display='none';
+  document.getElementById('error').style.display='none';
+  document.getElementById('quizArea').style.display='block';
+  showStep(1);
 }
 
 function downloadPDF() {
   if (!currentAudit) return;
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const sections = currentAudit.sections || [];
-  const overall = overallGrade(sections.map(s => s.grade));
-  const burgundy = [92, 31, 46];
-  const darkGray = [40, 40, 40];
-  const midGray = [100, 100, 100];
-  const lightGray = [230, 230, 230];
-  const pageW = 612;
-  const margin = 48;
-  const contentW = pageW - margin * 2;
-  let y = 48;
-
-  doc.setFillColor(...burgundy); doc.rect(0, 0, pageW, 72, 'F');
-  doc.setTextColor(255, 255, 255); doc.setFontSize(20); doc.setFont('helvetica', 'bold');
-  doc.text('Marketing Audit Report', margin, 36);
-  doc.setFontSize(11); doc.setFont('helvetica', 'normal');
-  doc.text('Studio Lou - studiolouinteriors.com', margin, 54);
-  doc.text(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageW - margin, 54, { align: 'right' });
-  y = 96;
-
-  const firmType = document.getElementById('firmType').value;
-  const idealClient = document.getElementById('idealClient').value.trim();
-  if (firmType) {
-    doc.setTextColor(...midGray); doc.setFontSize(10);
-    doc.text(`${firmType}${idealClient ? ' · ' + idealClient : ''}`, margin, y);
-    y += 20;
-  }
-
-  doc.setDrawColor(...lightGray); doc.setLineWidth(0.5); doc.line(margin, y, pageW - margin, y); y += 20;
-  doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(...darkGray);
-  doc.text('Overall grade', margin, y);
-  doc.setFontSize(28); doc.setTextColor(...burgundy);
-  doc.text(overall, margin, y + 28);
-  y += 56;
-
-  doc.setDrawColor(...lightGray); doc.line(margin, y, pageW - margin, y); y += 20;
-
-  const gradeColors = { A: [42, 92, 42], B: [90, 110, 0], C: [122, 80, 0], D: [122, 31, 31] };
-
-  sections.forEach(s => {
-    if (y > 680) { doc.addPage(); y = 48; }
-    const gc = gradeColors[s.grade] || midGray;
-    doc.setFillColor(245, 238, 240); doc.roundedRect(margin, y, contentW, 28, 4, 4, 'F');
-    doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(...darkGray);
-    doc.text(s.title, margin + 10, y + 18);
-    doc.setFontSize(13); doc.setTextColor(...gc);
-    doc.text(s.grade, pageW - margin - 10, y + 18, { align: 'right' });
-    y += 40;
-
-    doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(...midGray);
-    const summaryLines = doc.splitTextToSize(s.summary, contentW);
-    doc.text(summaryLines, margin, y);
-    y += summaryLines.length * 14 + 10;
-
-    doc.setFont('helvetica', 'bold'); doc.setTextColor(...burgundy);
-    doc.text('Next step:', margin, y);
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(...midGray);
-    const recLines = doc.splitTextToSize(s.recommendation, contentW - 60);
-    doc.text(recLines, margin + 58, y);
-    y += Math.max(recLines.length * 14, 14) + 20;
-
-    doc.setDrawColor(...lightGray); doc.line(margin, y, pageW - margin, y); y += 16;
+  const doc = new jsPDF({ unit:'pt', format:'letter' });
+  const sections = currentAudit.sections||[];
+  const overall = overallGrade(sections.map(s=>s.grade));
+  const burgundy=[92,31,46], darkGray=[40,40,40], midGray=[100,100,100], lightGray=[230,230,230];
+  const pageW=612, margin=48, contentW=pageW-margin*2;
+  let y=48;
+  doc.setFillColor(...burgundy); doc.rect(0,0,pageW,72,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(20); doc.setFont('helvetica','bold');
+  doc.text('Marketing Audit Report',margin,36);
+  doc.setFontSize(11); doc.setFont('helvetica','normal');
+  doc.text('Studio Lou - studiolouinteriors.com',margin,54);
+  doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),pageW-margin,54,{align:'right'});
+  y=96;
+  const firmType=document.getElementById('firmType').value, idealClient=document.getElementById('idealClient').value.trim();
+  if(firmType){doc.setTextColor(...midGray);doc.setFontSize(10);doc.text(firmType+(idealClient?' \u00b7 '+idealClient:''),margin,y);y+=20;}
+  doc.setDrawColor(...lightGray);doc.setLineWidth(0.5);doc.line(margin,y,pageW-margin,y);y+=20;
+  doc.setFontSize(13);doc.setFont('helvetica','bold');doc.setTextColor(...darkGray);doc.text('Overall grade',margin,y);
+  doc.setFontSize(28);doc.setTextColor(...burgundy);doc.text(overall,margin,y+28);y+=56;
+  doc.setDrawColor(...lightGray);doc.line(margin,y,pageW-margin,y);y+=20;
+  const gradeColors={A:[42,92,42],B:[90,110,0],C:[122,80,0],D:[122,31,31]};
+  sections.forEach(s=>{
+    if(y>680){doc.addPage();y=48;}
+    const gc=gradeColors[s.grade]||midGray;
+    doc.setFillColor(245,238,240);doc.roundedRect(margin,y,contentW,28,4,4,'F');
+    doc.setFontSize(12);doc.setFont('helvetica','bold');doc.setTextColor(...darkGray);doc.text(s.title,margin+10,y+18);
+    doc.setFontSize(13);doc.setTextColor(...gc);doc.text(s.grade,pageW-margin-10,y+18,{align:'right'});y+=40;
+    doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(...midGray);
+    const summaryLines=doc.splitTextToSize(s.summary,contentW);doc.text(summaryLines,margin,y);y+=summaryLines.length*14+10;
+    doc.setFont('helvetica','bold');doc.setTextColor(...burgundy);doc.text('Next step:',margin,y);
+    doc.setFont('helvetica','normal');doc.setTextColor(...midGray);
+    const recLines=doc.splitTextToSize(s.recommendation,contentW-60);doc.text(recLines,margin+58,y);
+    y+=Math.max(recLines.length*14,14)+20;
+    doc.setDrawColor(...lightGray);doc.line(margin,y,pageW-margin,y);y+=16;
   });
-
-  y += 10;
-  doc.setFontSize(9); doc.setTextColor(...midGray);
-  doc.text('Generated by Studio Lou AI Tools - studiolouinteriors.com/marketing-toolkit', margin, y);
+  y+=10;doc.setFontSize(9);doc.setTextColor(...midGray);
+  doc.text('Generated by Studio Lou AI Tools - studiolouinteriors.com/marketing-toolkit',margin,y);
   doc.save('studio-lou-marketing-audit.pdf');
 }
 </script>
