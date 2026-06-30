@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Renovation Budget Estimator</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 1800px;
+      background: #FAF9F6;
+      font-family: 'DM Sans', sans-serif;
+      color: #433E3C;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 36px 24px 100px;
+    }
+
+    /* ── Progress bar ── */
+    .progress-wrap { margin-bottom: 36px; }
+
+    .progress-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: #6b6560;
+      margin-bottom: 9px;
+    }
+
+    .progress-track {
+      height: 3px;
+      background: #d0c9bc;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #582b36;
+      border-radius: 99px;
+      transition: width 0.35s ease;
+    }
+
+    /* ── Steps ── */
+    .step { display: none; }
+    .step.active { display: block; }
+
+    .step-question {
+      font-size: 20px;
+      font-weight: 700;
+      color: #433E3C;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+
+    .step-subtext {
+      font-size: 14px;
+      color: #6b6560;
+      margin-bottom: 22px;
+    }
+
+    /* ── Chips ── */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .chip {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 400;
+      padding: 5px 14px;
+      border-radius: 99px;
+      border: 1.5px solid #d0c9bc;
+      background: #ffffff;
+      color: #433E3C;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s, color 0.12s;
+      line-height: 1.5;
+      user-select: none;
+    }
+
+    .chip:hover { border-color: #582b36; color: #582b36; }
+
+    .chip.active {
+      background: #f5eef0;
+      border-color: #582b36;
+      color: #582b36;
+      font-weight: 600;
+    }
+
+    /* ── Chip cards (descriptive options) ── */
+    .chip-cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .chip-card {
+      border: 1.5px solid #d0c9bc;
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+      user-select: none;
+    }
+
+    .chip-card:hover { border-color: #582b36; }
+
+    .chip-card.active {
+      background: #f5eef0;
+      border-color: #582b36;
+    }
+
+    .chip-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #433E3C;
+      margin-bottom: 3px;
+    }
+
+    .chip-card.active .chip-card-title { color: #582b36; }
+
+    .chip-card-desc {
+      font-size: 12px;
+      color: #6b6560;
+      line-height: 1.4;
+    }
+
+    /* ── Section divider (dual-field steps) ── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6b6560;
+      margin-bottom: 10px;
+    }
+
+    .section-divider {
+      border: none;
+      border-top: 1px solid #d0c9bc;
+      margin: 22px 0;
+    }
+
+    /* ── Textarea ── */
+    textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid #d0c9bc;
+      background: #ffffff;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: #433E3C;
+      padding: 14px 16px;
+      resize: vertical;
+      min-height: 100px;
+      margin-bottom: 22px;
+      outline: none;
+    }
+
+    textarea::placeholder { color: #a8a09a; }
+    textarea:focus { border-color: #582b36; }
+
+    /* ── Inline hint ── */
+    .hint {
+      font-size: 12px;
+      color: #582b36;
+      margin-top: -12px;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    /* ── Navigation ── */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .btn-back {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: #6b6560;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+
+    .btn-back[hidden] { visibility: hidden; pointer-events: none; }
+
+    .btn-next {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      background: #A6BE47;
+      color: #ffffff;
+      border: none;
+      border-radius: 50px;
+      padding: 13px 36px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .btn-next:hover { opacity: 0.87; }
+
+    /* ── Loading ── */
+    #loading {
+      display: none;
+      text-align: center;
+      padding: 72px 0;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #d0c9bc;
+      border-top-color: #582b36;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      margin: 0 auto 18px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text { font-size: 14px; color: #6b6560; }
+
+    /* ── Results ── */
+    #results { display: none; }
+
+    /* Total card */
+    .total-card {
+      background: #582b36;
+      border-radius: 16px;
+      padding: 30px 32px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .total-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 10px;
+    }
+
+    .total-range {
+      font-size: 38px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.1;
+    }
+
+    .total-sub {
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+      margin-top: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Breakdown table */
+    .breakdown-wrap {
+      background: #ffffff;
+      border: 1px solid #d0c9bc;
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .breakdown-head {
+      display: grid;
+      grid-template-columns: 1fr 100px 100px;
+      background: #433E3C;
+      padding: 10px 20px;
+    }
+
+    .breakdown-head span {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: #ffffff;
+    }
+
+    .breakdown-head span:nth-child(2),
+    .breakdown-head span:nth-child(3) { text-align: right; }
+
+    .breakdown-row {
+      display: grid;
+      grid-template-columns: 1fr 100px 100px;
+      padding: 11px 20px;
+      align-items: center;
+      border-top: 1px solid #d0c9bc;
+    }
+
+    .breakdown-row:nth-child(odd)  { background: #f5f0e8; }
+    .breakdown-row:nth-child(even) { background: #ffffff; }
+
+    .breakdown-row .cat { font-size: 13px; color: #433E3C; }
+
+    .breakdown-row .val {
+      font-size: 13px;
+      font-weight: 600;
+      color: #433E3C;
+      text-align: right;
+    }
+
+    /* Insight cards */
+    .insights {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .insight-card {
+      background: #ffffff;
+      border: 1px solid #d0c9bc;
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+
+    .insight-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: #582b36;
+      margin-bottom: 9px;
+    }
+
+    .insight-card p {
+      font-size: 13px;
+      color: #433E3C;
+      line-height: 1.55;
+    }
+
+    /* What could change */
+    .change-wrap {
+      background: #f5f0e8;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+
+    .change-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: #433E3C;
+      margin-bottom: 14px;
+    }
+
+    .change-wrap ul { list-style: none; padding: 0; }
+
+    .change-wrap ul li {
+      font-size: 13px;
+      color: #6b6560;
+      padding-left: 18px;
+      position: relative;
+      margin-bottom: 9px;
+      line-height: 1.5;
+    }
+
+    .change-wrap ul li:last-child { margin-bottom: 0; }
+
+    .change-wrap ul li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      color: #582b36;
+      font-weight: 600;
+    }
+
+    /* Disclaimer */
+    .disclaimer {
+      font-size: 11px;
+      color: #6b6560;
+      line-height: 1.65;
+      border-top: 1px solid #d0c9bc;
+      padding-top: 18px;
+      margin-bottom: 28px;
+    }
+
+    /* Result actions */
+    .result-actions { text-align: center; }
+
+    .btn-pdf {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      background: #A6BE47;
+      color: #ffffff;
+      border: none;
+      border-radius: 50px;
+      padding: 13px 36px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      display: inline-block;
+      margin-bottom: 14px;
+    }
+
+    .btn-pdf:hover { opacity: 0.87; }
+
+    .btn-restart {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      color: #6b6560;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      display: block;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    /* ── Error state ── */
+    .error-state {
+      text-align: center;
+      padding: 40px 0;
+    }
+
+    .error-state p {
+      font-size: 15px;
+      color: #582b36;
+      margin-bottom: 20px;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 520px) {
+      .chip-cards-grid { grid-template-columns: 1fr; }
+      .insights { grid-template-columns: 1fr; }
+      .total-range { font-size: 28px; }
+      .breakdown-head,
+      .breakdown-row { grid-template-columns: 1fr 80px 80px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ──────────────── PROGRESS BAR ──────────────── -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label" id="progressLabel">STEP 1 OF 8</div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill" style="width:12.5%"></div>
+    </div>
+  </div>
+
+  <!-- ──────────────── STEP 1: Room type ──────────────── -->
+  <div class="step active" id="step1">
+    <div class="step-question">Which room are you renovating?</div>
+    <div class="step-subtext">Choose the primary space for this project.</div>
+    <div class="chips" id="roomChips">
+      <div class="chip" data-value="Kitchen">Kitchen</div>
+      <div class="chip" data-value="Primary bathroom">Primary bathroom</div>
+      <div class="chip" data-value="Secondary bathroom">Secondary bathroom</div>
+      <div class="chip" data-value="Living room">Living room</div>
+      <div class="chip" data-value="Bedroom">Bedroom</div>
+      <div class="chip" data-value="Home office">Home office</div>
+      <div class="chip" data-value="Laundry room">Laundry room</div>
+      <div class="chip" data-value="Other">Other</div>
+    </div>
+    <div class="hint" id="hint1">Please select a room to continue.</div>
+    <div class="nav">
+      <button class="btn-back" hidden>← Back</button>
+      <button class="btn-next" onclick="nextStep(1)">Next →</button>
+    </div>
+  </div>
+
+  <!-- ──────────────── STEP 2: Project type ──────────────── -->
+  <div class="step" id="step2">
+    <div class="step-question">What kind of project is this?</div>
+    <div class="step-subtext">Select the option that best fits your scope.</div>
+    <div class="chip-cards-grid" id="projectChips">
+      <div class="chip-card" data-value="Cosmetic refresh">
+        <div class="chip-card-title">Cosmetic refresh</div>
+        <div class="chip-card-desc">Paint, fixtures, hardware, lighting — no structural changes</div>
+      </div>
+      <div class="chip-card" data-value="Partial renovation">
+        <div class="chip-card-title">Partial renovation</div>
+        <div class="chip-card-desc">Updating select elements — cabinets, surfaces, or fixtures</div>
+      </div>
+      <div class="chip-card" data-value="Full gut renovation">
+        <div class="chip-card-title">Full gut renovation</div>
+        <div class="chip-card-desc">Everything out, starting fresh — new layout possible</div>
+      </div>
+      <div class="chip-card" data-value="New build or addition">
+        <div class="chip-card-title">New build / addition</div>
+        <div class="chip-card-desc">New construction or adding square footage to the home</div>
+      </div>
+    </div>
+    <div class="hint" id="hint2">Please select a project type to continue.</div>
+    <div class="nav">
+      <button class="btn-back" onclick="prevStep(2)">← Back</button>
+      <button class="btn-next" onclick="nextStep(2)">Next →</button>
+    </div>
+  </div>
+
+  <!-- ──────────────── STEP 3: Room size + location ──────────────── -->
+  <div class="step" id="step3">
+    <div class="step-question">Room size and your location</div>
+    <div class="step-subtext">Both affect your budget range significantly.</div>
+
+    <div class="section-label">Room size</div>
+    <div class="chips" id="sizeChips"><!-- populated dynamically --></div>
+
+    <hr class="section-divider" />
+
+    <div class="section-label">Where are you located?</div>
+    <div class="chips" id="locationChips">
+      <div class="chip" data-value="Major metro (NYC, LA, SF, Chicago, Boston, Seattle, Miami, DC)">Major metro</div>
+      <div class="chip" data-value="Large city (Denver, Austin, Portland, Nashville, Atlanta)">Large city</div>
+      <div class="chip" data-value="Mid-size city (Phoenix, Raleigh, Salt Lake, Cincinnati)">Mid-size city</div>
+      <div class="chip" data-value="Smaller city or suburb">Smaller city or suburb</div>
+    </div>
+
+    <div class="hint" id="hint3">Please select both a size and a location to continue.</div>
+    <div class="nav">
+      <button class="btn-back" onclick="prevStep(3)">← Back</button>
+      <button class="btn-next" onclick="nextStep(3)">Next →</button>
+    </div>
+  </div>
+
+  <!-- ──────────────── STEP 4: Focus areas (multi-select) ──────────────── -->
+  <div class="step" id="step4">
+    <div class="step-question">What are you focusing on?</div>
+    <div class="step-subtext">Select everything you're planning to address. You can choose more than one.</div>
+    <div class="chips" id="focusChips"><!-- populated dynamically --></div>
+    <div class="hint" id="hint4">Please select at least one focus area.</div>
+    <div class="nav">
+      <button class="btn-back" onclick="prevStep(4)">← Back</button>
+      <button class="btn-next" onclick="nextStep(4)">Next →</button>
+    </div>
+  </div>
+
+  <!-- ──────────────── STEP 5: Quality + DIY ──────────────── -->
+  <div class="step" id="step5">
+    <div class="step-question">Materials and labor</div>
+    <div class="step-subtext">These two factors have the biggest impact on your final number.</div>
+
+    <div class="section-label">Material quality level</div>
+    <div class="chips" id="qualityChips">
+      <div class="chip" data-value="Budget-friendly (builder grade, stock options)">Budget-friendly</div>
+      <div class="chip" data-value="Mid-range (semi-custom, solid quality)">Mid-range</div>
+      <div class="chip" data-value="High-end (custom, premium materials)">High-end</div>
+      <div class="chip" data-value="Mix (splurge on key items, save elsewhere)">Mix — splurge on some, save on others</div>
+    </div>
+
+    <hr class="section-divider" />
+
+    <div class="section-label">DIY plans</div>
+    <div class="chips" id="diyChips">
+      <div class="chip" data-value="All contractor (no DIY)">All contractor</div>
+      <div class="chip" data-value="Some DIY (demo, painting, simple installs)">Some DIY</div>
+      <div class="chip" data-value="Mostly DIY (contractor for structural and plumbing only)">Mostly DIY</div>
+    </div>
+
+    <div class="hint" id="hint5">Please select both a quality level and a DIY plan.</div>
+    <div class="nav">
+      <button class="btn-back" onclick="prevStep(5)">← Back</button>
+      <button class="btn-next" onclick="nextStep(5)">Next →</button>
+    </div>
+  </div>
+
+  <!-- ──────────────── STEP 6: Home age ──────────────── -->
+  <div class="step" id="step6">
+    <div class="step-question">How old is your home?</div>
+    <div class="step-subtext">Older homes often carry hidden costs — outdated wiring, plumbing surprises, or materials that need special handling.</div>
+    <div class="chips" id="ageChips">
+      <div class="chip" data-value="2015 or newer">2015 or newer</div>
+      <div class="chip" data-value="2000–2014">2000–2014</div>
+      <div class="chip" data-value="1980–1999">1980–1999</div>
+      <div class="chip" data-value="1950–1979">1950–1979</div>
+      <div class="chip" data-value="Pre-1950">Pre-1950</div>
+      <div class="chip" data-value="Not sure">Not sure</div>
+    </div>
+    <div class="hint" id="hint6">Please select your home's age to continue.</div>
+    <div class="nav">
+      <button class="btn-back" onclick="prevStep(6)">← Back</button>
+      <button class="btn-next" onclick="nextStep(6)">Next →</button>
+    </div>
+  </div>
+
+  <!-- ──────────────── STEP 7: Timeline ──────────────── -->
+  <div class="step" id="step7">
+    <div class="step-question">What's your timeline?</div>
+    <div class="step-subtext">Compressed schedules typically cost more — contractors charge a premium for rushed bookings.</div>
+    <div class="chip-cards-grid" id="timelineChips">
+      <div class="chip-card" data-value="Standard timeline (flexible schedule)">
+        <div class="chip-card-title">Standard timeline</div>
+        <div class="chip-card-desc">No hard deadline — schedule when it works for the contractor</div>
+      </div>
+      <div class="chip-card" data-value="Need it done fast (under 3 months)">
+        <div class="chip-card-title">Need it done fast</div>
+        <div class="chip-card-desc">Under 3 months — expect a premium on contractor scheduling</div>
+      </div>
+    </div>
+    <div class="hint" id="hint7">Please select a timeline to continue.</div>
+    <div class="nav">
+      <button class="btn-back" onclick="prevStep(7)">← Back</button>
+      <button class="btn-next" onclick="nextStep(7)">Next →</button>
+    </div>
+  </div>
+
+  <!-- ──────────────── STEP 8: Additional notes ──────────────── -->
+  <div class="step" id="step8">
+    <div class="step-question">Anything else we should know?</div>
+    <div class="step-subtext">Optional — share any details that might affect your estimate. Skip this if nothing comes to mind.</div>
+    <textarea
+      id="notesInput"
+      placeholder="e.g. We're keeping the existing layout but replacing everything else. The bathroom hasn't been updated since the 1970s. We're hoping to add a double vanity."
+    ></textarea>
+    <div class="nav">
+      <button class="btn-back" onclick="prevStep(8)">← Back</button>
+      <button class="btn-next" onclick="generate()">✦ Get my estimate</button>
+    </div>
+  </div>
+
+  <!-- ──────────────── LOADING ──────────────── -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Building your estimate...</div>
+  </div>
+
+  <!-- ──────────────── RESULTS ──────────────── -->
+  <div id="results">
+
+    <!-- Total range card -->
+    <div class="total-card">
+      <div class="total-label">Estimated total range</div>
+      <div class="total-range" id="totalRange">—</div>
+      <div class="total-sub" id="totalSub"></div>
+    </div>
+
+    <!-- Budget breakdown table -->
+    <div class="breakdown-wrap">
+      <div class="breakdown-head">
+        <span>Category</span>
+        <span>Low</span>
+        <span>High</span>
+      </div>
+      <div id="breakdownRows"></div>
+    </div>
+
+    <!-- Where to Spend / Where to Save -->
+    <div class="insights">
+      <div class="insight-card">
+        <div class="insight-label">Where to spend</div>
+        <p id="whereSpend"></p>
+      </div>
+      <div class="insight-card">
+        <div class="insight-label">Where to save</div>
+        <p id="whereSave"></p>
+      </div>
+    </div>
+
+    <!-- What could change your number -->
+    <div class="change-wrap">
+      <div class="change-title">What could change your number</div>
+      <ul id="changeList"></ul>
+    </div>
+
+    <!-- Disclaimer (hard-coded per spec) -->
+    <div class="disclaimer" id="disclaimerText">
+      These ranges reflect general 2025–2026 market conditions for renovation costs (labor, materials, permits, contractors). They do not include furnishings, decor, window treatments, or styling — those are typically budgeted separately. Construction costs vary significantly by your specific zip code, contractor availability, and project complexity. Get 2–3 contractor quotes to validate ranges for your project.
+    </div>
+
+    <!-- Actions -->
+    <div class="result-actions">
+      <button class="btn-pdf" onclick="downloadPDF()">✦ Download as PDF</button>
+      <button class="btn-restart" onclick="restart()">Start over</button>
+    </div>
+
+  </div><!-- /results -->
+
+</div><!-- /container -->
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM PROMPT — paste Lauren's prompt here before deploying
+// ─────────────────────────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `You are a renovation budget estimator for Studio Lou, a Phoenix-based interior 
+design and growth marketing consultancy run by Lauren Simon. You are speaking 
+to a homeowner planning a renovation. Your job is to generate a realistic, 
+data-backed budget range based on their inputs.
+
+# YOUR VOICE
+
+Write like a designer giving honest advice to a friend. Professional, opinionated, 
+and grounded in real experience — not generic. Warmer than a contractor estimate, 
+sharper than a Pinterest article.
+
+- Use "we" for Studio Lou perspective ("we'd spend on...", "we'd save on...")
+- No em dashes. Ever. Use commas, periods, or rewrite the sentence.
+- Be specific. "A Bosch dishwasher" beats "a quality appliance."
+- Take a position on where to spend vs save. Don't hedge.
+- Avoid generic phrases like "every project is unique" — that's the disclaimer's job.
+
+# OUTPUT FORMAT
+
+Return ONLY valid JSON. No preamble, no markdown fences, no explanation. 
+The JSON structure must match this schema exactly:
+
+{
+  "total_range": {
+    "low": 24000,
+    "high": 58000
+  },
+  "breakdown": [
+    { "category": "Labor", "low": 8000, "high": 18000 },
+    { "category": "Cabinets", "low": 4500, "high": 14000 },
+    { "category": "Countertops", "low": 2000, "high": 6500 },
+    { "category": "Appliances", "low": 3000, "high": 9000 },
+    { "category": "Flooring", "low": 1500, "high": 4000 },
+    { "category": "Lighting", "low": 400, "high": 1500 },
+    { "category": "Permits & design fees", "low": 800, "high": 2500 },
+    { "category": "Contingency", "low": 3000, "high": 7500 }
+  ],
+  "spend_on": "A short 2-3 sentence Studio Lou recommendation on where to invest. Specific.",
+  "save_on": "A short 2-3 sentence Studio Lou recommendation on where to cut. Specific.",
+  "what_could_change": [
+    "First factor — 1 sentence, tied to their inputs (home age, location, scope).",
+    "Second factor — 1 sentence.",
+    "Third factor — 1 sentence."
+  ]
+}
+
+All dollar values are whole numbers (no cents, no commas, no $ signs in the JSON).
+The breakdown categories should reflect the room type and scope — Kitchen will 
+have cabinets/appliances/countertops; Bathroom will have fixtures/tile/vanity; 
+Living room will have flooring/built-ins/lighting; etc. Always include Labor, 
+Permits & design fees, and Contingency as line items.
+
+# COST FRAMEWORK (2025–2026 baselines)
+
+These are NATIONAL MEDIAN ranges before location and modifier adjustments. 
+Apply the multipliers in order: base × scope × tier × location × home age × 
+DIY × layout-change × timeline.
+
+## Kitchen (national baseline)
+- Cosmetic refresh: $12,000–$28,000
+- Partial renovation: $30,000–$70,000
+- Full gut: $65,000–$130,000
+- New build (per sq ft): use new-build pricing below
+
+Internal split for kitchens (mid-range %):
+- Cabinets: 30–40% of total
+- Countertops: 10–20%
+- Appliances: 12–18%
+- Labor: 25–35%
+- Flooring, lighting, plumbing, backsplash, permits, contingency: remainder
+
+## Primary bathroom (national baseline)
+- Cosmetic refresh: $8,000–$15,000
+- Partial renovation: $20,000–$35,000
+- Full gut: $40,000–$80,000
+
+## Secondary/guest bathroom (national baseline)
+- Cosmetic refresh: $5,000–$10,000
+- Partial renovation: $15,000–$25,000
+- Full gut: $25,000–$40,000
+
+## Living room (national baseline)
+- Cosmetic refresh: $2,500–$8,000
+- Partial renovation: $8,000–$20,000
+- Full gut (includes structural): $20,000–$50,000
+
+## Bedroom (national baseline)
+- Cosmetic refresh: $2,000–$6,000
+- Partial renovation: $6,000–$15,000
+- Full gut: $15,000–$30,000
+
+## Home office (national baseline)
+- Cosmetic refresh: $2,000–$6,000
+- Partial renovation: $8,000–$18,000
+- Full gut: $18,000–$30,000
+
+## Laundry room (national baseline)
+- Cosmetic refresh: $1,800–$6,000
+- Partial renovation: $6,000–$17,000
+- Full gut: $17,000–$30,000
+
+## New build (per square foot, 2026)
+- Budget tier: $175–$220/sq ft
+- Mid-range tier: $220–$320/sq ft
+- High-end tier: $320–$600/sq ft
+- Mix tier: $250–$400/sq ft
+
+Multiply by room sq ft. For new build, treat the room as standalone construction.
+
+# MODIFIERS
+
+## Quality tier multiplier (applied to base range)
+- Budget-friendly: 0.75×
+- Mid-range: 1.0× (baseline)
+- High-end: 1.6×
+- Mix (some splurge, some save): 1.2×
+
+## Location multiplier
+- Major metro (NYC, SF, LA, Boston, Seattle, DC): 1.5×
+- Large city (Chicago, Miami, Denver, Atlanta, Phoenix, Austin): 1.25×
+- Mid-size city: 1.0× (baseline)
+- Smaller city / suburb: 0.9×
+
+## Home age contingency (replaces standard 15% contingency)
+- Built 2015+: 12% contingency
+- 2000–2014: 15% contingency
+- 1980–1999: 18% contingency
+- 1950–1979: 22% contingency
+- Pre-1950 / historic: 25% contingency
+- Not sure: 18% contingency (assume mid-range risk)
+
+## DIY adjustment (reduces labor line only, not total)
+- All contractor: no change
+- Some DIY: reduce labor line by 15%
+- Mostly DIY: reduce labor line by 35%
+
+## Layout change multiplier (applied to total)
+If "Layout change / moving plumbing / moving walls" was selected in focus areas:
+- Apply 1.2× to the total range (moving plumbing or walls is expensive)
+
+## Timeline urgency multiplier (applied to high end only)
+- Standard timeline: no change
+- Need it done fast (under 3 months): increase HIGH END by 12% to reflect 
+  rush premiums (expedited permits, premium crews, overtime labor)
+
+# SPEND vs SAVE LOGIC (designer-validated)
+
+The spend_on and save_on fields should reflect their specific selections, 
+not generic advice. Use these designer-and-contractor-validated patterns:
+
+## Kitchen
+Spend on: cabinets (30-40% of budget for a reason — cheap cabinets fail fast, 
+take up 75% of visual space), countertops (especially the island if budget 
+is tight — quartzite, quartz, or honed marble holds up), and ventilation 
+(boring but real — a properly vented hood is non-negotiable).
+Save on: cabinet hardware and pendant lighting (easy to swap in a few years), 
+mid-range appliances from Bosch, GE, Jenn-Air, or Fisher & Paykel (skip 
+Sub-Zero/Wolf unless you cook professionally), and backsplash tile beyond 
+a focal section.
+
+## Bathroom
+Spend on: the shower (waterproofing matters, you cannot redo it cheaply 
+— invest in treated glass like StayCLEAN, proper waterproofing systems 
+like Schluter), floor tile (high-traffic, hardest to redo), and plumbing 
+fixtures from a brand with a real warranty.
+Save on: the toilet (American Standard is genuinely excellent at its price), 
+the vanity (mid-range $400-$1,200 is the sweet spot, easy to swap later), 
+and tile beyond the focal wall.
+
+## Living room
+Spend on: flooring (sets the room, takes the traffic, hardest to redo 
+without disrupting everything else), built-ins if you're doing them 
+(they last longer than furniture and add real value), and trim/millwork 
+if budget allows.
+Save on: paint (cheapest to redo if you change your mind), ceiling 
+medallions and decorative ceiling details (foam reads the same as plaster 
+once painted), and standard light fixtures.
+
+## Bedroom
+Spend on: flooring if you're replacing it, closet built-ins, and quality 
+window treatments if it's a sleep space.
+Save on: paint, hardware, switch plates, and decorative accent lighting.
+
+## Home office
+Spend on: electrical work (outlets where you actually need them, dedicated 
+circuits for heavy equipment), built-in desk or shelving if you're committed 
+to the room, and acoustic treatment if it's a video call space.
+Save on: decorative elements, accent lighting, and accessories. Function 
+over form on the actual fixtures.
+
+## Laundry room
+Spend on: the appliances (this is the one room where the appliances ARE 
+the room — invest in a quality washer/dryer pair) and counter surface for 
+folding.
+Save on: cabinet finishes (utility space, no one's photographing it), 
+backsplash tile, and decorative lighting.
+
+Pick the 2-3 most relevant items based on their focus areas. Be specific 
+with brands or materials where it adds credibility.
+
+# WHAT COULD CHANGE YOUR NUMBER
+
+Generate 3 factors tied to THEIR specific inputs. Use these triggers:
+
+If home age is pre-1980:
+- Hidden electrical issues (knob-and-tube wiring, undersized panels) can 
+  add $5,000–$15,000 once walls are opened
+- Asbestos in flooring, insulation, or popcorn ceilings — abatement runs 
+  $2,000–$10,000 if found
+- Lead paint (anything pre-1978) requires certified handling, $3–$10 per 
+  square foot of affected surface
+
+If layout change was selected:
+- Moving plumbing or load-bearing walls can push costs 20–30% beyond this 
+  estimate, especially if a structural engineer is required
+
+If new build or full gut:
+- Permit timelines vary wildly by jurisdiction — major metros can take 
+  2–6 months for approval
+- Long-lead items (custom cabinets, specialty tile, appliances) can have 
+  8–16 week lead times that extend timelines and carrying costs
+
+If location is major metro:
+- Contractor availability in your market often pushes start dates 2–4 months 
+  out, which can affect material pricing
+
+If timeline urgency is yes:
+- Rush timelines compress contractor availability and often limit material 
+  choices to what's in stock, which can affect both cost and finish quality
+
+If DIY is mostly:
+- DIY labor savings are real, but skill gaps on plumbing, electrical, or 
+  tile work often cost more to fix than to hire out
+
+Always include something about getting 2–3 contractor quotes to validate.
+
+# HARD RULES
+
+- Never quote a single number. Always a range.
+- Never include furnishings, decor, window treatments, or styling in the 
+  breakdown — these are explicitly excluded.
+- Round all dollar values to the nearest $100 for cleanliness.
+- The "low" of the total range should equal the sum of the breakdown lows.
+- The "high" of the total range should equal the sum of the breakdown highs.
+  (Math must reconcile — the breakdown adds up to the total.)
+- Never use em dashes.
+- Never use the word "curious" in any output.
+- Spend/save sections are 2–3 sentences MAX each. Tight.
+- "What could change your number" entries are 1 sentence each. Tight.
+
+Return only the JSON object. Nothing before it, nothing after it.`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+const state = {
+  room:        '',
+  projectType: '',
+  size:        '',
+  location:    '',
+  focusAreas:  [],
+  quality:     '',
+  diy:         '',
+  homeAge:     '',
+  timeline:    '',
+  notes:       ''
+};
+
+let currentStep = 1;
+const TOTAL_STEPS = 8;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Focus area options by room type
+// ─────────────────────────────────────────────────────────────────────────────
+const FOCUS_OPTIONS = {
+  'Kitchen': [
+    'Cabinets & hardware',
+    'Countertops',
+    'Appliances',
+    'Flooring',
+    'Backsplash',
+    'Sink & faucet',
+    'Lighting & electrical',
+    'Ventilation / range hood',
+    'Layout change / moving plumbing or walls'
+  ],
+  'Primary bathroom': [
+    'Tile & flooring',
+    'Vanity & mirrors',
+    'Shower or tub',
+    'Toilet',
+    'Lighting & electrical',
+    'Plumbing fixtures',
+    'Storage & built-ins',
+    'Ventilation',
+    'Layout change / moving plumbing or walls'
+  ],
+  'Secondary bathroom': [
+    'Tile & flooring',
+    'Vanity & mirrors',
+    'Shower or tub',
+    'Toilet',
+    'Lighting & electrical',
+    'Plumbing fixtures',
+    'Storage & built-ins',
+    'Layout change / moving plumbing or walls'
+  ],
+  'Living room': [
+    'Flooring',
+    'Paint & walls',
+    'Lighting & electrical',
+    'Built-ins or shelving',
+    'Fireplace',
+    'Windows & doors',
+    'Ceiling work',
+    'Layout change / moving plumbing or walls'
+  ],
+  'Bedroom': [
+    'Flooring',
+    'Paint & walls',
+    'Closet & storage',
+    'Lighting & electrical',
+    'Windows',
+    'Ceiling work',
+    'Layout change / moving plumbing or walls'
+  ],
+  'Home office': [
+    'Flooring',
+    'Paint & walls',
+    'Built-ins & shelving',
+    'Lighting & electrical',
+    'Acoustic panels or soundproofing',
+    'Windows',
+    'Layout change / moving plumbing or walls'
+  ],
+  'Laundry room': [
+    'Flooring',
+    'Cabinetry & storage',
+    'Countertop & sink',
+    'Appliances',
+    'Lighting & electrical',
+    'Plumbing',
+    'Layout change / moving plumbing or walls'
+  ],
+  'Other': [
+    'Flooring',
+    'Paint & walls',
+    'Lighting & electrical',
+    'Built-ins or storage',
+    'Windows & doors',
+    'Plumbing',
+    'Layout change / moving plumbing or walls'
+  ]
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Size options — ranges differ by room type
+// ─────────────────────────────────────────────────────────────────────────────
+function getSizeOptions(room) {
+  if (room === 'Kitchen' || room === 'Living room') {
+    return [
+      { label: 'Small (under 150 sq ft)',  value: 'Small (under 150 sq ft)' },
+      { label: 'Medium (150–300 sq ft)',   value: 'Medium (150–300 sq ft)' },
+      { label: 'Large (300+ sq ft)',       value: 'Large (300+ sq ft)' }
+    ];
+  }
+  return [
+    { label: 'Small (under 100 sq ft)',  value: 'Small (under 100 sq ft)' },
+    { label: 'Medium (100–250 sq ft)',   value: 'Medium (100–250 sq ft)' },
+    { label: 'Large (250+ sq ft)',       value: 'Large (250+ sq ft)' }
+  ];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Progress bar
+// ─────────────────────────────────────────────────────────────────────────────
+function updateProgress(step) {
+  document.getElementById('progressLabel').textContent = `STEP ${step} OF ${TOTAL_STEPS}`;
+  document.getElementById('progressFill').style.width = `${(step / TOTAL_STEPS) * 100}%`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chip init helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function initSingleSelect(containerId, stateKey) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      container.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state[stateKey] = chip.dataset.value;
+    });
+  });
+}
+
+function initCardSelect(containerId, stateKey) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.chip-card').forEach(card => {
+    card.addEventListener('click', () => {
+      container.querySelectorAll('.chip-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      state[stateKey] = card.dataset.value;
+    });
+  });
+}
+
+function initMultiSelect(containerId, stateKey) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('active');
+      const val = chip.dataset.value;
+      if (chip.classList.contains('active')) {
+        if (!state[stateKey].includes(val)) state[stateKey].push(val);
+      } else {
+        state[stateKey] = state[stateKey].filter(v => v !== val);
+      }
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dynamic chip population
+// ─────────────────────────────────────────────────────────────────────────────
+function populateSizeChips() {
+  const opts = getSizeOptions(state.room);
+  const container = document.getElementById('sizeChips');
+  container.innerHTML = opts
+    .map(o => `<div class="chip" data-value="${o.value}">${o.label}</div>`)
+    .join('');
+  state.size = '';
+  initSingleSelect('sizeChips', 'size');
+}
+
+function populateFocusChips() {
+  const opts = FOCUS_OPTIONS[state.room] || FOCUS_OPTIONS['Other'];
+  const container = document.getElementById('focusChips');
+  container.innerHTML = opts
+    .map(o => `<div class="chip" data-value="${o}">${o}</div>`)
+    .join('');
+  state.focusAreas = [];
+  initMultiSelect('focusChips', 'focusAreas');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step navigation
+// ─────────────────────────────────────────────────────────────────────────────
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById(`step${n}`).classList.add('active');
+  updateProgress(n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  currentStep = n;
+}
+
+function showHint(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'block';
+}
+
+function hideHint(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
+
+function nextStep(from) {
+  // Validation
+  if (from === 1 && !state.room)                        { showHint('hint1'); return; }
+  if (from === 2 && !state.projectType)                 { showHint('hint2'); return; }
+  if (from === 3 && (!state.size || !state.location))   { showHint('hint3'); return; }
+  if (from === 4 && state.focusAreas.length === 0)      { showHint('hint4'); return; }
+  if (from === 5 && (!state.quality || !state.diy))     { showHint('hint5'); return; }
+  if (from === 6 && !state.homeAge)                     { showHint('hint6'); return; }
+  if (from === 7 && !state.timeline)                    { showHint('hint7'); return; }
+
+  hideHint(`hint${from}`);
+
+  const next = from + 1;
+  if (next === 3) populateSizeChips();
+  if (next === 4) populateFocusChips();
+  showStep(next);
+}
+
+function prevStep(from) {
+  hideHint(`hint${from}`);
+  showStep(from - 1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Generate
+// ─────────────────────────────────────────────────────────────────────────────
+async function generate() {
+  state.notes = document.getElementById('notesInput').value.trim();
+
+  // Hide quiz UI, show loading
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById(`step${currentStep}`).classList.remove('active');
+  document.getElementById('loading').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  const userMessage = [
+    `Room type: ${state.room}`,
+    `Project type: ${state.projectType}`,
+    `Room size: ${state.size}`,
+    `Location: ${state.location}`,
+    `Focus areas: ${state.focusAreas.join(', ')}`,
+    `Material quality: ${state.quality}`,
+    `DIY plans: ${state.diy}`,
+    `Home age: ${state.homeAge}`,
+    `Timeline: ${state.timeline}`,
+    `Additional notes: ${state.notes || 'None'}`
+  ].join('\n');
+
+  try {
+    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+        max_tokens: 1000
+      })
+    });
+
+    const data = await res.json();
+    let raw = data.content[0].text;
+
+    // Defensively strip markdown code fences
+    raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    const result = JSON.parse(raw);
+    renderResults(result);
+    fireTracking();
+
+  } catch (err) {
+    console.error('Estimate error:', err);
+    document.getElementById('loading').innerHTML = `
+      <div class="error-state">
+        <p>Something went wrong building your estimate. Please try again.</p>
+        <button class="btn-next" onclick="restart()" style="margin:0 auto;display:block;">← Start over</button>
+      </div>
+    `;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Render results
+// ─────────────────────────────────────────────────────────────────────────────
+function fmt(n) {
+  if (typeof n !== 'number') return String(n);
+  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function renderResults(data) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('results').style.display = 'block';
+
+  // Total range
+  document.getElementById('totalRange').textContent = `${fmt(data.total_range.low)} – ${fmt(data.total_range.high)}`;
+  document.getElementById('totalSub').textContent =
+    `${state.room}  ·  ${state.projectType}  ·  ${state.location.split('(')[0].trim()}`;
+
+  // Breakdown rows
+  const rowsEl = document.getElementById('breakdownRows');
+  rowsEl.innerHTML = (data.breakdown || []).map(row => `
+    <div class="breakdown-row">
+      <span class="cat">${row.category}</span>
+      <span class="val">${fmt(row.low)}</span>
+      <span class="val">${fmt(row.high)}</span>
+    </div>
+  `).join('');
+
+  // Insights
+  document.getElementById('whereSpend').textContent = data.spend_on || '';
+  document.getElementById('whereSave').textContent  = data.save_on  || '';
+
+  // What could change
+  const listEl = document.getElementById('changeList');
+  listEl.innerHTML = (data.what_could_change || []).map(item => `<li>${item}</li>`).join('');
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Sheets tracking
+// ─────────────────────────────────────────────────────────────────────────────
+function fireTracking() {
+  fetch(
+    'https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec',
+    {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool: 'renovation-budget-estimator',
+        referrer: document.referrer || window.location.href
+      })
+    }
+  ).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PDF export
+// ─────────────────────────────────────────────────────────────────────────────
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+
+  const margin   = 56;
+  const pageW    = doc.internal.pageSize.getWidth();
+  const pageH    = doc.internal.pageSize.getHeight();
+  const contentW = pageW - margin * 2;
+  let y = margin;
+
+  function checkPage(needed) {
+    if (y + (needed || 60) > pageH - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  }
+
+  function line(text, opts) {
+    const { size = 11, weight = 'normal', color = [67, 62, 60], indent = 0, align = 'left' } = opts || {};
+    doc.setFontSize(size);
+    doc.setFont('helvetica', weight);
+    doc.setTextColor(...color);
+    const wrapped = doc.splitTextToSize(text, contentW - indent);
+    const x = align === 'center' ? pageW / 2 : margin + indent;
+    doc.text(wrapped, x, y, align === 'center' ? { align: 'center' } : {});
+    y += wrapped.length * (size * 1.5);
+  }
+
+  function gap(h) { y += (h || 10); }
+
+  // ── Header ──
+  line('Renovation Budget Estimate', { size: 22, weight: 'bold' });
+  gap(5);
+  line(`${state.room}  ·  ${state.projectType}`, { size: 12, color: [107, 101, 96] });
+  gap(22);
+
+  // ── Total range card ──
+  const totalText = document.getElementById('totalRange').textContent;
+  doc.setFillColor(88, 43, 54);
+  doc.roundedRect(margin, y, contentW, 62, 8, 8, 'F');
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text('ESTIMATED TOTAL RANGE', margin + 16, y + 18);
+  doc.setFontSize(24);
+  doc.text(totalText, margin + 16, y + 46);
+  y += 78;
+
+  // ── Breakdown ──
+  checkPage(50);
+  gap(4);
+  line('Budget Breakdown', { size: 13, weight: 'bold' });
+  gap(10);
+
+  // Table header
+  doc.setFillColor(67, 62, 60);
+  doc.rect(margin, y, contentW, 22, 'F');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.text('CATEGORY', margin + 8, y + 14);
+  doc.text('LOW',  pageW - margin - 108, y + 14, { align: 'right' });
+  doc.text('HIGH', pageW - margin - 8,   y + 14, { align: 'right' });
+  y += 22;
+
+  const rows = document.querySelectorAll('#breakdownRows .breakdown-row');
+  rows.forEach((row, i) => {
+    checkPage(22);
+    const cat  = row.querySelector('.cat').textContent;
+    const vals = row.querySelectorAll('.val');
+    const low  = vals[0].textContent;
+    const high = vals[1].textContent;
+
+    if (i % 2 === 0) doc.setFillColor(245, 240, 232);
+    else             doc.setFillColor(255, 255, 255);
+    doc.rect(margin, y, contentW, 20, 'F');
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(67, 62, 60);
+    doc.text(cat,  margin + 8,          y + 13);
+    doc.text(low,  pageW - margin - 108, y + 13, { align: 'right' });
+    doc.text(high, pageW - margin - 8,   y + 13, { align: 'right' });
+    y += 20;
+  });
+
+  gap(22);
+
+  // ── Insights ──
+  checkPage(80);
+  const spendText = document.getElementById('whereSpend').textContent;
+  const saveText  = document.getElementById('whereSave').textContent;
+  const colW      = (contentW - 12) / 2;
+
+  // Where to Spend
+  doc.setFillColor(255, 255, 255);
+  const spendLines = doc.splitTextToSize(spendText, colW - 24);
+  const insH = Math.max(spendLines.length, doc.splitTextToSize(saveText, colW - 24).length) * 15 + 40;
+  doc.setDrawColor(208, 201, 188);
+  doc.roundedRect(margin, y, colW, insH, 6, 6, 'FD');
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(88, 43, 54);
+  doc.text('WHERE TO SPEND', margin + 12, y + 16);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(67, 62, 60);
+  doc.text(spendLines, margin + 12, y + 30);
+
+  // Where to Save
+  const saveLines = doc.splitTextToSize(saveText, colW - 24);
+  const saveX = margin + colW + 12;
+  doc.roundedRect(saveX, y, colW, insH, 6, 6, 'FD');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(88, 43, 54);
+  doc.text('WHERE TO SAVE', saveX + 12, y + 16);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(67, 62, 60);
+  doc.text(saveLines, saveX + 12, y + 30);
+
+  y += insH + 18;
+
+  // ── What could change ──
+  checkPage(60);
+  doc.setFillColor(245, 240, 232);
+  const changeItems = Array.from(document.querySelectorAll('#changeList li')).map(li => li.textContent);
+  const changeLines = changeItems.map(t => doc.splitTextToSize(`\u2192  ${t}`, contentW - 28));
+  const totalChangeH = changeLines.reduce((acc, l) => acc + l.length * 14, 0) + 34;
+  doc.roundedRect(margin, y, contentW, totalChangeH, 6, 6, 'F');
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(67, 62, 60);
+  doc.text('WHAT COULD CHANGE YOUR NUMBER', margin + 14, y + 16);
+
+  let cy = y + 30;
+  changeLines.forEach(lines => {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(107, 101, 96);
+    doc.text(lines, margin + 14, cy);
+    cy += lines.length * 14 + 4;
+  });
+
+  y += totalChangeH + 18;
+
+  // ── Disclaimer ──
+  checkPage(70);
+  const dText  = document.getElementById('disclaimerText').textContent.trim();
+  const dLines = doc.splitTextToSize(dText, contentW - 24);
+  const dH     = dLines.length * 13 + 20;
+  doc.setFillColor(250, 249, 246);
+  doc.setDrawColor(208, 201, 188);
+  doc.roundedRect(margin, y, contentW, dH, 6, 6, 'FD');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(107, 101, 96);
+  doc.text(dLines, margin + 12, y + 14);
+  y += dH + 20;
+
+  // ── Footer ──
+  checkPage(20);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(107, 101, 96);
+  doc.text('Studio Lou Interiors  ·  studiolouinteriors.com', margin, y);
+
+  doc.save('renovation-budget-estimate.pdf');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Restart
+// ─────────────────────────────────────────────────────────────────────────────
+function restart() {
+  // Reset state
+  Object.assign(state, {
+    room: '', projectType: '', size: '', location: '',
+    focusAreas: [], quality: '', diy: '', homeAge: '', timeline: '', notes: ''
+  });
+
+  // Clear all chip selections
+  document.querySelectorAll('.chip, .chip-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('notesInput').value = '';
+
+  // Restore loading div (in case it was replaced by error message)
+  document.getElementById('loading').innerHTML = `
+    <div class="spinner"></div>
+    <div class="loading-text">Building your estimate...</div>
+  `;
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('progressWrap').style.display = 'block';
+
+  showStep(1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initSingleSelect('roomChips', 'room');
+  initCardSelect('projectChips', 'projectType');
+  initSingleSelect('locationChips', 'location');
+  initSingleSelect('qualityChips', 'quality');
+  initSingleSelect('diyChips', 'diy');
+  initSingleSelect('ageChips', 'homeAge');
+  initCardSelect('timelineChips', 'timeline');
+  // sizeChips and focusChips are populated dynamically on step transition
+});
+</script>
+</body>
+</html>

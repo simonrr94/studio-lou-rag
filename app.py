@@ -645,6 +645,10 @@ def color_palette_generator():
 def room_layout_helper():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "room-layout-helper.html")
 
+@app.route("/tools/renovation-budget-estimator")
+def renovation_budget_estimator():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "renovation-budget-estimator.html")
+
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)
