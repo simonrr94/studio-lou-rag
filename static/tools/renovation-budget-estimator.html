@@ -1437,10 +1437,14 @@ function downloadPDF() {
 
   // ── What could change ──
   checkPage(60);
-  doc.setFillColor(245, 240, 232);
   const changeItems = Array.from(document.querySelectorAll('#changeList li')).map(li => li.textContent);
-  const changeLines = changeItems.map(t => doc.splitTextToSize(`\u2192  ${t}`, contentW - 28));
-  const totalChangeH = changeLines.reduce((acc, l) => acc + l.length * 14, 0) + 34;
+  // Set font BEFORE splitTextToSize — width calc must match render size
+  // Use ASCII hyphen: jsPDF built-in Helvetica is latin-1 only, Unicode arrows corrupt the line
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const changeLines = changeItems.map(t => doc.splitTextToSize('-  ' + t, contentW - 32));
+  const totalChangeH = changeLines.reduce((acc, l) => acc + l.length * 15, 0) + 38;
+  doc.setFillColor(245, 240, 232);
   doc.roundedRect(margin, y, contentW, totalChangeH, 6, 6, 'F');
 
   doc.setFontSize(9);
@@ -1448,13 +1452,13 @@ function downloadPDF() {
   doc.setTextColor(67, 62, 60);
   doc.text('WHAT COULD CHANGE YOUR NUMBER', margin + 14, y + 16);
 
-  let cy = y + 30;
+  let cy = y + 32;
   changeLines.forEach(lines => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(107, 101, 96);
     doc.text(lines, margin + 14, cy);
-    cy += lines.length * 14 + 4;
+    cy += lines.length * 15 + 5;
   });
 
   y += totalChangeH + 18;
