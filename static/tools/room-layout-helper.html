@@ -629,14 +629,6 @@
   </div>
 
   <script>
-function trackUsage(toolName) {
-  fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
-  }).catch(() => {});
-}
     const TOTAL_STEPS = 5;
     const state = { roomType: null, lifestyle: [] };
 
@@ -743,24 +735,30 @@ Rules:
           body: JSON.stringify({
             system: 'You are an expert interior designer. Respond only with valid JSON. No markdown, no backticks, no text before or after the JSON object.',
             messages: [{ role: 'user', content: prompt }],
-            max_tokens: 1000
+            max_tokens: 2000
           })
         });
 
+        if (!res.ok) throw new Error('API returned ' + res.status);
         const data = await res.json();
+        if (!data.content || !data.content[0] || !data.content[0].text) {
+          throw new Error('Unexpected API response shape');
+        }
         const raw = data.content[0].text.trim().replace(/```json|```/g, '').trim();
         const parsed = JSON.parse(raw);
+        if (!parsed.layouts || !Array.isArray(parsed.layouts)) {
+          throw new Error('Response missing layouts array');
+        }
 
         loading.style.display = 'none';
         renderResults(parsed.layouts, dimensionStr);
-        trackUsage('room-layout-helper');
 
       } catch (err) {
         loading.style.display = 'none';
         document.getElementById('quizArea').style.display = 'block';
         btn.disabled = false;
         error.style.display = 'block';
-        console.error(err);
+        console.error('Room layout helper error:', err);
       }
     }
 
