@@ -613,9 +613,9 @@
         <textarea class="text-area" id="lifestyleNotes" placeholder="e.g. Two people work from this room on different schedules. Storage is a priority. We want the space to feel calm, not cluttered." style="margin-bottom: 0;"></textarea>
         <div class="step-nav">
           <button class="back-btn" onclick="goBack(5)">← Back</button>
-          <button class="generate-btn" id="generateBtn" onclick="generateLayouts()">✦ Get my layout options</button>
+          <button class="generate-btn" id="generateBtn" onclick="generateLayouts()">✦ Get my layout</button>
         </div>
-        <div class="error-message" id="errorMessage">Something went wrong generating your layout options. Please try again in a moment.</div>
+        <div class="error-message" id="errorMessage">Something went wrong generating your layout. Please try again in a moment.</div>
       </div>
 
     </div>
@@ -628,7 +628,7 @@
 
     <!-- Results -->
     <div class="results-section" id="resultsSection">
-      <div class="results-heading">Your layout options</div>
+      <div class="results-heading">Your layout recommendation</div>
       <div class="results-subheading" id="resultsSubheading"></div>
       <div id="layoutCards"></div>
 
@@ -705,72 +705,106 @@
       const dimensionStr = (length && width) ? `${length} ft × ${width} ft` : null;
       const lifestyleStr = state.lifestyle.length > 0 ? state.lifestyle.join(', ') : null;
 
-      const prompt = `You are an expert interior designer helping a homeowner think through the best layout options for their space. Based on the room details below, provide exactly 2–3 distinct, named layout options WITH a floor plan diagram schema for each.
+      const prompt = `You are an expert interior designer helping a homeowner plan a single, well-considered layout for their space. Return exactly ONE layout that is spatially accurate and honest about trade-offs.
 
 Room details:
 - Type: ${state.roomType}
-- Dimensions: ${dimensionStr || 'Not provided — assume a reasonable rectangular room'}
-- Windows and doors: ${windowDoors || 'Not specified — place one door on south wall, one window on a longer wall'}
+- Dimensions: ${dimensionStr || 'Not provided — assume a reasonable rectangular room and note assumptions'}
+- Windows and doors: ${windowDoors || 'Not specified — assume one door on south wall (start 5, end 20), one window on north wall (start 35, end 65)'}
 - Existing furniture to keep: ${existing || 'Not specified'}
 - Furniture to add: ${newFurniture || 'None mentioned'}
 - Lifestyle / usage: ${lifestyleStr || 'Not specified'}
 - Additional context: ${lifestyleNotes || 'None'}
 
-FLOOR PLAN COORDINATE SYSTEM:
-- The room is drawn on a normalized 100x100 grid (top-left origin: 0,0 top-left; 100,100 bottom-right)
-- The room's outer walls span the full 100x100 grid
-- Compass orientation: NORTH is TOP of grid, SOUTH is BOTTOM, EAST is RIGHT, WEST is LEFT
-- All furniture, windows, and doors must fit inside the room and not overlap each other
-- Windows sit ON a wall (draw as line segments along the wall)
-- Doors sit ON a wall (draw as line segments with a swing arc)
+COORDINATE SYSTEM:
+- The room is drawn on a normalized 100x100 grid
+- (0,0) is TOP-LEFT (northwest corner); (100,100) is BOTTOM-RIGHT (southeast corner)
+- NORTH = top of grid; SOUTH = bottom; EAST = right; WEST = left
+
+CRITICAL: FURNITURE MUST BE PROPORTIONALLY ACCURATE
+To make furniture sizing realistic, compute grid dimensions from actual real-world dimensions divided by room dimensions, then multiplied by 100.
+
+Formula: grid_width = (furniture_width_ft / room_width_ft) × 100
+         grid_height = (furniture_depth_ft / room_length_ft) × 100
+
+STANDARD FURNITURE DIMENSIONS (in feet, width × depth):
+- Twin bed: 3.3 × 6.3
+- Full bed: 4.5 × 6.3
+- Queen bed: 5 × 6.7
+- King bed: 6.3 × 6.7
+- Nightstand: 1.8 × 1.8
+- Small dresser: 3 × 1.8
+- Standard dresser: 5 × 1.8
+- Tall dresser: 3 × 1.8
+- Armchair: 2.8 × 2.8
+- Small sofa (loveseat): 5 × 3
+- Standard sofa: 7 × 3
+- Large sofa: 8.5 × 3.3
+- Coffee table: 4 × 2
+- Side table: 1.8 × 1.8
+- Dining table (4-person): 3.5 × 3.5
+- Dining table (6-person): 6 × 3.5
+- Desk: 4.5 × 2
+- Bookshelf: 3 × 1
+- Console table: 4 × 1.5
+- Ottoman: 2 × 2
+- TV stand: 5 × 1.5
+- Floor lamp: 1.3 × 1.3
+- Area rug (small): 5 × 7
+- Area rug (medium): 8 × 10
+- Area rug (large): 9 × 12
+
+If a room dimension wasn't provided, assume a reasonable size for the room type (bedroom: 12 × 14, living room: 15 × 18, dining room: 12 × 14, home office: 10 × 12) and NOTE this assumption in the summary.
+
+CRITICAL: DO NOT BLOCK DOORS
+Doors need a clearance zone that must remain free of furniture. For each door, the clearance zone extends INTO the room from the door opening, with:
+- Width = door width + 20% on either side
+- Depth into room = door width × 1.2 (enough for the door swing to open fully)
+
+Before placing any furniture, mentally reserve this clearance zone for each door. Do NOT overlap any furniture piece with any door clearance zone.
+
+RULES FOR PLACEMENT:
+- Every furniture piece must fit fully inside the room (0 ≤ x, x+w ≤ 100, 0 ≤ y, y+h ≤ 100)
+- No furniture may overlap other furniture (except rugs, which sit under furniture — see below)
+- No furniture may block the door clearance zone
+- Beds, sofas, and dressers should sit AGAINST a wall (their edge touching wall = 0 or 100) unless there's a specific design reason not to (float away for a specific purpose)
+- Nightstands go on either side of the bed, aligned with the head of the bed
+- Rugs are the ONLY furniture type allowed to overlap other furniture (they sit UNDER furniture) — place rugs FIRST in the furniture array
+- Windows should not be blocked by tall furniture (bookshelves, tall dressers) — if you must place tall furniture on that wall, leave a gap
 
 Return ONLY a valid JSON object. No markdown, no backticks, no commentary before or after. Use this exact structure:
 
 {
-  "layouts": [
-    {
-      "name": "An evocative, specific name (e.g. The Social Hub, The Symmetrical Retreat, The Corner Command)",
-      "summary": "One sentence describing the overall approach and feel of this layout.",
-      "placement": "2–3 sentences of specific furniture placement advice, referencing actual walls, windows, and doors.",
-      "pros": ["Concrete pro 1", "Concrete pro 2", "Concrete pro 3"],
-      "cons": ["Honest trade-off 1", "Honest trade-off 2"],
-      "best_for": "One sentence starting with 'This works best if...' that tells the homeowner when to choose this option.",
-      "floorplan": {
-        "windows": [
-          { "wall": "north", "start": 30, "end": 60 }
-        ],
-        "doors": [
-          { "wall": "south", "start": 5, "end": 20, "swing": "in-right" }
-        ],
-        "furniture": [
-          { "type": "bed", "label": "Queen bed", "x": 35, "y": 10, "w": 30, "h": 40 },
-          { "type": "nightstand", "label": "Nightstand", "x": 25, "y": 12, "w": 8, "h": 8 },
-          { "type": "dresser", "label": "Dresser", "x": 82, "y": 40, "w": 14, "h": 30 },
-          { "type": "chair", "label": "Reading chair", "x": 78, "y": 78, "w": 15, "h": 15 }
-        ]
-      }
+  "layout": {
+    "name": "An evocative, specific name (e.g. The North Light Retreat, The Symmetrical Bedroom)",
+    "summary": "One or two sentences describing the overall approach and any assumptions made about missing information.",
+    "placement": "3–4 sentences of specific furniture placement advice, referencing actual walls, windows, and doors.",
+    "pros": ["Concrete pro 1", "Concrete pro 2", "Concrete pro 3"],
+    "cons": ["Honest trade-off 1", "Honest trade-off 2"],
+    "best_for": "One sentence starting with 'This works best if...' that tells the homeowner when this layout is the right call.",
+    "floorplan": {
+      "windows": [
+        { "wall": "north", "start": 30, "end": 60 }
+      ],
+      "doors": [
+        { "wall": "south", "start": 5, "end": 20, "swing": "in-right" }
+      ],
+      "furniture": [
+        { "type": "rug", "label": "Area rug", "x": 25, "y": 15, "w": 50, "h": 55 },
+        { "type": "bed", "label": "Queen bed", "x": 32, "y": 3, "w": 36, "h": 45 }
+      ]
     }
-  ]
+  }
 }
 
-FLOOR PLAN RULES:
+FLOOR PLAN SCHEMA RULES:
 - Wall values must be exactly: "north", "south", "east", or "west"
-- Window/door start and end are positions along that wall from 0-100 (0 = corner closest to origin of that wall)
+- Window/door start and end: 0-100 positions along the wall (0 = corner closest to origin of that wall)
 - Door swing values: "in-left", "in-right", "out-left", "out-right"
-- Furniture x/y = top-left corner of piece on the 100x100 grid
-- Furniture w/h = width and height on the 100x100 grid
-- Common furniture types (use these type values for consistent icons): "bed", "nightstand", "dresser", "chair", "sofa", "coffee-table", "dining-table", "desk", "bookshelf", "rug", "tv", "lamp", "console", "ottoman", "table"
+- Furniture x/y = top-left corner on 100x100 grid; w/h = width and height on 100x100 grid
+- Use these type values for consistent icons: "bed", "nightstand", "dresser", "chair", "sofa", "coffee-table", "dining-table", "desk", "bookshelf", "rug", "tv", "lamp", "console", "ottoman", "table"
 - If a furniture type is unusual, use "table" as fallback type but keep the descriptive label
-- Every layout must include the same list of furniture pieces (the user's existing + additions) but arranged differently
-- Do NOT overlap furniture pieces
-- Do NOT place furniture on top of doors or blocking door swings
-
-Other rules:
-- Give each layout a distinctive evocative name
-- Placement advice must be specific to the actual furniture and constraints
-- Pros and cons must be practical and honest
-- Each layout must be meaningfully different in furniture arrangement
-- If lifestyle needs were mentioned, at least one layout should address them`;
+- Include ALL furniture the user mentioned (existing + additions) unless one truly does not fit`;
 
       try {
         const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
@@ -790,12 +824,12 @@ Other rules:
         }
         const raw = data.content[0].text.trim().replace(/```json|```/g, '').trim();
         const parsed = JSON.parse(raw);
-        if (!parsed.layouts || !Array.isArray(parsed.layouts)) {
-          throw new Error('Response missing layouts array');
+        if (!parsed.layout || typeof parsed.layout !== 'object') {
+          throw new Error('Response missing layout object');
         }
 
         loading.style.display = 'none';
-        renderResults(parsed.layouts, dimensionStr);
+        renderResults(parsed.layout, dimensionStr);
 
       } catch (err) {
         loading.style.display = 'none';
@@ -806,47 +840,44 @@ Other rules:
       }
     }
 
-    function renderResults(layouts, dimensionStr) {
+    function renderResults(layout, dimensionStr) {
       const subheading = document.getElementById('resultsSubheading');
       const dim = dimensionStr ? ` (${dimensionStr})` : '';
-      subheading.textContent = `${layouts.length} layout ${layouts.length === 1 ? 'option' : 'options'} for your ${state.roomType.toLowerCase()}${dim}.`;
+      subheading.textContent = `A layout recommendation for your ${state.roomType.toLowerCase()}${dim}.`;
 
       const cards = document.getElementById('layoutCards');
       cards.innerHTML = '';
 
-      layouts.forEach((layout, i) => {
-        const prosHTML = (layout.pros || []).map(p => `<li>${escapeHTML(p)}</li>`).join('');
-        const consHTML = (layout.cons || []).map(c => `<li>${escapeHTML(c)}</li>`).join('');
+      const prosHTML = (layout.pros || []).map(p => `<li>${escapeHTML(p)}</li>`).join('');
+      const consHTML = (layout.cons || []).map(c => `<li>${escapeHTML(c)}</li>`).join('');
 
-        const card = document.createElement('div');
-        card.className = 'layout-card';
-        card.innerHTML = `
-          <div class="layout-card-header">
-            <span class="layout-badge">Option ${i + 1}</span>
-            <div>
-              <div class="layout-name">${escapeHTML(layout.name)}</div>
-              <div class="layout-summary">${escapeHTML(layout.summary)}</div>
+      const card = document.createElement('div');
+      card.className = 'layout-card';
+      card.innerHTML = `
+        <div class="layout-card-header">
+          <div>
+            <div class="layout-name">${escapeHTML(layout.name)}</div>
+            <div class="layout-summary">${escapeHTML(layout.summary)}</div>
+          </div>
+        </div>
+        <div class="layout-card-body">
+          ${layout.floorplan ? `<div class="floorplan-label">Floor plan</div><div class="floorplan-wrap">${renderFloorplan(layout.floorplan)}</div>` : ''}
+          <div class="placement-label">Furniture placement</div>
+          <div class="placement-text">${escapeHTML(layout.placement)}</div>
+          <div class="pros-cons-grid">
+            <div class="pros-block">
+              <div class="pros-cons-label pros-label">What works</div>
+              <ul class="pros-list">${prosHTML}</ul>
+            </div>
+            <div class="cons-block">
+              <div class="pros-cons-label cons-label">Trade-offs</div>
+              <ul class="cons-list">${consHTML}</ul>
             </div>
           </div>
-          <div class="layout-card-body">
-            ${layout.floorplan ? `<div class="floorplan-label">Floor plan</div><div class="floorplan-wrap">${renderFloorplan(layout.floorplan)}</div>` : ''}
-            <div class="placement-label">Furniture placement</div>
-            <div class="placement-text">${escapeHTML(layout.placement)}</div>
-            <div class="pros-cons-grid">
-              <div class="pros-block">
-                <div class="pros-cons-label pros-label">What works</div>
-                <ul class="pros-list">${prosHTML}</ul>
-              </div>
-              <div class="cons-block">
-                <div class="pros-cons-label cons-label">Trade-offs</div>
-                <ul class="cons-list">${consHTML}</ul>
-              </div>
-            </div>
-            <div class="best-for"><strong>Best for:</strong> ${escapeHTML(layout.best_for)}</div>
-          </div>
-        `;
-        cards.appendChild(card);
-      });
+          <div class="best-for"><strong>Best for:</strong> ${escapeHTML(layout.best_for)}</div>
+        </div>
+      `;
+      cards.appendChild(card);
 
       const section = document.getElementById('resultsSection');
       section.style.display = 'block';
