@@ -340,6 +340,23 @@
       padding: 20px 22px 22px;
     }
 
+    .floorplan-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6b6560;
+      margin-bottom: 10px;
+    }
+
+    .floorplan-wrap {
+      background: #fafaf7;
+      border: 1px solid #e8e2d9;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 22px;
+    }
+
     .placement-label {
       font-size: 11px;
       font-weight: 700;
@@ -615,12 +632,6 @@
       <div class="results-subheading" id="resultsSubheading"></div>
       <div id="layoutCards"></div>
 
-      <div class="cta-block">
-        <div class="cta-title">Want help making this happen?</div>
-        <div class="cta-body">A good plan is a start — but pulling a room together takes more than a layout. Studio Lou's virtual design services take you from here to a space that actually looks and feels the way you want it to. We handle the sourcing, the decisions, and the details.</div>
-        <a href="https://www.studiolouinteriors.com/contact" target="_blank" class="cta-link">Get in touch with Studio Lou</a>
-      </div>
-
       <div class="reset-wrap">
         <button class="reset-btn" onclick="resetTool()">← Start over with a different room</button>
       </div>
@@ -694,16 +705,24 @@
       const dimensionStr = (length && width) ? `${length} ft × ${width} ft` : null;
       const lifestyleStr = state.lifestyle.length > 0 ? state.lifestyle.join(', ') : null;
 
-      const prompt = `You are an expert interior designer helping a homeowner think through the best layout options for their space. Based on the room details below, provide exactly 2–3 distinct, named layout options with honest pros and cons.
+      const prompt = `You are an expert interior designer helping a homeowner think through the best layout options for their space. Based on the room details below, provide exactly 2–3 distinct, named layout options WITH a floor plan diagram schema for each.
 
 Room details:
 - Type: ${state.roomType}
-- Dimensions: ${dimensionStr || 'Not provided — give advice in relative terms'}
-- Windows and doors: ${windowDoors || 'Not specified'}
+- Dimensions: ${dimensionStr || 'Not provided — assume a reasonable rectangular room'}
+- Windows and doors: ${windowDoors || 'Not specified — place one door on south wall, one window on a longer wall'}
 - Existing furniture to keep: ${existing || 'Not specified'}
 - Furniture to add: ${newFurniture || 'None mentioned'}
 - Lifestyle / usage: ${lifestyleStr || 'Not specified'}
 - Additional context: ${lifestyleNotes || 'None'}
+
+FLOOR PLAN COORDINATE SYSTEM:
+- The room is drawn on a normalized 100x100 grid (top-left origin: 0,0 top-left; 100,100 bottom-right)
+- The room's outer walls span the full 100x100 grid
+- Compass orientation: NORTH is TOP of grid, SOUTH is BOTTOM, EAST is RIGHT, WEST is LEFT
+- All furniture, windows, and doors must fit inside the room and not overlap each other
+- Windows sit ON a wall (draw as line segments along the wall)
+- Doors sit ON a wall (draw as line segments with a swing arc)
 
 Return ONLY a valid JSON object. No markdown, no backticks, no commentary before or after. Use this exact structure:
 
@@ -712,21 +731,46 @@ Return ONLY a valid JSON object. No markdown, no backticks, no commentary before
     {
       "name": "An evocative, specific name (e.g. The Social Hub, The Symmetrical Retreat, The Corner Command)",
       "summary": "One sentence describing the overall approach and feel of this layout.",
-      "placement": "2–3 sentences of specific furniture placement advice, referencing actual walls, windows, and doors mentioned above.",
+      "placement": "2–3 sentences of specific furniture placement advice, referencing actual walls, windows, and doors.",
       "pros": ["Concrete pro 1", "Concrete pro 2", "Concrete pro 3"],
       "cons": ["Honest trade-off 1", "Honest trade-off 2"],
-      "best_for": "One sentence starting with 'This works best if...' that tells the homeowner when to choose this option."
+      "best_for": "One sentence starting with 'This works best if...' that tells the homeowner when to choose this option.",
+      "floorplan": {
+        "windows": [
+          { "wall": "north", "start": 30, "end": 60 }
+        ],
+        "doors": [
+          { "wall": "south", "start": 5, "end": 20, "swing": "in-right" }
+        ],
+        "furniture": [
+          { "type": "bed", "label": "Queen bed", "x": 35, "y": 10, "w": 30, "h": 40 },
+          { "type": "nightstand", "label": "Nightstand", "x": 25, "y": 12, "w": 8, "h": 8 },
+          { "type": "dresser", "label": "Dresser", "x": 82, "y": 40, "w": 14, "h": 30 },
+          { "type": "chair", "label": "Reading chair", "x": 78, "y": 78, "w": 15, "h": 15 }
+        ]
+      }
     }
   ]
 }
 
-Rules:
-- Give each layout a distinctive evocative name, not a generic label like Option A or Layout 1
-- Make placement advice specific to the actual furniture pieces and room constraints mentioned
-- Pros and cons must be practical and honest, not generic cheerleader language
-- Each layout must be meaningfully different from the others
-- If lifestyle needs were mentioned (pets, kids, WFH, etc.), at least one layout should directly address them
-- If dimensions were not provided, still give useful relative placement guidance`;
+FLOOR PLAN RULES:
+- Wall values must be exactly: "north", "south", "east", or "west"
+- Window/door start and end are positions along that wall from 0-100 (0 = corner closest to origin of that wall)
+- Door swing values: "in-left", "in-right", "out-left", "out-right"
+- Furniture x/y = top-left corner of piece on the 100x100 grid
+- Furniture w/h = width and height on the 100x100 grid
+- Common furniture types (use these type values for consistent icons): "bed", "nightstand", "dresser", "chair", "sofa", "coffee-table", "dining-table", "desk", "bookshelf", "rug", "tv", "lamp", "console", "ottoman", "table"
+- If a furniture type is unusual, use "table" as fallback type but keep the descriptive label
+- Every layout must include the same list of furniture pieces (the user's existing + additions) but arranged differently
+- Do NOT overlap furniture pieces
+- Do NOT place furniture on top of doors or blocking door swings
+
+Other rules:
+- Give each layout a distinctive evocative name
+- Placement advice must be specific to the actual furniture and constraints
+- Pros and cons must be practical and honest
+- Each layout must be meaningfully different in furniture arrangement
+- If lifestyle needs were mentioned, at least one layout should address them`;
 
       try {
         const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
@@ -735,7 +779,7 @@ Rules:
           body: JSON.stringify({
             system: 'You are an expert interior designer. Respond only with valid JSON. No markdown, no backticks, no text before or after the JSON object.',
             messages: [{ role: 'user', content: prompt }],
-            max_tokens: 2000
+            max_tokens: 4000
           })
         });
 
@@ -785,6 +829,7 @@ Rules:
             </div>
           </div>
           <div class="layout-card-body">
+            ${layout.floorplan ? `<div class="floorplan-label">Floor plan</div><div class="floorplan-wrap">${renderFloorplan(layout.floorplan)}</div>` : ''}
             <div class="placement-label">Furniture placement</div>
             <div class="placement-text">${escapeHTML(layout.placement)}</div>
             <div class="pros-cons-grid">
@@ -811,6 +856,112 @@ Rules:
     function escapeHTML(str) {
       if (!str) return '';
       return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderFloorplan(fp) {
+      if (!fp || !Array.isArray(fp.furniture)) return '';
+
+      // SVG viewBox: 100x100 room area with padding for labels/wall thickness
+      const PAD = 6;
+      const SIZE = 100;
+      const VB = SIZE + PAD * 2;
+      const strokeMain = '#6b6560';
+      const strokeSub = '#a39d92';
+      const fillFurn = '#f5f0e8';
+      const labelColor = '#6b6560';
+
+      // Convert wall + position to SVG coordinates
+      // Wall runs 0-100. For north/south: 0=west corner, 100=east corner.
+      // For east/west: 0=north corner, 100=south corner.
+      const wallCoord = (wall, pos) => {
+        if (wall === 'north') return { x: PAD + pos, y: PAD };
+        if (wall === 'south') return { x: PAD + pos, y: PAD + SIZE };
+        if (wall === 'west') return { x: PAD, y: PAD + pos };
+        if (wall === 'east') return { x: PAD + SIZE, y: PAD + pos };
+        return { x: PAD, y: PAD };
+      };
+
+      // Furniture icons - simple SVG shapes for each type
+      const drawFurniture = (item) => {
+        const x = PAD + item.x;
+        const y = PAD + item.y;
+        const w = item.w;
+        const h = item.h;
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const type = item.type || 'table';
+        let inner = '';
+
+        if (type === 'bed') {
+          // Rectangle with two pillow squares at head
+          const pillowH = Math.min(h * 0.22, 8);
+          const gap = w * 0.05;
+          const pillowW = (w - gap * 3) / 2;
+          inner = `<rect x="${x + gap}" y="${y + gap * 0.6}" width="${pillowW}" height="${pillowH}" fill="none" stroke="${strokeSub}" stroke-width="0.6"/>
+                   <rect x="${x + gap * 2 + pillowW}" y="${y + gap * 0.6}" width="${pillowW}" height="${pillowH}" fill="none" stroke="${strokeSub}" stroke-width="0.6"/>`;
+        } else if (type === 'sofa') {
+          // Rectangle with a cushion line inset
+          inner = `<line x1="${x + 2}" y1="${y + h * 0.35}" x2="${x + w - 2}" y2="${y + h * 0.35}" stroke="${strokeSub}" stroke-width="0.5"/>`;
+        } else if (type === 'chair') {
+          // Small square with a curved back suggestion
+          inner = `<line x1="${x + 1.5}" y1="${y + 2}" x2="${x + w - 1.5}" y2="${y + 2}" stroke="${strokeSub}" stroke-width="0.6"/>`;
+        } else if (type === 'rug') {
+          // Dashed outline, no fill
+          return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${strokeSub}" stroke-width="0.5" stroke-dasharray="2,1.5"/>`;
+        } else if (type === 'lamp') {
+          // Small circle
+          const r = Math.min(w, h) / 2;
+          return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fillFurn}" stroke="${strokeMain}" stroke-width="0.8"/>`;
+        }
+
+        return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fillFurn}" stroke="${strokeMain}" stroke-width="0.8"/>${inner}`;
+      };
+
+      // Draw windows as thick line segments over the wall
+      const drawWindow = (win) => {
+        const s = wallCoord(win.wall, win.start);
+        const e = wallCoord(win.wall, win.end);
+        return `<line x1="${s.x}" y1="${s.y}" x2="${e.x}" y2="${e.y}" stroke="#ffffff" stroke-width="2.2"/>
+                <line x1="${s.x}" y1="${s.y}" x2="${e.x}" y2="${e.y}" stroke="${strokeMain}" stroke-width="0.8" stroke-dasharray="1.5,0.8"/>`;
+      };
+
+      // Draw doors as an opening in the wall + a swing arc
+      const drawDoor = (door) => {
+        const s = wallCoord(door.wall, door.start);
+        const e = wallCoord(door.wall, door.end);
+        const doorW = Math.abs(door.end - door.start);
+        // Clear opening in wall
+        const clear = `<line x1="${s.x}" y1="${s.y}" x2="${e.x}" y2="${e.y}" stroke="#ffffff" stroke-width="2.5"/>`;
+        // Swing arc: from hinge point, radius = door width
+        const swing = door.swing || 'in-right';
+        const isRight = swing.endsWith('right');
+        const isIn = swing.startsWith('in');
+        const hinge = isRight ? e : s;
+        const tip = isRight ? s : e;
+        // Arc endpoint: perpendicular into the room
+        let px = 0, py = 0;
+        if (door.wall === 'north') py = isIn ? doorW : -doorW;
+        else if (door.wall === 'south') py = isIn ? -doorW : doorW;
+        else if (door.wall === 'west') px = isIn ? doorW : -doorW;
+        else if (door.wall === 'east') px = isIn ? -doorW : doorW;
+        const arcEnd = { x: hinge.x + px, y: hinge.y + py };
+        const arc = `<path d="M ${tip.x} ${tip.y} A ${doorW} ${doorW} 0 0 1 ${arcEnd.x} ${arcEnd.y}" fill="none" stroke="${strokeSub}" stroke-width="0.5" stroke-dasharray="1.5,1"/>`;
+        const doorLine = `<line x1="${hinge.x}" y1="${hinge.y}" x2="${arcEnd.x}" y2="${arcEnd.y}" stroke="${strokeSub}" stroke-width="0.6"/>`;
+        return clear + arc + doorLine;
+      };
+
+      const windowsSVG = (fp.windows || []).map(drawWindow).join('');
+      const doorsSVG = (fp.doors || []).map(drawDoor).join('');
+      const furnitureSVG = fp.furniture.map(drawFurniture).join('');
+
+      return `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VB} ${VB}" style="width:100%; height:auto; display:block; max-width:420px; margin:0 auto;">
+          <rect x="${PAD}" y="${PAD}" width="${SIZE}" height="${SIZE}" fill="#ffffff" stroke="${strokeMain}" stroke-width="1.4"/>
+          ${windowsSVG}
+          ${doorsSVG}
+          ${furnitureSVG}
+        </svg>
+      `;
     }
 
     function resetTool() {
