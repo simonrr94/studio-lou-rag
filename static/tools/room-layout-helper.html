@@ -14,516 +14,110 @@
       font-family: 'DM Sans', sans-serif;
       color: #433E3C;
     }
+    .container { max-width: 720px; margin: 0 auto; padding: 32px 24px 80px; }
 
-    .container {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 32px 24px 80px;
-    }
+    .progress-wrap { margin-bottom: 28px; }
+    .progress-label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
+    .progress-track { height: 2px; background: #e8e2d9; border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #582b36; border-radius: 99px; transition: width 0.35s ease; }
 
-    /* Progress bar */
-    .progress-wrap {
-      margin-bottom: 28px;
-    }
+    .step { display: none; }
+    .step.active { display: block; }
+    .step-question { font-size: 22px; font-weight: 700; color: #433E3C; line-height: 1.3; margin-bottom: 8px; }
+    .step-hint { font-size: 14px; color: #6b6560; line-height: 1.6; margin-bottom: 22px; }
 
-    .progress-label {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #6b6560;
-      margin-bottom: 10px;
-    }
+    .chip-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+    .chip { font-size: 13px; padding: 5px 14px; border-radius: 99px; border: 1px solid #d0c9bc; background: #ffffff; color: #433E3C; cursor: pointer; transition: all 0.15s ease; font-family: 'DM Sans', sans-serif; font-weight: 400; }
+    .chip:hover { border-color: #582b36; color: #582b36; }
+    .chip.active { background: #f5eef0; border-color: #582b36; color: #582b36; font-weight: 600; }
 
-    .progress-track {
-      height: 2px;
-      background: #e8e2d9;
-      border-radius: 99px;
-      overflow: hidden;
-    }
+    .dimensions-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+    .dimension-input-wrap { display: flex; align-items: center; gap: 8px; }
+    .dimension-input { width: 80px; padding: 10px 12px; font-size: 15px; font-family: 'DM Sans', sans-serif; color: #433E3C; border: 1px solid #d0c9bc; border-radius: 12px; background: #ffffff; text-align: center; }
+    .dimension-input:focus { outline: none; border-color: #582b36; }
+    .dimension-unit { font-size: 14px; color: #6b6560; }
+    .dimension-x { font-size: 20px; color: #d0c9bc; font-weight: 300; }
 
-    .progress-fill {
-      height: 100%;
-      background: #582b36;
-      border-radius: 99px;
-      transition: width 0.35s ease;
-    }
+    .text-area { width: 100%; padding: 12px 16px; font-size: 14px; font-family: 'DM Sans', sans-serif; color: #433E3C; border: 1px solid #d0c9bc; border-radius: 12px; background: #ffffff; resize: vertical; min-height: 88px; line-height: 1.6; }
+    .text-area:focus { outline: none; border-color: #582b36; }
+    .field-label { font-size: 14px; font-weight: 600; color: #433E3C; margin-bottom: 6px; }
+    .field-hint { font-size: 13px; color: #6b6560; margin-bottom: 10px; line-height: 1.5; }
+    .field-stack { display: flex; flex-direction: column; gap: 18px; margin-bottom: 22px; }
 
-    /* Step */
-    .step {
-      display: none;
-    }
+    /* Furniture picker (step 4) */
+    .furniture-picker { display: flex; flex-direction: column; gap: 20px; margin-bottom: 22px; }
+    .furniture-category { }
+    .furniture-category-label { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
+    .furniture-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .furniture-chip { font-size: 13px; padding: 6px 14px; border-radius: 99px; border: 1px solid #d0c9bc; background: #ffffff; color: #433E3C; cursor: pointer; transition: all 0.15s ease; font-family: 'DM Sans', sans-serif; font-weight: 400; user-select: none; display: inline-flex; align-items: center; gap: 6px; }
+    .furniture-chip:hover { border-color: #582b36; color: #582b36; }
+    .furniture-chip.active { background: #f5eef0; border-color: #582b36; color: #582b36; font-weight: 600; }
+    .furniture-chip .count { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding-left: 8px; border-left: 1px solid rgba(88,43,54,0.25); }
+    .count-btn { background: none; border: none; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; font-family: 'DM Sans', sans-serif; font-weight: 700; }
+    .count-num { min-width: 14px; text-align: center; font-weight: 700; }
 
-    .step.active {
-      display: block;
-    }
-
-    .step-question {
-      font-size: 22px;
-      font-weight: 700;
-      color: #433E3C;
-      line-height: 1.3;
-      margin-bottom: 8px;
-    }
-
-    .step-hint {
-      font-size: 14px;
-      color: #6b6560;
-      line-height: 1.6;
-      margin-bottom: 22px;
-    }
-
-    /* Chips */
-    .chip-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 22px;
-    }
-
-    .chip {
-      font-size: 13px;
-      padding: 5px 14px;
-      border-radius: 99px;
-      border: 1px solid #d0c9bc;
-      background: #ffffff;
-      color: #433E3C;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      font-family: 'DM Sans', sans-serif;
-      font-weight: 400;
-    }
-
-    .chip:hover {
-      border-color: #582b36;
-      color: #582b36;
-    }
-
-    .chip.active {
-      background: #f5eef0;
-      border-color: #582b36;
-      color: #582b36;
-      font-weight: 600;
-    }
-
-    /* Dimensions */
-    .dimensions-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 22px;
-    }
-
-    .dimension-input-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .dimension-input {
-      width: 80px;
-      padding: 10px 12px;
-      font-size: 15px;
-      font-family: 'DM Sans', sans-serif;
-      color: #433E3C;
-      border: 1px solid #d0c9bc;
-      border-radius: 12px;
-      background: #ffffff;
-      text-align: center;
-    }
-
-    .dimension-input:focus {
-      outline: none;
-      border-color: #582b36;
-    }
-
-    .dimension-unit {
-      font-size: 14px;
-      color: #6b6560;
-    }
-
-    .dimension-x {
-      font-size: 20px;
-      color: #d0c9bc;
-      font-weight: 300;
-    }
-
-    /* Textareas */
-    .text-area {
-      width: 100%;
-      padding: 12px 16px;
-      font-size: 14px;
-      font-family: 'DM Sans', sans-serif;
-      color: #433E3C;
-      border: 1px solid #d0c9bc;
-      border-radius: 12px;
-      background: #ffffff;
-      resize: vertical;
-      min-height: 88px;
-      line-height: 1.6;
-    }
-
-    .text-area:focus {
-      outline: none;
-      border-color: #582b36;
-    }
-
-    .field-label {
-      font-size: 14px;
-      font-weight: 600;
-      color: #433E3C;
-      margin-bottom: 6px;
-    }
-
-    .field-hint {
-      font-size: 13px;
-      color: #6b6560;
-      margin-bottom: 10px;
-      line-height: 1.5;
-    }
-
-    .field-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      margin-bottom: 22px;
-    }
-
-    /* Navigation */
-    .step-nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 32px;
-    }
-
-    .back-btn {
-      background: none;
-      border: none;
-      font-size: 14px;
-      color: #6b6560;
-      cursor: pointer;
-      font-family: 'DM Sans', sans-serif;
-      padding: 0;
-      text-decoration: underline;
-    }
-
+    .step-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 32px; }
+    .back-btn { background: none; border: none; font-size: 14px; color: #6b6560; cursor: pointer; font-family: 'DM Sans', sans-serif; padding: 0; text-decoration: underline; }
     .back-btn:hover { color: #433E3C; }
     .back-btn.hidden { visibility: hidden; pointer-events: none; }
 
-    .next-btn, .generate-btn {
-      padding: 11px 28px;
-      background: #A6BE47;
-      color: #ffffff;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: 'DM Sans', sans-serif;
-      border: none;
-      border-radius: 50px;
-      cursor: pointer;
-      transition: opacity 0.2s ease;
-    }
-
+    .next-btn, .generate-btn { padding: 11px 28px; background: #A6BE47; color: #ffffff; font-size: 15px; font-weight: 600; font-family: 'DM Sans', sans-serif; border: none; border-radius: 50px; cursor: pointer; transition: opacity 0.2s ease; }
     .next-btn:hover, .generate-btn:hover { opacity: 0.88; }
     .next-btn:disabled, .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Validation */
-    .validation-hint {
-      display: none;
-      font-size: 13px;
-      color: #582b36;
-      margin-top: 10px;
-    }
+    .validation-hint { display: none; font-size: 13px; color: #582b36; margin-top: 10px; }
 
-    /* Loading */
-    .loading-state {
-      display: none;
-      text-align: center;
-      padding: 64px 0;
-    }
-
-    .loading-spinner {
-      width: 32px;
-      height: 32px;
-      border: 3px solid #d7e8bc;
-      border-top-color: #A6BE47;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 16px;
-    }
-
+    .loading-state { display: none; text-align: center; padding: 64px 0; }
+    .loading-spinner { width: 32px; height: 32px; border: 3px solid #d7e8bc; border-top-color: #A6BE47; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 14px; color: #6b6560; }
 
-    .loading-text {
-      font-size: 14px;
-      color: #6b6560;
-    }
+    .error-message { display: none; background: #fdf0f2; border: 1px solid #f0c8cf; border-radius: 12px; padding: 14px 18px; font-size: 14px; color: #582b36; margin-top: 16px; }
 
-    /* Error */
-    .error-message {
-      display: none;
-      background: #fdf0f2;
-      border: 1px solid #f0c8cf;
-      border-radius: 12px;
-      padding: 14px 18px;
-      font-size: 14px;
-      color: #582b36;
-      margin-top: 16px;
-    }
+    .results-section { display: none; }
+    .results-heading { font-size: 20px; font-weight: 700; color: #433E3C; margin-bottom: 6px; }
+    .results-subheading { font-size: 14px; color: #6b6560; margin-bottom: 28px; }
 
-    /* Results */
-    .results-section {
-      display: none;
-    }
+    .layout-card { background: #ffffff; border: 1px solid #d0c9bc; border-radius: 16px; overflow: hidden; margin-bottom: 20px; }
+    .layout-card-header { padding: 18px 22px 16px; border-bottom: 1px solid #f0ebe3; }
+    .layout-name { font-size: 18px; font-weight: 700; color: #433E3C; line-height: 1.3; }
+    .layout-summary { font-size: 14px; color: #6b6560; line-height: 1.6; margin-top: 4px; }
+    .layout-card-body { padding: 20px 22px 22px; }
 
-    .results-heading {
-      font-size: 20px;
-      font-weight: 700;
-      color: #433E3C;
-      margin-bottom: 6px;
-    }
+    .floorplan-label, .placement-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
+    .floorplan-wrap { background: #fafaf7; border: 1px solid #e8e2d9; border-radius: 10px; padding: 14px; margin-bottom: 22px; }
+    .placement-text { font-size: 14px; color: #433E3C; line-height: 1.7; margin-bottom: 20px; }
+    .assumptions-note { background: #f9f5ea; border: 1px solid #e8dcc0; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #6b6560; line-height: 1.55; margin-bottom: 20px; }
 
-    .results-subheading {
-      font-size: 14px;
-      color: #6b6560;
-      margin-bottom: 28px;
-    }
-
-    /* Layout cards */
-    .layout-card {
-      background: #ffffff;
-      border: 1px solid #d0c9bc;
-      border-radius: 16px;
-      overflow: hidden;
-      margin-bottom: 20px;
-    }
-
-    .layout-card-header {
-      padding: 18px 22px 16px;
-      border-bottom: 1px solid #f0ebe3;
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-    }
-
-    .layout-badge {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: #582b36;
-      background: #f5eef0;
-      border: 1px solid #e8d5da;
-      border-radius: 99px;
-      padding: 3px 10px;
-      white-space: nowrap;
-      flex-shrink: 0;
-      margin-top: 3px;
-    }
-
-    .layout-name {
-      font-size: 18px;
-      font-weight: 700;
-      color: #433E3C;
-      line-height: 1.3;
-    }
-
-    .layout-summary {
-      font-size: 14px;
-      color: #6b6560;
-      line-height: 1.6;
-      margin-top: 4px;
-    }
-
-    .layout-card-body {
-      padding: 20px 22px 22px;
-    }
-
-    .floorplan-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #6b6560;
-      margin-bottom: 10px;
-    }
-
-    .floorplan-wrap {
-      background: #fafaf7;
-      border: 1px solid #e8e2d9;
-      border-radius: 10px;
-      padding: 14px;
-      margin-bottom: 22px;
-    }
-
-    .placement-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #6b6560;
-      margin-bottom: 8px;
-    }
-
-    .placement-text {
-      font-size: 14px;
-      color: #433E3C;
-      line-height: 1.7;
-      margin-bottom: 20px;
-    }
-
-    .pros-cons-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      margin-bottom: 16px;
-    }
-
-    @media (max-width: 480px) {
-      .pros-cons-grid { grid-template-columns: 1fr; }
-    }
-
-    .pros-block {
-      background: #f6fae8;
-      border: 1px solid #d7e8bc;
-      border-radius: 10px;
-      padding: 14px 16px;
-    }
-
-    .cons-block {
-      background: #fdf5f6;
-      border: 1px solid #e8d5da;
-      border-radius: 10px;
-      padding: 14px 16px;
-    }
-
-    .pros-cons-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 10px;
-    }
-
+    .pros-cons-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    @media (max-width: 480px) { .pros-cons-grid { grid-template-columns: 1fr; } }
+    .pros-block { background: #f6fae8; border: 1px solid #d7e8bc; border-radius: 10px; padding: 14px 16px; }
+    .cons-block { background: #fdf5f6; border: 1px solid #e8d5da; border-radius: 10px; padding: 14px 16px; }
+    .pros-cons-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
     .pros-label { color: #5a7a2e; }
     .cons-label { color: #582b36; }
-
-    .pros-list, .cons-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
-
-    .pros-list li, .cons-list li {
-      font-size: 13px;
-      line-height: 1.5;
-      color: #433E3C;
-      display: flex;
-      gap: 8px;
-      align-items: flex-start;
-    }
-
-    .pros-list li::before {
-      content: '✓';
-      color: #A6BE47;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    .cons-list li::before {
-      content: '✕';
-      color: #582b36;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    .best-for {
-      background: #f5eef0;
-      border-radius: 10px;
-      padding: 12px 16px;
-      font-size: 13px;
-      color: #582b36;
-      line-height: 1.6;
-    }
-
+    .pros-list, .cons-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+    .pros-list li, .cons-list li { font-size: 13px; line-height: 1.5; color: #433E3C; display: flex; gap: 8px; align-items: flex-start; }
+    .pros-list li::before { content: '\2713'; color: #A6BE47; font-weight: 700; flex-shrink: 0; }
+    .cons-list li::before { content: '\2715'; color: #582b36; font-weight: 700; flex-shrink: 0; }
+    .best-for { background: #f5eef0; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #582b36; line-height: 1.6; }
     .best-for strong { font-weight: 700; }
 
-    /* CTA block */
-    .cta-block {
-      background: #f5f0e8;
-      border-radius: 16px;
-      padding: 32px 28px;
-      margin-top: 36px;
-      text-align: center;
-    }
-
-    .cta-title {
-      font-size: 18px;
-      font-weight: 700;
-      color: #433E3C;
-      margin-bottom: 12px;
-    }
-
-    .cta-body {
-      font-size: 14px;
-      color: #6b6560;
-      line-height: 1.7;
-      margin-bottom: 20px;
-      max-width: 460px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    .cta-link {
-      display: inline-block;
-      padding: 13px 36px;
-      background: #582b36;
-      color: #ffffff;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: 'DM Sans', sans-serif;
-      border-radius: 50px;
-      text-decoration: none;
-      transition: opacity 0.2s ease;
-    }
-
-    .cta-link:hover { opacity: 0.85; }
-
-    .reset-wrap {
-      text-align: center;
-      margin-top: 24px;
-    }
-
-    .reset-btn {
-      background: none;
-      border: none;
-      font-size: 13px;
-      color: #6b6560;
-      cursor: pointer;
-      text-decoration: underline;
-      font-family: 'DM Sans', sans-serif;
-    }
-
+    .reset-wrap { text-align: center; margin-top: 24px; }
+    .reset-btn { background: none; border: none; font-size: 13px; color: #6b6560; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
     .reset-btn:hover { color: #433E3C; }
-  </style>
+</style>
 </head>
 <body>
+
   <div class="container">
-
-    <!-- Quiz area -->
     <div id="quizArea">
-
-      <!-- Progress -->
       <div class="progress-wrap">
         <div class="progress-label" id="progressLabel">STEP 1 OF 5</div>
-        <div class="progress-track">
-          <div class="progress-fill" id="progressFill" style="width: 20%;"></div>
-        </div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width: 20%;"></div></div>
       </div>
 
-      <!-- Step 1: Room type -->
+      <!-- Step 1 -->
       <div class="step active" id="step1">
         <div class="step-question">What type of room is this?</div>
         <div class="step-hint">Pick the one that best describes how you use this space.</div>
@@ -542,10 +136,10 @@
         </div>
       </div>
 
-      <!-- Step 2: Dimensions -->
+      <!-- Step 2 -->
       <div class="step" id="step2">
         <div class="step-question">How big is the room?</div>
-        <div class="step-hint">Approximate is fine — even rough estimates help us suggest better layouts. Skip this if you're not sure.</div>
+        <div class="step-hint">Approximate is fine. If you don't know, we'll assume a reasonable size based on the room type.</div>
         <div class="dimensions-row">
           <div class="dimension-input-wrap">
             <input type="number" class="dimension-input" id="roomLength" placeholder="12" min="1" max="200">
@@ -563,39 +157,30 @@
         </div>
       </div>
 
-      <!-- Step 3: Windows & Doors -->
+      <!-- Step 3 -->
       <div class="step" id="step3">
         <div class="step-question">Where are your windows and doors?</div>
-        <div class="step-hint">Describe their location as best you can. This helps us account for natural light and foot traffic. Skip this if you're not sure.</div>
-        <textarea class="text-area" id="windowDoors" placeholder="e.g. One large window on the north wall, a smaller window on the east wall, entry door on the south wall near the corner."></textarea>
+        <div class="step-hint">Tell us the wall each is on: north (top), south (bottom), east (right), west (left). We'll make sure nothing blocks a door.</div>
+        <textarea class="text-area" id="windowDoors" placeholder="e.g. One large window on the north wall, entry door on the south wall near the west corner."></textarea>
         <div class="step-nav">
           <button class="back-btn" onclick="goBack(3)">← Back</button>
           <button class="next-btn" onclick="goNext(3)">Next →</button>
         </div>
       </div>
 
-      <!-- Step 4: Furniture -->
+      <!-- Step 4 -->
       <div class="step" id="step4">
-        <div class="step-question">What are you working with, furniture-wise?</div>
-        <div class="step-hint">Tell us what you're keeping and anything you'd like to bring in. Leave either field blank if it doesn't apply.</div>
-        <div class="field-stack">
-          <div>
-            <div class="field-label">What do you already have?</div>
-            <div class="field-hint">List the pieces you're keeping, even if they're not in the room yet.</div>
-            <textarea class="text-area" id="existingFurniture" placeholder="e.g. Queen bed, 2 nightstands, a tall 6-drawer dresser, upholstered armchair."></textarea>
-          </div>
-          <div>
-            <div class="field-label">What would you like to add?</div>
-            <textarea class="text-area" id="newFurniture" placeholder="e.g. A bench at the foot of the bed, a floor lamp, maybe a small writing desk if space allows."></textarea>
-          </div>
-        </div>
+        <div class="step-question">What furniture are you working with?</div>
+        <div class="step-hint">Pick everything you want in the room. Tap once to add. Use + / − for multiples like nightstands or chairs.</div>
+        <div class="furniture-picker" id="furniturePicker"></div>
+        <div class="validation-hint" id="step4Hint">Please pick at least one piece of furniture to continue.</div>
         <div class="step-nav">
           <button class="back-btn" onclick="goBack(4)">← Back</button>
           <button class="next-btn" onclick="goNext(4)">Next →</button>
         </div>
       </div>
 
-      <!-- Step 5: Lifestyle -->
+      <!-- Step 5 -->
       <div class="step" id="step5">
         <div class="step-question">How do you use this room?</div>
         <div class="step-hint">Select everything that applies, then add any extra context below.</div>
@@ -610,404 +195,916 @@
           <button class="chip" data-value="Watch TV / movie nights" onclick="toggleChip(this)">Watch TV / movie nights</button>
         </div>
         <div class="field-label">Anything else we should know?</div>
-        <textarea class="text-area" id="lifestyleNotes" placeholder="e.g. Two people work from this room on different schedules. Storage is a priority. We want the space to feel calm, not cluttered." style="margin-bottom: 0;"></textarea>
+        <textarea class="text-area" id="lifestyleNotes" placeholder="e.g. Two people work from this room. Storage is a priority."></textarea>
         <div class="step-nav">
           <button class="back-btn" onclick="goBack(5)">← Back</button>
-          <button class="generate-btn" id="generateBtn" onclick="generateLayouts()">✦ Get my layout</button>
+          <button class="generate-btn" id="generateBtn" onclick="generateLayout()">✦ Get my layout</button>
         </div>
         <div class="error-message" id="errorMessage">Something went wrong generating your layout. Please try again in a moment.</div>
       </div>
-
     </div>
 
-    <!-- Loading -->
     <div class="loading-state" id="loadingState">
       <div class="loading-spinner"></div>
       <div class="loading-text">Thinking through your space...</div>
     </div>
 
-    <!-- Results -->
     <div class="results-section" id="resultsSection">
       <div class="results-heading">Your layout recommendation</div>
       <div class="results-subheading" id="resultsSubheading"></div>
       <div id="layoutCards"></div>
-
       <div class="reset-wrap">
         <button class="reset-btn" onclick="resetTool()">← Start over with a different room</button>
       </div>
     </div>
-
   </div>
-
   <script>
-    const TOTAL_STEPS = 5;
-    const state = { roomType: null, lifestyle: [] };
 
-    function updateProgress(step) {
-      document.getElementById('progressLabel').textContent = `STEP ${step} OF ${TOTAL_STEPS}`;
-      document.getElementById('progressFill').style.width = `${(step / TOTAL_STEPS) * 100}%`;
+// ============================================================
+// FURNITURE CATALOG - real-world dimensions in INCHES (w x d)
+// Data sourced from interior design standards guides.
+// ============================================================
+const FURNITURE_CATALOG = {
+  // Bedroom
+  'bed_twin':      { label: 'Twin bed',       type: 'bed',        w: 39, d: 75, category: 'Beds', wallRequired: 'head' },
+  'bed_full':      { label: 'Full bed',       type: 'bed',        w: 54, d: 75, category: 'Beds', wallRequired: 'head' },
+  'bed_queen':     { label: 'Queen bed',      type: 'bed',        w: 60, d: 80, category: 'Beds', wallRequired: 'head' },
+  'bed_king':      { label: 'King bed',       type: 'bed',        w: 76, d: 80, category: 'Beds', wallRequired: 'head' },
+  'nightstand':    { label: 'Nightstand',     type: 'nightstand', w: 22, d: 18, category: 'Beds', pairsWith: 'bed' },
+  'dresser_std':   { label: 'Dresser',        type: 'dresser',    w: 60, d: 20, category: 'Storage', wallRequired: 'back' },
+  'dresser_tall':  { label: 'Tall dresser',   type: 'dresser',    w: 36, d: 20, category: 'Storage', wallRequired: 'back' },
+  'wardrobe':      { label: 'Wardrobe',       type: 'dresser',    w: 48, d: 24, category: 'Storage', wallRequired: 'back' },
+  // Seating
+  'sofa_love':     { label: 'Loveseat',       type: 'sofa',       w: 60, d: 36, category: 'Seating', wallRequired: 'back' },
+  'sofa_std':      { label: 'Sofa',           type: 'sofa',       w: 84, d: 36, category: 'Seating', wallRequired: 'back' },
+  'sofa_large':    { label: 'Large sofa',     type: 'sofa',       w: 96, d: 38, category: 'Seating', wallRequired: 'back' },
+  'sectional':     { label: 'Sectional',      type: 'sofa',       w: 108, d: 68, category: 'Seating', wallRequired: 'back' },
+  'armchair':      { label: 'Armchair',       type: 'chair',      w: 34, d: 34, category: 'Seating' },
+  'accent_chair':  { label: 'Accent chair',   type: 'chair',      w: 30, d: 30, category: 'Seating' },
+  'reading_chair': { label: 'Reading chair',  type: 'chair',      w: 32, d: 34, category: 'Seating' },
+  'ottoman':       { label: 'Ottoman',        type: 'ottoman',    w: 24, d: 24, category: 'Seating' },
+  // Tables
+  'coffee_table':  { label: 'Coffee table',   type: 'coffee-table', w: 48, d: 24, category: 'Tables', pairsWith: 'sofa' },
+  'side_table':    { label: 'Side table',     type: 'side-table', w: 22, d: 22, category: 'Tables' },
+  'console':       { label: 'Console table',  type: 'console',    w: 48, d: 16, category: 'Tables', wallRequired: 'back' },
+  'dining_4':      { label: 'Dining table (4)', type: 'dining-table', w: 42, d: 42, category: 'Tables' },
+  'dining_6':      { label: 'Dining table (6)', type: 'dining-table', w: 72, d: 40, category: 'Tables' },
+  'dining_8':      { label: 'Dining table (8)', type: 'dining-table', w: 96, d: 42, category: 'Tables' },
+  // Office
+  'desk_std':      { label: 'Desk',           type: 'desk',       w: 54, d: 24, category: 'Office', wallRequired: 'back' },
+  'desk_large':    { label: 'Large desk',     type: 'desk',       w: 72, d: 30, category: 'Office', wallRequired: 'back' },
+  'office_chair':  { label: 'Office chair',   type: 'chair',      w: 26, d: 26, category: 'Office', pairsWith: 'desk' },
+  'bookshelf':     { label: 'Bookshelf',      type: 'bookshelf',  w: 36, d: 12, category: 'Office', wallRequired: 'back' },
+  // Media
+  'tv_stand':      { label: 'TV stand',       type: 'tv-stand',   w: 60, d: 18, category: 'Media', wallRequired: 'back' },
+  // Rugs
+  'rug_small':     { label: 'Small rug (5x7)', type: 'rug',       w: 60, d: 84, category: 'Rugs', isRug: true },
+  'rug_medium':    { label: 'Medium rug (8x10)', type: 'rug',     w: 96, d: 120, category: 'Rugs', isRug: true },
+  'rug_large':     { label: 'Large rug (9x12)', type: 'rug',      w: 108, d: 144, category: 'Rugs', isRug: true },
+  // Misc
+  'floor_lamp':    { label: 'Floor lamp',     type: 'lamp',       w: 16, d: 16, category: 'Accents' },
+  'plant':         { label: 'Plant',          type: 'plant',      w: 20, d: 20, category: 'Accents' }
+};
+
+// Preset furniture options by room type (which chips appear in Step 4)
+const ROOM_FURNITURE_PRESETS = {
+  'Bedroom': ['bed_queen','bed_king','bed_full','bed_twin','nightstand','dresser_std','dresser_tall','wardrobe','reading_chair','side_table','floor_lamp','rug_medium','rug_large'],
+  'Living Room': ['sofa_std','sofa_love','sofa_large','sectional','armchair','accent_chair','coffee_table','side_table','tv_stand','console','bookshelf','ottoman','floor_lamp','rug_medium','rug_large','plant'],
+  'Dining Room': ['dining_4','dining_6','dining_8','console','bookshelf','rug_medium','rug_large','plant'],
+  'Home Office': ['desk_std','desk_large','office_chair','bookshelf','accent_chair','side_table','floor_lamp','rug_small','rug_medium','plant'],
+  'Guest Room': ['bed_queen','bed_full','bed_twin','nightstand','dresser_tall','desk_std','accent_chair','floor_lamp','rug_medium'],
+  'Studio / Flex Space': ['bed_queen','sofa_love','desk_std','office_chair','dresser_tall','bookshelf','coffee_table','side_table','floor_lamp','rug_medium','plant']
+};
+
+// Default room sizes (feet) if user didn't provide
+const DEFAULT_ROOM_SIZES = {
+  'Bedroom': { length: 12, width: 14 },
+  'Living Room': { length: 15, width: 18 },
+  'Dining Room': { length: 12, width: 14 },
+  'Home Office': { length: 10, width: 12 },
+  'Guest Room': { length: 11, width: 12 },
+  'Studio / Flex Space': { length: 14, width: 16 }
+};
+
+// ============================================================
+// STATE
+// ============================================================
+const TOTAL_STEPS = 5;
+const state = {
+  roomType: null,
+  lifestyle: [],
+  furniture: {} // { catalogKey: count }
+};
+
+// ============================================================
+// STEP NAV
+// ============================================================
+function updateProgress(step) {
+  document.getElementById('progressLabel').textContent = 'STEP ' + step + ' OF ' + TOTAL_STEPS;
+  document.getElementById('progressFill').style.width = ((step / TOTAL_STEPS) * 100) + '%';
+}
+function showStep(n) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+  updateProgress(n);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function goNext(current) {
+  if (current === 1 && !state.roomType) {
+    document.getElementById('step1Hint').style.display = 'block';
+    document.getElementById('roomTypeChips').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  if (current === 3) {
+    // After step 3, we need to build the furniture picker for step 4 based on room type
+    buildFurniturePicker(state.roomType);
+  }
+  if (current === 4) {
+    const totalFurniture = Object.values(state.furniture).reduce((a,b) => a+b, 0);
+    if (totalFurniture === 0) {
+      document.getElementById('step4Hint').style.display = 'block';
+      return;
     }
+  }
+  showStep(current + 1);
+}
+function goBack(current) { showStep(current - 1); }
 
-    function showStep(n) {
-      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-      document.getElementById('step' + n).classList.add('active');
-      updateProgress(n);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    function goNext(current) {
-      if (current === 1 && !state.roomType) {
-        document.getElementById('step1Hint').style.display = 'block';
-        return;
-      }
-      showStep(current + 1);
-    }
-
-    function goBack(current) {
-      showStep(current - 1);
-    }
-
-    function selectSingle(el, key) {
-      el.closest('.chip-group').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      el.classList.add('active');
-      state[key] = el.dataset.value;
-      document.getElementById('step1Hint').style.display = 'none';
-    }
-
-    function toggleChip(el) {
-      const val = el.dataset.value;
-      if (el.classList.contains('active')) {
-        el.classList.remove('active');
-        state.lifestyle = state.lifestyle.filter(v => v !== val);
-      } else {
-        el.classList.add('active');
-        state.lifestyle.push(val);
-      }
-    }
-
-    async function generateLayouts() {
-      const length = document.getElementById('roomLength').value;
-      const width = document.getElementById('roomWidth').value;
-      const windowDoors = document.getElementById('windowDoors').value.trim();
-      const existing = document.getElementById('existingFurniture').value.trim();
-      const newFurniture = document.getElementById('newFurniture').value.trim();
-      const lifestyleNotes = document.getElementById('lifestyleNotes').value.trim();
-
-      const btn = document.getElementById('generateBtn');
-      const loading = document.getElementById('loadingState');
-      const error = document.getElementById('errorMessage');
-
-      btn.disabled = true;
-      error.style.display = 'none';
-      document.getElementById('quizArea').style.display = 'none';
-      loading.style.display = 'block';
-
-      const dimensionStr = (length && width) ? `${length} ft × ${width} ft` : null;
-      const lifestyleStr = state.lifestyle.length > 0 ? state.lifestyle.join(', ') : null;
-
-      const prompt = `You are an expert interior designer helping a homeowner plan a single, well-considered layout for their space. Return exactly ONE layout that is spatially accurate and honest about trade-offs.
-
-Room details:
-- Type: ${state.roomType}
-- Dimensions: ${dimensionStr || 'Not provided — assume a reasonable rectangular room and note assumptions'}
-- Windows and doors: ${windowDoors || 'Not specified — assume one door on south wall (start 5, end 20), one window on north wall (start 35, end 65)'}
-- Existing furniture to keep: ${existing || 'Not specified'}
-- Furniture to add: ${newFurniture || 'None mentioned'}
-- Lifestyle / usage: ${lifestyleStr || 'Not specified'}
-- Additional context: ${lifestyleNotes || 'None'}
-
-COORDINATE SYSTEM:
-- The room is drawn on a normalized 100x100 grid
-- (0,0) is TOP-LEFT (northwest corner); (100,100) is BOTTOM-RIGHT (southeast corner)
-- NORTH = top of grid; SOUTH = bottom; EAST = right; WEST = left
-
-CRITICAL: FURNITURE MUST BE PROPORTIONALLY ACCURATE
-To make furniture sizing realistic, compute grid dimensions from actual real-world dimensions divided by room dimensions, then multiplied by 100.
-
-Formula: grid_width = (furniture_width_ft / room_width_ft) × 100
-         grid_height = (furniture_depth_ft / room_length_ft) × 100
-
-STANDARD FURNITURE DIMENSIONS (in feet, width × depth):
-- Twin bed: 3.3 × 6.3
-- Full bed: 4.5 × 6.3
-- Queen bed: 5 × 6.7
-- King bed: 6.3 × 6.7
-- Nightstand: 1.8 × 1.8
-- Small dresser: 3 × 1.8
-- Standard dresser: 5 × 1.8
-- Tall dresser: 3 × 1.8
-- Armchair: 2.8 × 2.8
-- Small sofa (loveseat): 5 × 3
-- Standard sofa: 7 × 3
-- Large sofa: 8.5 × 3.3
-- Coffee table: 4 × 2
-- Side table: 1.8 × 1.8
-- Dining table (4-person): 3.5 × 3.5
-- Dining table (6-person): 6 × 3.5
-- Desk: 4.5 × 2
-- Bookshelf: 3 × 1
-- Console table: 4 × 1.5
-- Ottoman: 2 × 2
-- TV stand: 5 × 1.5
-- Floor lamp: 1.3 × 1.3
-- Area rug (small): 5 × 7
-- Area rug (medium): 8 × 10
-- Area rug (large): 9 × 12
-
-If a room dimension wasn't provided, assume a reasonable size for the room type (bedroom: 12 × 14, living room: 15 × 18, dining room: 12 × 14, home office: 10 × 12) and NOTE this assumption in the summary.
-
-CRITICAL: DO NOT BLOCK DOORS
-Doors need a clearance zone that must remain free of furniture. For each door, the clearance zone extends INTO the room from the door opening, with:
-- Width = door width + 20% on either side
-- Depth into room = door width × 1.2 (enough for the door swing to open fully)
-
-Before placing any furniture, mentally reserve this clearance zone for each door. Do NOT overlap any furniture piece with any door clearance zone.
-
-RULES FOR PLACEMENT:
-- Every furniture piece must fit fully inside the room (0 ≤ x, x+w ≤ 100, 0 ≤ y, y+h ≤ 100)
-- No furniture may overlap other furniture (except rugs, which sit under furniture — see below)
-- No furniture may block the door clearance zone
-- Beds, sofas, and dressers should sit AGAINST a wall (their edge touching wall = 0 or 100) unless there's a specific design reason not to (float away for a specific purpose)
-- Nightstands go on either side of the bed, aligned with the head of the bed
-- Rugs are the ONLY furniture type allowed to overlap other furniture (they sit UNDER furniture) — place rugs FIRST in the furniture array
-- Windows should not be blocked by tall furniture (bookshelves, tall dressers) — if you must place tall furniture on that wall, leave a gap
-
-Return ONLY a valid JSON object. No markdown, no backticks, no commentary before or after. Use this exact structure:
-
-{
-  "layout": {
-    "name": "An evocative, specific name (e.g. The North Light Retreat, The Symmetrical Bedroom)",
-    "summary": "One or two sentences describing the overall approach and any assumptions made about missing information.",
-    "placement": "3–4 sentences of specific furniture placement advice, referencing actual walls, windows, and doors.",
-    "pros": ["Concrete pro 1", "Concrete pro 2", "Concrete pro 3"],
-    "cons": ["Honest trade-off 1", "Honest trade-off 2"],
-    "best_for": "One sentence starting with 'This works best if...' that tells the homeowner when this layout is the right call.",
-    "floorplan": {
-      "windows": [
-        { "wall": "north", "start": 30, "end": 60 }
-      ],
-      "doors": [
-        { "wall": "south", "start": 5, "end": 20, "swing": "in-right" }
-      ],
-      "furniture": [
-        { "type": "rug", "label": "Area rug", "x": 25, "y": 15, "w": 50, "h": 55 },
-        { "type": "bed", "label": "Queen bed", "x": 32, "y": 3, "w": 36, "h": 45 }
-      ]
-    }
+function selectSingle(el, key) {
+  el.closest('.chip-group').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  state[key] = el.dataset.value;
+  document.getElementById('step1Hint').style.display = 'none';
+}
+function toggleChip(el) {
+  const val = el.dataset.value;
+  if (el.classList.contains('active')) {
+    el.classList.remove('active');
+    state.lifestyle = state.lifestyle.filter(v => v !== val);
+  } else {
+    el.classList.add('active');
+    state.lifestyle.push(val);
   }
 }
 
-FLOOR PLAN SCHEMA RULES:
-- Wall values must be exactly: "north", "south", "east", or "west"
-- Window/door start and end: 0-100 positions along the wall (0 = corner closest to origin of that wall)
-- Door swing values: "in-left", "in-right", "out-left", "out-right"
-- Furniture x/y = top-left corner on 100x100 grid; w/h = width and height on 100x100 grid
-- Use these type values for consistent icons: "bed", "nightstand", "dresser", "chair", "sofa", "coffee-table", "dining-table", "desk", "bookshelf", "rug", "tv", "lamp", "console", "ottoman", "table"
-- If a furniture type is unusual, use "table" as fallback type but keep the descriptive label
-- Include ALL furniture the user mentioned (existing + additions) unless one truly does not fit`;
+// ============================================================
+// STEP 4 FURNITURE PICKER
+// ============================================================
+function buildFurniturePicker(roomType) {
+  const picker = document.getElementById('furniturePicker');
+  picker.innerHTML = '';
+  const keys = ROOM_FURNITURE_PRESETS[roomType] || [];
+  // Group by category
+  const byCat = {};
+  keys.forEach(k => {
+    const item = FURNITURE_CATALOG[k];
+    if (!byCat[item.category]) byCat[item.category] = [];
+    byCat[item.category].push({ key: k, item: item });
+  });
+  Object.keys(byCat).forEach(cat => {
+    const catDiv = document.createElement('div');
+    catDiv.className = 'furniture-category';
+    catDiv.innerHTML = '<div class="furniture-category-label">' + cat + '</div>';
+    const chipsDiv = document.createElement('div');
+    chipsDiv.className = 'furniture-chips';
+    byCat[cat].forEach(({ key, item }) => {
+      const chip = document.createElement('button');
+      chip.className = 'furniture-chip';
+      chip.dataset.key = key;
+      chip.innerHTML = '<span class="chip-label">' + item.label + '</span>';
+      chip.onclick = (e) => {
+        if (e.target.classList.contains('count-btn')) return;
+        if (state.furniture[key]) { removeFurniture(key); }
+        else { addFurniture(key); }
+      };
+      chipsDiv.appendChild(chip);
+    });
+    catDiv.appendChild(chipsDiv);
+    picker.appendChild(catDiv);
+  });
+  refreshFurniturePickerUI();
+}
 
-      try {
-        const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system: 'You are an expert interior designer. Respond only with valid JSON. No markdown, no backticks, no text before or after the JSON object.',
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 4000
-          })
-        });
+function addFurniture(key) {
+  state.furniture[key] = (state.furniture[key] || 0) + 1;
+  refreshFurniturePickerUI();
+  document.getElementById('step4Hint').style.display = 'none';
+}
+function removeFurniture(key) {
+  if (!state.furniture[key]) return;
+  state.furniture[key] -= 1;
+  if (state.furniture[key] <= 0) delete state.furniture[key];
+  refreshFurniturePickerUI();
+}
+function refreshFurniturePickerUI() {
+  document.querySelectorAll('.furniture-chip').forEach(chip => {
+    const key = chip.dataset.key;
+    const count = state.furniture[key] || 0;
+    const label = FURNITURE_CATALOG[key].label;
+    if (count > 0) {
+      chip.classList.add('active');
+      chip.innerHTML = '<span class="chip-label">' + label + '</span><span class="count"><button class="count-btn" onclick="event.stopPropagation(); removeFurniture(\'' + key + '\')">−</button><span class="count-num">' + count + '</span><button class="count-btn" onclick="event.stopPropagation(); addFurniture(\'' + key + '\')">+</button></span>';
+    } else {
+      chip.classList.remove('active');
+      chip.innerHTML = '<span class="chip-label">' + label + '</span>';
+    }
+  });
+}
 
-        if (!res.ok) throw new Error('API returned ' + res.status);
-        const data = await res.json();
-        if (!data.content || !data.content[0] || !data.content[0].text) {
-          throw new Error('Unexpected API response shape');
+// ============================================================
+// SPATIAL ENGINE
+// ============================================================
+// All layout math is done here, deterministically, in inches.
+// SVG is rendered on a 100x100 grid but coordinates are computed
+// in real inches for accuracy then scaled at render time.
+//
+// Room coordinate system (inches):
+//   (0,0) = northwest corner (top-left)
+//   x increases east (right), y increases south (down)
+//   Room dimensions: roomWidthIn x roomLengthIn (width x depth)
+//
+// Clearance constants from interior design guidelines:
+const CLEARANCE = {
+  DOOR_SWING: 32,        // inches into room from door
+  WALKWAY_MAIN: 36,      // main walkway width
+  WALKWAY_MINOR: 30,     // secondary walkway
+  BED_SIDE: 24,          // clearance beside bed
+  BED_FOOT: 30,          // clearance at foot of bed
+  SOFA_COFFEE: 16,       // sofa to coffee table
+  DESK_CHAIR: 30,        // chair pull-out room at desk
+  DINING_CHAIR: 24       // chair pull-out at dining
+};
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.d && a.y + a.d > b.y;
+}
+function rectInside(r, roomW, roomD) {
+  return r.x >= 0 && r.y >= 0 && r.x + r.w <= roomW && r.y + r.d <= roomD;
+}
+function inflate(r, pad) {
+  return { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, d: r.d + pad * 2 };
+}
+
+// Compute door swing rectangle (inches, in room coordinates)
+function doorSwingRect(door, roomW, roomD) {
+  const w = door.end - door.start; // door width in inches
+  const swingDepth = Math.max(w, CLEARANCE.DOOR_SWING);
+  const swingWidth = w + 20; // pad 10" each side
+  if (door.wall === 'north') {
+    return { x: door.start - 10, y: 0, w: swingWidth, d: swingDepth };
+  } else if (door.wall === 'south') {
+    return { x: door.start - 10, y: roomD - swingDepth, w: swingWidth, d: swingDepth };
+  } else if (door.wall === 'west') {
+    return { x: 0, y: door.start - 10, w: swingDepth, d: swingWidth };
+  } else {
+    return { x: roomW - swingDepth, y: door.start - 10, w: swingDepth, d: swingWidth };
+  }
+}
+
+// Try to place a piece against a specified wall, sliding along the wall until it fits.
+// Returns placed rect { x, y, w, d } or null if no valid spot found.
+function placeAgainstWall(piece, wall, blockers, roomW, roomD, preferredCenter) {
+  const pw = piece.w, pd = piece.d;
+  const isNorthSouth = (wall === 'north' || wall === 'south');
+  // Piece orientation: back edge sits flush against the wall.
+  // For furniture with a defined "back" (wall-required), the depth (d) is the smaller
+  // dimension and sits perpendicular to the wall. Width (w) runs along the wall.
+  // We orient the piece so its width (w) runs along the wall direction.
+  // For north/south walls, "along the wall" = x-axis, so rect.w = pw, rect.d = pd.
+  // For east/west walls, "along the wall" = y-axis, so rect.w (x-extent) = pd, rect.d (y-extent) = pw.
+  const alongWall = pw;       // piece's width dimension goes along the wall
+  const perpWall = pd;        // piece's depth dimension goes perpendicular
+
+  let axisMax, y_or_x;
+  if (wall === 'north') { axisMax = roomW - alongWall; y_or_x = 0; }
+  else if (wall === 'south') { axisMax = roomW - alongWall; y_or_x = roomD - perpWall; }
+  else if (wall === 'west') { axisMax = roomD - alongWall; y_or_x = 0; }
+  else { axisMax = roomD - alongWall; y_or_x = roomW - perpWall; }
+
+  if (axisMax < 0) return null;
+
+  // Generate candidate positions: preferred center, then sweep left/right
+  const candidates = [];
+  const centerPos = preferredCenter != null ? preferredCenter - alongWall/2 : axisMax/2;
+  candidates.push(Math.max(0, Math.min(axisMax, centerPos)));
+  for (let step = 6; step <= axisMax + alongWall; step += 6) {
+    candidates.push(Math.max(0, Math.min(axisMax, centerPos - step)));
+    candidates.push(Math.max(0, Math.min(axisMax, centerPos + step)));
+  }
+
+  for (const pos of candidates) {
+    let rect;
+    // For north/south walls: pos is x-position, y is fixed. rect.w = alongWall (x-extent), rect.d = perpWall (y-extent)
+    // For east/west walls: pos is y-position, x is fixed. rect.w = perpWall (x-extent), rect.d = alongWall (y-extent)
+    if (isNorthSouth) rect = { x: pos, y: y_or_x, w: alongWall, d: perpWall };
+    else              rect = { x: y_or_x, y: pos, w: perpWall, d: alongWall };
+    if (!rectInside(rect, roomW, roomD)) continue;
+    let ok = true;
+    for (const b of blockers) {
+      if (rectsOverlap(rect, b)) { ok = false; break; }
+    }
+    if (ok) return { ...rect, wall };
+  }
+  return null;
+}
+
+// Find any free spot in the room (interior, not against wall) with padding around blockers.
+function placeAnywhere(piece, blockers, roomW, roomD, minWallGap) {
+  const w = piece.w, d = piece.d;
+  const gap = minWallGap || 12;
+  // Try both orientations
+  const orientations = piece.w === piece.d ? [{ w, d }] : [{ w, d }, { w: d, d: w }];
+  for (const orient of orientations) {
+    for (let y = gap; y + orient.d + gap <= roomD; y += 6) {
+      for (let x = gap; x + orient.w + gap <= roomW; x += 6) {
+        const rect = { x, y, w: orient.w, d: orient.d };
+        let ok = true;
+        for (const b of blockers) {
+          if (rectsOverlap(rect, b)) { ok = false; break; }
         }
-        const raw = data.content[0].text.trim().replace(/```json|```/g, '').trim();
-        const parsed = JSON.parse(raw);
-        if (!parsed.layout || typeof parsed.layout !== 'object') {
-          throw new Error('Response missing layout object');
+        if (ok) return rect;
+      }
+    }
+  }
+  return null;
+}
+
+// Parse doors/windows from Claude's structured strategy response
+function normalizeOpenings(fp, roomW, roomD) {
+  // fp = { doors: [{wall, start, end, swing}], windows: [{wall, start, end}] }
+  // Ensure start/end are in inches (Claude returns 0-100 grid units — scale to inches)
+  const scaleWall = (wall, val) => {
+    // wall length: north/south = width; east/west = depth
+    const len = (wall === 'north' || wall === 'south') ? roomW : roomD;
+    return (val / 100) * len;
+  };
+  const doors = (fp.doors || []).map(d => ({
+    wall: d.wall,
+    start: scaleWall(d.wall, d.start),
+    end: scaleWall(d.wall, d.end),
+    swing: d.swing || 'in-right'
+  }));
+  const windows = (fp.windows || []).map(w => ({
+    wall: w.wall,
+    start: scaleWall(w.wall, w.start),
+    end: scaleWall(w.wall, w.end)
+  }));
+  return { doors, windows };
+}
+
+// MAIN PLACEMENT ENGINE.
+// Takes room dims + Claude's strategy + user furniture list.
+// Returns { pieces: [{...rect, type, label}], notes: [strings] }
+function computeLayout(strategy, roomW, roomD, furnitureList) {
+  const notes = [];
+  const placed = [];
+  const doorBlockers = strategy.doors.map(d => doorSwingRect(d, roomW, roomD));
+  const allBlockers = () => [...placed, ...doorBlockers];
+
+  // strategy.assignments: array of { catalogKey, wall (optional), zone (optional), anchor (optional catalogKey) }
+  // Process order: rugs first (they underlay), then anchors (bed/sofa/dining), then attached (nightstands, coffee tables, chairs), then floaters.
+
+  const assignments = strategy.assignments.slice();
+  const rugs = assignments.filter(a => FURNITURE_CATALOG[a.catalogKey].isRug);
+  const anchors = assignments.filter(a => {
+    const t = FURNITURE_CATALOG[a.catalogKey].type;
+    return !FURNITURE_CATALOG[a.catalogKey].isRug && (t === 'bed' || t === 'sofa' || t === 'dining-table' || t === 'desk' || t === 'sectional');
+  });
+  const attached = assignments.filter(a => {
+    const item = FURNITURE_CATALOG[a.catalogKey];
+    return !item.isRug && (item.pairsWith || item.type === 'nightstand' || item.type === 'side-table' || item.type === 'coffee-table');
+  }).filter(a => !anchors.includes(a));
+  const others = assignments.filter(a => !rugs.includes(a) && !anchors.includes(a) && !attached.includes(a));
+
+  // Place rugs first — they'll be repositioned to sit under anchor. Skip rug collision for anchors that will sit on top.
+  const rugRects = [];
+  rugs.forEach(a => {
+    const item = FURNITURE_CATALOG[a.catalogKey];
+    // Place rug centered in room, avoiding doors
+    const rugW = Math.min(item.w, roomW - 24);
+    const rugD = Math.min(item.d, roomD - 24);
+    const rug = { x: (roomW - rugW)/2, y: (roomD - rugD)/2, w: rugW, d: rugD, type: 'rug', label: item.label, catalogKey: a.catalogKey };
+    // Push clear of doors
+    for (const d of doorBlockers) {
+      if (rectsOverlap(rug, d)) {
+        // Shift away from door
+        if (d.y < roomD/2) rug.y = Math.max(rug.y, d.y + d.d + 6);
+        else rug.y = Math.min(rug.y, d.y - rug.d - 6);
+      }
+    }
+    if (rectInside(rug, roomW, roomD)) {
+      rugRects.push(rug);
+      placed.push(rug);
+    } else {
+      notes.push('The ' + item.label + ' was too large for the space and was omitted.');
+    }
+  });
+
+  // Place anchors (bed/sofa/dining table). Try assigned wall first.
+  const anchorPositions = {};
+  anchors.forEach(a => {
+    const item = FURNITURE_CATALOG[a.catalogKey];
+    // For anchors, temporarily remove rug from blockers (anchors sit on rugs)
+    const blockers = allBlockers().filter(b => b.type !== 'rug');
+    // Also inflate other blockers to give clearance
+    const inflated = blockers.map(b => inflate(b, 12));
+    let placement = null;
+    const walls = a.wall ? [a.wall] : ['north','east','south','west'];
+    for (const wall of walls) {
+      // Skip walls with doors (we don't want bed against a door wall)
+      const wallHasDoor = strategy.doors.some(d => d.wall === wall);
+      if (wallHasDoor && (item.type === 'bed' || item.type === 'sofa' || item.type === 'sectional')) continue;
+      placement = placeAgainstWall(item, wall, inflated, roomW, roomD);
+      if (placement) break;
+    }
+    // If no wall works, try any wall
+    if (!placement) {
+      for (const wall of ['north','east','south','west']) {
+        placement = placeAgainstWall(item, wall, inflated, roomW, roomD);
+        if (placement) break;
+      }
+    }
+    // Last resort: floating placement
+    if (!placement) {
+      placement = placeAnywhere(item, allBlockers(), roomW, roomD, 24);
+    }
+    if (placement) {
+      const rect = { ...placement, type: item.type, label: item.label, catalogKey: a.catalogKey };
+      placed.push(rect);
+      anchorPositions[a.catalogKey] = rect;
+    } else {
+      notes.push('The ' + item.label + ' could not fit in the room without blocking a door or another piece.');
+    }
+  });
+
+  // Place attached items (nightstands next to bed, coffee table in front of sofa, chairs at desk)
+  attached.forEach(a => {
+    const item = FURNITURE_CATALOG[a.catalogKey];
+    let placement = null;
+
+    // Nightstands: place at head of bed on either side
+    if (item.type === 'nightstand') {
+      const bed = placed.find(p => p.type === 'bed');
+      if (bed) {
+        // Determine bed head wall (the wall it's against)
+        const bedWall = bed.wall;
+        // Nightstands sit next to bed on the head side
+        const candidates = [];
+        if (bedWall === 'north') {
+          candidates.push({ x: bed.x - item.w - 3, y: bed.y, w: item.w, d: item.d });
+          candidates.push({ x: bed.x + bed.w + 3, y: bed.y, w: item.w, d: item.d });
+        } else if (bedWall === 'south') {
+          candidates.push({ x: bed.x - item.w - 3, y: bed.y + bed.d - item.d, w: item.w, d: item.d });
+          candidates.push({ x: bed.x + bed.w + 3, y: bed.y + bed.d - item.d, w: item.w, d: item.d });
+        } else if (bedWall === 'west') {
+          candidates.push({ x: bed.x, y: bed.y - item.d - 3, w: item.w, d: item.d });
+          candidates.push({ x: bed.x, y: bed.y + bed.d + 3, w: item.w, d: item.d });
+        } else if (bedWall === 'east') {
+          candidates.push({ x: bed.x + bed.w - item.w, y: bed.y - item.d - 3, w: item.w, d: item.d });
+          candidates.push({ x: bed.x + bed.w - item.w, y: bed.y + bed.d + 3, w: item.w, d: item.d });
         }
-
-        loading.style.display = 'none';
-        renderResults(parsed.layout, dimensionStr);
-
-      } catch (err) {
-        loading.style.display = 'none';
-        document.getElementById('quizArea').style.display = 'block';
-        btn.disabled = false;
-        error.style.display = 'block';
-        console.error('Room layout helper error:', err);
+        for (const c of candidates) {
+          if (!rectInside(c, roomW, roomD)) continue;
+          let ok = true;
+          const blockers = placed.filter(p => p.type !== 'rug');
+          for (const b of blockers) { if (rectsOverlap(c, b)) { ok = false; break; } }
+          if (!ok) continue;
+          for (const d of doorBlockers) { if (rectsOverlap(c, d)) { ok = false; break; } }
+          if (ok) { placement = c; break; }
+        }
       }
     }
 
-    function renderResults(layout, dimensionStr) {
-      const subheading = document.getElementById('resultsSubheading');
-      const dim = dimensionStr ? ` (${dimensionStr})` : '';
-      subheading.textContent = `A layout recommendation for your ${state.roomType.toLowerCase()}${dim}.`;
-
-      const cards = document.getElementById('layoutCards');
-      cards.innerHTML = '';
-
-      const prosHTML = (layout.pros || []).map(p => `<li>${escapeHTML(p)}</li>`).join('');
-      const consHTML = (layout.cons || []).map(c => `<li>${escapeHTML(c)}</li>`).join('');
-
-      const card = document.createElement('div');
-      card.className = 'layout-card';
-      card.innerHTML = `
-        <div class="layout-card-header">
-          <div>
-            <div class="layout-name">${escapeHTML(layout.name)}</div>
-            <div class="layout-summary">${escapeHTML(layout.summary)}</div>
-          </div>
-        </div>
-        <div class="layout-card-body">
-          ${layout.floorplan ? `<div class="floorplan-label">Floor plan</div><div class="floorplan-wrap">${renderFloorplan(layout.floorplan)}</div>` : ''}
-          <div class="placement-label">Furniture placement</div>
-          <div class="placement-text">${escapeHTML(layout.placement)}</div>
-          <div class="pros-cons-grid">
-            <div class="pros-block">
-              <div class="pros-cons-label pros-label">What works</div>
-              <ul class="pros-list">${prosHTML}</ul>
-            </div>
-            <div class="cons-block">
-              <div class="pros-cons-label cons-label">Trade-offs</div>
-              <ul class="cons-list">${consHTML}</ul>
-            </div>
-          </div>
-          <div class="best-for"><strong>Best for:</strong> ${escapeHTML(layout.best_for)}</div>
-        </div>
-      `;
-      cards.appendChild(card);
-
-      const section = document.getElementById('resultsSection');
-      section.style.display = 'block';
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function escapeHTML(str) {
-      if (!str) return '';
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    function renderFloorplan(fp) {
-      if (!fp || !Array.isArray(fp.furniture)) return '';
-
-      // SVG viewBox: 100x100 room area with padding for labels/wall thickness
-      const PAD = 6;
-      const SIZE = 100;
-      const VB = SIZE + PAD * 2;
-      const strokeMain = '#6b6560';
-      const strokeSub = '#a39d92';
-      const fillFurn = '#f5f0e8';
-      const labelColor = '#6b6560';
-
-      // Convert wall + position to SVG coordinates
-      // Wall runs 0-100. For north/south: 0=west corner, 100=east corner.
-      // For east/west: 0=north corner, 100=south corner.
-      const wallCoord = (wall, pos) => {
-        if (wall === 'north') return { x: PAD + pos, y: PAD };
-        if (wall === 'south') return { x: PAD + pos, y: PAD + SIZE };
-        if (wall === 'west') return { x: PAD, y: PAD + pos };
-        if (wall === 'east') return { x: PAD + SIZE, y: PAD + pos };
-        return { x: PAD, y: PAD };
-      };
-
-      // Furniture icons - simple SVG shapes for each type
-      const drawFurniture = (item) => {
-        const x = PAD + item.x;
-        const y = PAD + item.y;
-        const w = item.w;
-        const h = item.h;
-        const cx = x + w / 2;
-        const cy = y + h / 2;
-        const type = item.type || 'table';
-        let inner = '';
-
-        if (type === 'bed') {
-          // Rectangle with two pillow squares at head
-          const pillowH = Math.min(h * 0.22, 8);
-          const gap = w * 0.05;
-          const pillowW = (w - gap * 3) / 2;
-          inner = `<rect x="${x + gap}" y="${y + gap * 0.6}" width="${pillowW}" height="${pillowH}" fill="none" stroke="${strokeSub}" stroke-width="0.6"/>
-                   <rect x="${x + gap * 2 + pillowW}" y="${y + gap * 0.6}" width="${pillowW}" height="${pillowH}" fill="none" stroke="${strokeSub}" stroke-width="0.6"/>`;
-        } else if (type === 'sofa') {
-          // Rectangle with a cushion line inset
-          inner = `<line x1="${x + 2}" y1="${y + h * 0.35}" x2="${x + w - 2}" y2="${y + h * 0.35}" stroke="${strokeSub}" stroke-width="0.5"/>`;
-        } else if (type === 'chair') {
-          // Small square with a curved back suggestion
-          inner = `<line x1="${x + 1.5}" y1="${y + 2}" x2="${x + w - 1.5}" y2="${y + 2}" stroke="${strokeSub}" stroke-width="0.6"/>`;
-        } else if (type === 'rug') {
-          // Dashed outline, no fill
-          return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${strokeSub}" stroke-width="0.5" stroke-dasharray="2,1.5"/>`;
-        } else if (type === 'lamp') {
-          // Small circle
-          const r = Math.min(w, h) / 2;
-          return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fillFurn}" stroke="${strokeMain}" stroke-width="0.8"/>`;
+    // Coffee table: in front of sofa
+    if (item.type === 'coffee-table') {
+      const sofa = placed.find(p => p.type === 'sofa');
+      if (sofa) {
+        const sofaWall = sofa.wall;
+        let c;
+        if (sofaWall === 'north')       c = { x: sofa.x + (sofa.w - item.w)/2, y: sofa.y + sofa.d + CLEARANCE.SOFA_COFFEE, w: item.w, d: item.d };
+        else if (sofaWall === 'south')  c = { x: sofa.x + (sofa.w - item.w)/2, y: sofa.y - CLEARANCE.SOFA_COFFEE - item.d, w: item.w, d: item.d };
+        else if (sofaWall === 'west')   c = { x: sofa.x + sofa.w + CLEARANCE.SOFA_COFFEE, y: sofa.y + (sofa.d - item.d)/2, w: item.w, d: item.d };
+        else                             c = { x: sofa.x - CLEARANCE.SOFA_COFFEE - item.w, y: sofa.y + (sofa.d - item.d)/2, w: item.w, d: item.d };
+        if (c && rectInside(c, roomW, roomD)) {
+          let ok = true;
+          const blockers = placed.filter(p => p.type !== 'rug');
+          for (const b of blockers) { if (rectsOverlap(c, b)) { ok = false; break; } }
+          if (ok) placement = c;
         }
-
-        return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fillFurn}" stroke="${strokeMain}" stroke-width="0.8"/>${inner}`;
-      };
-
-      // Draw windows as thick line segments over the wall
-      const drawWindow = (win) => {
-        const s = wallCoord(win.wall, win.start);
-        const e = wallCoord(win.wall, win.end);
-        return `<line x1="${s.x}" y1="${s.y}" x2="${e.x}" y2="${e.y}" stroke="#ffffff" stroke-width="2.2"/>
-                <line x1="${s.x}" y1="${s.y}" x2="${e.x}" y2="${e.y}" stroke="${strokeMain}" stroke-width="0.8" stroke-dasharray="1.5,0.8"/>`;
-      };
-
-      // Draw doors as an opening in the wall + a swing arc
-      const drawDoor = (door) => {
-        const s = wallCoord(door.wall, door.start);
-        const e = wallCoord(door.wall, door.end);
-        const doorW = Math.abs(door.end - door.start);
-        // Clear opening in wall
-        const clear = `<line x1="${s.x}" y1="${s.y}" x2="${e.x}" y2="${e.y}" stroke="#ffffff" stroke-width="2.5"/>`;
-        // Swing arc: from hinge point, radius = door width
-        const swing = door.swing || 'in-right';
-        const isRight = swing.endsWith('right');
-        const isIn = swing.startsWith('in');
-        const hinge = isRight ? e : s;
-        const tip = isRight ? s : e;
-        // Arc endpoint: perpendicular into the room
-        let px = 0, py = 0;
-        if (door.wall === 'north') py = isIn ? doorW : -doorW;
-        else if (door.wall === 'south') py = isIn ? -doorW : doorW;
-        else if (door.wall === 'west') px = isIn ? doorW : -doorW;
-        else if (door.wall === 'east') px = isIn ? -doorW : doorW;
-        const arcEnd = { x: hinge.x + px, y: hinge.y + py };
-        const arc = `<path d="M ${tip.x} ${tip.y} A ${doorW} ${doorW} 0 0 1 ${arcEnd.x} ${arcEnd.y}" fill="none" stroke="${strokeSub}" stroke-width="0.5" stroke-dasharray="1.5,1"/>`;
-        const doorLine = `<line x1="${hinge.x}" y1="${hinge.y}" x2="${arcEnd.x}" y2="${arcEnd.y}" stroke="${strokeSub}" stroke-width="0.6"/>`;
-        return clear + arc + doorLine;
-      };
-
-      const windowsSVG = (fp.windows || []).map(drawWindow).join('');
-      const doorsSVG = (fp.doors || []).map(drawDoor).join('');
-      const furnitureSVG = fp.furniture.map(drawFurniture).join('');
-
-      return `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VB} ${VB}" style="width:100%; height:auto; display:block; max-width:420px; margin:0 auto;">
-          <rect x="${PAD}" y="${PAD}" width="${SIZE}" height="${SIZE}" fill="#ffffff" stroke="${strokeMain}" stroke-width="1.4"/>
-          ${windowsSVG}
-          ${doorsSVG}
-          ${furnitureSVG}
-        </svg>
-      `;
+      }
     }
 
-    function resetTool() {
-      state.roomType = null;
-      state.lifestyle = [];
-      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      ['roomLength', 'roomWidth'].forEach(id => document.getElementById(id).value = '');
-      ['windowDoors', 'existingFurniture', 'newFurniture', 'lifestyleNotes'].forEach(id => document.getElementById(id).value = '');
-      document.getElementById('generateBtn').disabled = false;
-      document.getElementById('errorMessage').style.display = 'none';
-      document.getElementById('step1Hint').style.display = 'none';
-      document.getElementById('resultsSection').style.display = 'none';
-      document.getElementById('quizArea').style.display = 'block';
-      showStep(1);
+    // Office chair: in front of desk
+    if (item.type === 'chair' && item.pairsWith === 'desk') {
+      const desk = placed.find(p => p.type === 'desk');
+      if (desk) {
+        const wall = desk.wall;
+        let c;
+        if (wall === 'north')       c = { x: desk.x + (desk.w - item.w)/2, y: desk.y + desk.d + 6, w: item.w, d: item.d };
+        else if (wall === 'south')  c = { x: desk.x + (desk.w - item.w)/2, y: desk.y - 6 - item.d, w: item.w, d: item.d };
+        else if (wall === 'west')   c = { x: desk.x + desk.w + 6, y: desk.y + (desk.d - item.d)/2, w: item.w, d: item.d };
+        else                         c = { x: desk.x - 6 - item.w, y: desk.y + (desk.d - item.d)/2, w: item.w, d: item.d };
+        if (c && rectInside(c, roomW, roomD)) {
+          let ok = true;
+          const blockers = placed.filter(p => p.type !== 'rug');
+          for (const b of blockers) { if (rectsOverlap(c, b)) { ok = false; break; } }
+          if (ok) placement = c;
+        }
+      }
     }
-  </script>
+
+    // Side table: next to a chair
+    if (item.type === 'side-table') {
+      const chair = placed.find(p => p.type === 'chair' && !p.hasSide);
+      if (chair) {
+        const candidates = [
+          { x: chair.x + chair.w + 2, y: chair.y, w: item.w, d: item.d },
+          { x: chair.x - item.w - 2, y: chair.y, w: item.w, d: item.d }
+        ];
+        for (const c of candidates) {
+          if (!rectInside(c, roomW, roomD)) continue;
+          let ok = true;
+          const blockers = placed.filter(p => p.type !== 'rug');
+          for (const b of blockers) { if (rectsOverlap(c, b)) { ok = false; break; } }
+          if (!ok) continue;
+          for (const d of doorBlockers) { if (rectsOverlap(c, d)) { ok = false; break; } }
+          if (ok) { placement = c; chair.hasSide = true; break; }
+        }
+      }
+    }
+
+    if (placement) {
+      placed.push({ ...placement, type: item.type, label: item.label, catalogKey: a.catalogKey });
+    } else {
+      // Fallback: place anywhere free
+      const fallback = placeAnywhere(item, allBlockers(), roomW, roomD, 12);
+      if (fallback) placed.push({ ...fallback, type: item.type, label: item.label, catalogKey: a.catalogKey });
+      else notes.push('The ' + item.label + ' could not fit and was omitted from the layout.');
+    }
+  });
+
+  // Place other items — dressers/bookshelves/TV against a free wall, chairs/lamps in corners
+  others.forEach(a => {
+    const item = FURNITURE_CATALOG[a.catalogKey];
+    let placement = null;
+    const wallBlockers = placed.filter(p => p.type !== 'rug').map(b => inflate(b, 6));
+    if (item.wallRequired === 'back' || item.type === 'chair' || item.type === 'lamp' || item.type === 'plant') {
+      // Try walls without doors first, then any wall
+      const wallsPref = ['north','east','south','west'].sort((a,b) => {
+        const aDoor = strategy.doors.some(d => d.wall === a) ? 1 : 0;
+        const bDoor = strategy.doors.some(d => d.wall === b) ? 1 : 0;
+        return aDoor - bDoor;
+      });
+      // Prefer the wall Claude assigned if any
+      const walls = a.wall ? [a.wall, ...wallsPref.filter(w => w !== a.wall)] : wallsPref;
+      for (const wall of walls) {
+        placement = placeAgainstWall(item, wall, wallBlockers, roomW, roomD);
+        if (placement) break;
+      }
+    }
+    if (!placement) {
+      // Fallback: place anywhere in the room, ignoring rugs (chairs can sit on rugs)
+      const anywhereBlockers = placed.filter(p => p.type !== 'rug').concat(doorBlockers);
+      placement = placeAnywhere(item, anywhereBlockers, roomW, roomD, 6);
+    }
+    if (placement) {
+      placed.push({ ...placement, type: item.type, label: item.label, catalogKey: a.catalogKey });
+    } else {
+      notes.push('The ' + item.label + ' did not fit and was left out.');
+    }
+  });
+
+  return { pieces: placed, notes };
+}
+
+// Post-check: verify no overlaps and no door blocks (safety net)
+function validateLayout(pieces, doorBlockers) {
+  const errors = [];
+  for (let i = 0; i < pieces.length; i++) {
+    for (let j = i+1; j < pieces.length; j++) {
+      const a = pieces[i], b = pieces[j];
+      if (a.type === 'rug' || b.type === 'rug') continue; // rugs OK to overlap
+      if (rectsOverlap(a, b)) errors.push('Overlap: ' + a.label + ' and ' + b.label);
+    }
+  }
+  for (const p of pieces) {
+    if (p.type === 'rug') continue;
+    for (const d of doorBlockers) {
+      if (rectsOverlap(p, d)) errors.push('Door blocked by: ' + p.label);
+    }
+  }
+  return errors;
+}
+
+// ============================================================
+// CLAUDE STRATEGY CALL
+// ============================================================
+async function generateLayout() {
+  const btn = document.getElementById('generateBtn');
+  const loading = document.getElementById('loadingState');
+  const errorEl = document.getElementById('errorMessage');
+
+  btn.disabled = true;
+  errorEl.style.display = 'none';
+  document.getElementById('quizArea').style.display = 'none';
+  loading.style.display = 'block';
+
+  // Compile inputs
+  const lengthRaw = parseFloat(document.getElementById('roomLength').value);
+  const widthRaw = parseFloat(document.getElementById('roomWidth').value);
+  const defaults = DEFAULT_ROOM_SIZES[state.roomType] || { length: 12, width: 14 };
+  const usedDefaults = !lengthRaw || !widthRaw;
+  const lengthFt = lengthRaw || defaults.length;
+  const widthFt = widthRaw || defaults.width;
+  const roomLengthIn = lengthFt * 12; // "length" = depth (north-south)
+  const roomWidthIn = widthFt * 12;   // "width" = east-west
+  const windowDoorsText = document.getElementById('windowDoors').value.trim();
+  const lifestyleNotes = document.getElementById('lifestyleNotes').value.trim();
+  const lifestyleStr = state.lifestyle.join(', ');
+
+  // Furniture list for Claude
+  const furnitureList = Object.entries(state.furniture).map(([key, count]) => {
+    const item = FURNITURE_CATALOG[key];
+    return { catalogKey: key, label: item.label + (count > 1 ? ' (' + count + ')' : ''), type: item.type, count };
+  });
+  const furnitureDesc = furnitureList.map(f => (f.count > 1 ? f.count + '× ' + FURNITURE_CATALOG[f.catalogKey].label : FURNITURE_CATALOG[f.catalogKey].label)).join(', ');
+
+  // Ask Claude ONLY for design intent, no coordinates
+  const prompt = 'You are an expert interior designer. Return ONLY a valid JSON object describing your design strategy. Do NOT compute or return coordinates — the layout math is handled separately.\n\n' +
+    'Room details:\n' +
+    '- Type: ' + state.roomType + '\n' +
+    '- Dimensions: ' + widthFt + 'ft wide (east-west) by ' + lengthFt + 'ft deep (north-south)' + (usedDefaults ? ' (ASSUMED — user did not provide)' : '') + '\n' +
+    '- Windows and doors described by user: ' + (windowDoorsText || 'not specified — assume one door on south wall near west corner, one window on north wall centered') + '\n' +
+    '- Furniture to place: ' + furnitureDesc + '\n' +
+    '- Lifestyle / usage: ' + (lifestyleStr || 'not specified') + '\n' +
+    '- Additional notes: ' + (lifestyleNotes || 'none') + '\n\n' +
+    'The room is oriented with NORTH at the top, SOUTH at the bottom, EAST right, WEST left.\n' +
+    'For each door and window, return "start" and "end" positions on a 0-100 scale along its wall. For north/south walls, 0 is the west corner and 100 is east. For east/west walls, 0 is the north corner and 100 is south.\n\n' +
+    'For each piece of furniture, specify which WALL it should anchor against ("north", "south", "east", or "west") OR say "floating" if it goes in the middle. Do not repeat pieces — group multiples like nightstands as one entry with "count".\n\n' +
+    'Return this exact schema (and NOTHING else):\n' +
+    '{\n' +
+    '  "layoutName": "An evocative name like The North Light Retreat",\n' +
+    '  "summary": "One or two sentences describing the design intent.",\n' +
+    '  "placement": "3-4 sentences of specific placement guidance in prose.",\n' +
+    '  "pros": ["concrete pro 1", "pro 2", "pro 3"],\n' +
+    '  "cons": ["honest trade-off 1", "trade-off 2"],\n' +
+    '  "bestFor": "One sentence starting with This works best if...",\n' +
+    '  "doors": [ { "wall": "south", "start": 5, "end": 20, "swing": "in-right" } ],\n' +
+    '  "windows": [ { "wall": "north", "start": 30, "end": 60 } ],\n' +
+    '  "assignments": [\n' +
+    '    { "catalogKey": "bed_queen", "wall": "north" },\n' +
+    '    { "catalogKey": "nightstand", "wall": "north" },\n' +
+    '    { "catalogKey": "dresser_std", "wall": "east" }\n' +
+    '  ]\n' +
+    '}\n\n' +
+    'CATALOG KEYS you MUST use (do not invent new ones): ' + furnitureList.map(f => f.catalogKey).join(', ') + '\n' +
+    'Rules:\n' +
+    '- Beds, sofas, sectionals must NOT be assigned to a wall that has a door.\n' +
+    '- Prefer placing beds and sofas centered on their wall.\n' +
+    '- Nightstands should be assigned to the same wall as the bed.\n' +
+    '- If lifestyle needs were mentioned, address at least one in the placement prose.\n' +
+    '- Do not use em dashes anywhere.';
+
+  try {
+    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: 'You are an interior design strategist. Return only valid JSON. No markdown, no backticks, no text before or after the JSON object.',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000
+      })
+    });
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    const data = await res.json();
+    if (!data.content || !data.content[0] || !data.content[0].text) throw new Error('Bad response shape');
+    const raw = data.content[0].text.trim().replace(/```json|```/g, '').trim();
+    const strategy = JSON.parse(raw);
+
+    // Expand assignments to individual pieces (respect count from furniture list)
+    const expanded = [];
+    strategy.assignments.forEach(a => {
+      const chosen = furnitureList.find(f => f.catalogKey === a.catalogKey);
+      const count = chosen ? chosen.count : 1;
+      for (let i = 0; i < count; i++) expanded.push({ ...a });
+    });
+
+    // Ensure ALL user furniture is in assignments (add anything Claude missed)
+    furnitureList.forEach(f => {
+      const claudeCount = strategy.assignments.filter(a => a.catalogKey === f.catalogKey).length;
+      const needed = f.count - claudeCount;
+      for (let i = 0; i < needed; i++) expanded.push({ catalogKey: f.catalogKey });
+    });
+
+    const strategyExpanded = { ...strategy, assignments: expanded };
+
+    // Normalize openings from 0-100 grid to real inches
+    const normalized = normalizeOpenings(strategy, roomWidthIn, roomLengthIn);
+    strategyExpanded.doors = normalized.doors;
+    strategyExpanded.windows = normalized.windows;
+
+    // Run spatial engine
+    const result = computeLayout(strategyExpanded, roomWidthIn, roomLengthIn, furnitureList);
+
+    // Validate
+    const doorBlockers = strategyExpanded.doors.map(d => doorSwingRect(d, roomWidthIn, roomLengthIn));
+    const errors = validateLayout(result.pieces, doorBlockers);
+    if (errors.length > 0) console.warn('Layout validation warnings:', errors);
+
+    loading.style.display = 'none';
+
+    // Assemble final layout object
+    const finalLayout = {
+      name: strategy.layoutName || 'Your layout',
+      summary: strategy.summary || '',
+      placement: strategy.placement || '',
+      pros: strategy.pros || [],
+      cons: strategy.cons || [],
+      bestFor: strategy.bestFor || '',
+      pieces: result.pieces,
+      windows: strategyExpanded.windows,
+      doors: strategyExpanded.doors,
+      notes: result.notes,
+      usedDefaults: usedDefaults,
+      defaultsDesc: usedDefaults ? 'We assumed a ' + widthFt + 'ft × ' + lengthFt + 'ft room since dimensions weren\'t provided.' : '',
+      roomWidthIn: roomWidthIn,
+      roomLengthIn: roomLengthIn
+    };
+
+    renderResults(finalLayout);
+
+  } catch (err) {
+    console.error('Room layout error:', err);
+    loading.style.display = 'none';
+    document.getElementById('quizArea').style.display = 'block';
+    btn.disabled = false;
+    errorEl.style.display = 'block';
+  }
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderResults(layout) {
+  const dimStr = layout.usedDefaults ? '' : ' (' + (layout.roomWidthIn/12) + ' ft × ' + (layout.roomLengthIn/12) + ' ft)';
+  document.getElementById('resultsSubheading').textContent = 'A layout recommendation for your ' + state.roomType.toLowerCase() + dimStr + '.';
+  const cards = document.getElementById('layoutCards');
+  cards.innerHTML = '';
+  const prosHTML = layout.pros.map(p => '<li>' + escapeHTML(p) + '</li>').join('');
+  const consHTML = layout.cons.map(c => '<li>' + escapeHTML(c) + '</li>').join('');
+  const notesHTML = (layout.usedDefaults || layout.notes.length > 0)
+    ? '<div class="assumptions-note">' + [layout.defaultsDesc, ...layout.notes].filter(Boolean).map(escapeHTML).join(' ') + '</div>'
+    : '';
+
+  const card = document.createElement('div');
+  card.className = 'layout-card';
+  card.innerHTML =
+    '<div class="layout-card-header">' +
+      '<div class="layout-name">' + escapeHTML(layout.name) + '</div>' +
+      '<div class="layout-summary">' + escapeHTML(layout.summary) + '</div>' +
+    '</div>' +
+    '<div class="layout-card-body">' +
+      '<div class="floorplan-label">Floor plan</div>' +
+      '<div class="floorplan-wrap">' + renderFloorplan(layout) + '</div>' +
+      notesHTML +
+      '<div class="placement-label">Furniture placement</div>' +
+      '<div class="placement-text">' + escapeHTML(layout.placement) + '</div>' +
+      '<div class="pros-cons-grid">' +
+        '<div class="pros-block"><div class="pros-cons-label pros-label">What works</div><ul class="pros-list">' + prosHTML + '</ul></div>' +
+        '<div class="cons-block"><div class="pros-cons-label cons-label">Trade-offs</div><ul class="cons-list">' + consHTML + '</ul></div>' +
+      '</div>' +
+      '<div class="best-for"><strong>Best for:</strong> ' + escapeHTML(layout.bestFor) + '</div>' +
+    '</div>';
+  cards.appendChild(card);
+
+  const section = document.getElementById('resultsSection');
+  section.style.display = 'block';
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// SVG floor plan renderer — inches to display units, neutral gray linework
+function renderFloorplan(layout) {
+  const roomW = layout.roomWidthIn;
+  const roomD = layout.roomLengthIn;
+  const PAD = 20;
+  // Scale factor to fit into 500x500 viewBox
+  const maxSize = 500;
+  const scale = Math.min(maxSize / roomW, maxSize / roomD);
+  const boxW = roomW * scale;
+  const boxD = roomD * scale;
+  const VB_W = boxW + PAD * 2;
+  const VB_H = boxD + PAD * 2;
+
+  const strokeMain = '#6b6560';
+  const strokeSub = '#a39d92';
+  const fillFurn = '#f5f0e8';
+
+  const S = (v) => v * scale;
+  const wallCoord = (wall, pos) => {
+    const p = pos * scale;
+    if (wall === 'north') return { x: PAD + p, y: PAD };
+    if (wall === 'south') return { x: PAD + p, y: PAD + boxD };
+    if (wall === 'west')  return { x: PAD, y: PAD + p };
+    return { x: PAD + boxW, y: PAD + p };
+  };
+
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + VB_W + ' ' + VB_H + '" style="width:100%; height:auto; display:block; max-width:520px; margin:0 auto;">';
+  // Outer walls
+  svg += '<rect x="' + PAD + '" y="' + PAD + '" width="' + boxW + '" height="' + boxD + '" fill="#ffffff" stroke="' + strokeMain + '" stroke-width="2.5"/>';
+  // Windows
+  (layout.windows || []).forEach(w => {
+    const s = wallCoord(w.wall, w.start);
+    const e = wallCoord(w.wall, w.end);
+    svg += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + e.x + '" y2="' + e.y + '" stroke="#ffffff" stroke-width="4"/>';
+    svg += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + e.x + '" y2="' + e.y + '" stroke="' + strokeMain + '" stroke-width="1.5" stroke-dasharray="4,2"/>';
+  });
+  // Doors
+  (layout.doors || []).forEach(door => {
+    const s = wallCoord(door.wall, door.start);
+    const e = wallCoord(door.wall, door.end);
+    const doorLenIn = door.end - door.start;
+    const doorLen = doorLenIn * scale;
+    svg += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + e.x + '" y2="' + e.y + '" stroke="#ffffff" stroke-width="5"/>';
+    // Simple swing arc — from one end, 90° into room
+    const swing = door.swing || 'in-right';
+    const isRight = swing.endsWith('right');
+    const hinge = isRight ? e : s;
+    const tip = isRight ? s : e;
+    let px = 0, py = 0;
+    if (door.wall === 'north') py = doorLen;
+    else if (door.wall === 'south') py = -doorLen;
+    else if (door.wall === 'west') px = doorLen;
+    else px = -doorLen;
+    const arcEnd = { x: hinge.x + px, y: hinge.y + py };
+    svg += '<path d="M ' + tip.x + ' ' + tip.y + ' A ' + doorLen + ' ' + doorLen + ' 0 0 1 ' + arcEnd.x + ' ' + arcEnd.y + '" fill="none" stroke="' + strokeSub + '" stroke-width="1" stroke-dasharray="3,2"/>';
+    svg += '<line x1="' + hinge.x + '" y1="' + hinge.y + '" x2="' + arcEnd.x + '" y2="' + arcEnd.y + '" stroke="' + strokeSub + '" stroke-width="1"/>';
+  });
+
+  // Furniture — rugs first, then rest
+  const rugs = layout.pieces.filter(p => p.type === 'rug');
+  const rest = layout.pieces.filter(p => p.type !== 'rug');
+
+  rugs.forEach(p => {
+    const x = PAD + S(p.x), y = PAD + S(p.y);
+    svg += '<rect x="' + x + '" y="' + y + '" width="' + S(p.w) + '" height="' + S(p.d) + '" fill="none" stroke="' + strokeSub + '" stroke-width="1" stroke-dasharray="4,3"/>';
+  });
+
+  rest.forEach(p => {
+    const x = PAD + S(p.x), y = PAD + S(p.y);
+    const w = S(p.w), h = S(p.d);
+    svg += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + fillFurn + '" stroke="' + strokeMain + '" stroke-width="1.5"/>';
+    // Icon suggestions per type
+    if (p.type === 'bed') {
+      // pillows at head based on wall
+      const pillowD = Math.min(h, w) * 0.18;
+      let hx, hy, hw, hh;
+      if (p.wall === 'north')       { hx = x; hy = y; hw = w; hh = pillowD; }
+      else if (p.wall === 'south')  { hx = x; hy = y + h - pillowD; hw = w; hh = pillowD; }
+      else if (p.wall === 'west')   { hx = x; hy = y; hw = pillowD; hh = h; }
+      else if (p.wall === 'east')   { hx = x + w - pillowD; hy = y; hw = pillowD; hh = h; }
+      if (hx != null) svg += '<rect x="' + hx + '" y="' + hy + '" width="' + hw + '" height="' + hh + '" fill="none" stroke="' + strokeSub + '" stroke-width="0.8"/>';
+    } else if (p.type === 'sofa' || p.type === 'sectional') {
+      // cushion line parallel to wall
+      const inset = 4;
+      let x1, y1, x2, y2;
+      if (p.wall === 'north')       { x1 = x + inset; y1 = y + h * 0.4; x2 = x + w - inset; y2 = y1; }
+      else if (p.wall === 'south')  { x1 = x + inset; y1 = y + h * 0.6; x2 = x + w - inset; y2 = y1; }
+      else if (p.wall === 'west')   { x1 = x + w * 0.4; y1 = y + inset; x2 = x1; y2 = y + h - inset; }
+      else                          { x1 = x + w * 0.6; y1 = y + inset; x2 = x1; y2 = y + h - inset; }
+      svg += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + strokeSub + '" stroke-width="0.8"/>';
+    } else if (p.type === 'chair') {
+      // curved back line
+      svg += '<line x1="' + (x + 2) + '" y1="' + (y + 3) + '" x2="' + (x + w - 2) + '" y2="' + (y + 3) + '" stroke="' + strokeSub + '" stroke-width="0.8"/>';
+    } else if (p.type === 'lamp' || p.type === 'plant') {
+      svg = svg.replace(/<rect x="([\d\.]+)" y="([\d\.]+)" width="([\d\.]+)" height="([\d\.]+)" fill="#f5f0e8" stroke="#6b6560" stroke-width="1.5"\/>(?=[^<]*$)/, '');
+      const r = Math.min(w, h) / 2;
+      svg += '<circle cx="' + (x + w/2) + '" cy="' + (y + h/2) + '" r="' + r + '" fill="' + fillFurn + '" stroke="' + strokeMain + '" stroke-width="1.2"/>';
+    }
+  });
+  svg += '</svg>';
+  return svg;
+}
+
+function escapeHTML(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function resetTool() {
+  state.roomType = null;
+  state.lifestyle = [];
+  state.furniture = {};
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  ['roomLength','roomWidth','windowDoors','lifestyleNotes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('generateBtn').disabled = false;
+  document.getElementById('errorMessage').style.display = 'none';
+  document.getElementById('step1Hint').style.display = 'none';
+  document.getElementById('step4Hint').style.display = 'none';
+  document.getElementById('resultsSection').style.display = 'none';
+  document.getElementById('quizArea').style.display = 'block';
+  showStep(1);
+}
+
+</script>
 </body>
 </html>
