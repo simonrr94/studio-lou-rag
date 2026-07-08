@@ -67,17 +67,15 @@
     .results-subheading { font-size: 14px; color: #6b6560; margin-bottom: 28px; }
 
     .layout-card { background: #ffffff; border: 1px solid #d0c9bc; border-radius: 16px; overflow: hidden; margin-bottom: 20px; }
-    .layout-card-header { padding: 18px 22px 16px; border-bottom: 1px solid #f0ebe3; }
-    .layout-name { font-size: 18px; font-weight: 700; color: #433E3C; line-height: 1.3; }
-    .layout-summary { font-size: 14px; color: #6b6560; line-height: 1.6; margin-top: 4px; }
-    .layout-card-body { padding: 20px 22px 22px; }
+    .layout-card-header { padding: 20px 24px 18px; border-bottom: 1px solid #f0ebe3; }
+    .layout-name { font-size: 20px; font-weight: 700; color: #433E3C; line-height: 1.3; }
+    .layout-summary { font-size: 14px; color: #6b6560; line-height: 1.6; margin-top: 6px; }
+    .layout-card-body { padding: 22px 24px 24px; }
 
-    .floorplan-label, .placement-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
-    .floorplan-wrap { background: #fafaf7; border: 1px solid #e8e2d9; border-radius: 10px; padding: 14px; margin-bottom: 22px; }
-    .placement-text { font-size: 14px; color: #433E3C; line-height: 1.7; margin-bottom: 20px; }
-    .assumptions-note { background: #f9f5ea; border: 1px solid #e8dcc0; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #6b6560; line-height: 1.55; margin-bottom: 20px; }
+    .placement-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
+    .placement-text { font-size: 15px; color: #433E3C; line-height: 1.75; margin-bottom: 24px; }
 
-    .pros-cons-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    .pros-cons-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
     @media (max-width: 480px) { .pros-cons-grid { grid-template-columns: 1fr; } }
     .pros-block { background: #f6fae8; border: 1px solid #d7e8bc; border-radius: 10px; padding: 14px 16px; }
     .cons-block { background: #fdf5f6; border: 1px solid #e8d5da; border-radius: 10px; padding: 14px 16px; }
@@ -91,21 +89,24 @@
     .best-for { background: #f5eef0; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #582b36; line-height: 1.6; }
     .best-for strong { font-weight: 700; }
 
-    .reset-wrap { text-align: center; margin-top: 24px; }
+    .soft-cta { font-size: 14px; color: #6b6560; line-height: 1.7; text-align: center; margin: 32px auto 0; max-width: 520px; padding: 0 12px; }
+    .soft-cta strong { color: #582b36; font-weight: 600; }
+
+    .reset-wrap { text-align: center; margin-top: 32px; }
     .reset-btn { background: none; border: none; font-size: 13px; color: #6b6560; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
     .reset-btn:hover { color: #433E3C; }
-</style>
+  </style>
 </head>
 <body>
-
   <div class="container">
+
     <div id="quizArea">
       <div class="progress-wrap">
         <div class="progress-label" id="progressLabel">STEP 1 OF 5</div>
         <div class="progress-track"><div class="progress-fill" id="progressFill" style="width: 20%;"></div></div>
       </div>
 
-      <!-- Step 1 -->
+      <!-- Step 1: Room type -->
       <div class="step active" id="step1">
         <div class="step-question">What type of room is this?</div>
         <div class="step-hint">Pick the one that best describes how you use this space.</div>
@@ -124,10 +125,10 @@
         </div>
       </div>
 
-      <!-- Step 2 -->
+      <!-- Step 2: Dimensions -->
       <div class="step" id="step2">
         <div class="step-question">How big is the room?</div>
-        <div class="step-hint">Approximate is fine. If you don't know, we'll assume a reasonable size based on the room type.</div>
+        <div class="step-hint">Approximate is fine. Skip if you're not sure and we'll give recommendations that work at a range of sizes.</div>
         <div class="dimensions-row">
           <div class="dimension-input-wrap">
             <input type="number" class="dimension-input" id="roomLength" placeholder="12" min="1" max="200">
@@ -145,25 +146,25 @@
         </div>
       </div>
 
-      <!-- Step 3 -->
+      <!-- Step 3: Windows & doors -->
       <div class="step" id="step3">
         <div class="step-question">Where are your windows and doors?</div>
-        <div class="step-hint">Tell us the wall each is on: north (top), south (bottom), east (right), west (left). We'll make sure nothing blocks a door.</div>
-        <textarea class="text-area" id="windowDoors" placeholder="e.g. One large window on the north wall, entry door on the south wall near the west corner."></textarea>
+        <div class="step-hint">Describe them however feels natural. Details help us give better placement advice.</div>
+        <textarea class="text-area" id="windowDoors" placeholder="e.g. Large window on the west wall, entry door on the south wall near the corner, wide opening to the living room on the east side."></textarea>
         <div class="step-nav">
           <button class="back-btn" onclick="goBack(3)">← Back</button>
           <button class="next-btn" onclick="goNext(3)">Next →</button>
         </div>
       </div>
 
-      <!-- Step 4 -->
+      <!-- Step 4: Furniture -->
       <div class="step" id="step4">
         <div class="step-question">What are you working with, furniture-wise?</div>
         <div class="step-hint">Tell us what you're keeping and anything you'd like to bring in. Leave either field blank if it doesn't apply.</div>
         <div class="field-stack">
           <div>
             <div class="field-label">What do you already have?</div>
-            <div class="field-hint">List the pieces you're keeping, even if they're not in the room yet.</div>
+            <div class="field-hint">List the pieces you're keeping.</div>
             <textarea class="text-area" id="existingFurniture" placeholder="e.g. Queen bed, 2 nightstands, a tall dresser, upholstered armchair."></textarea>
           </div>
           <div>
@@ -178,7 +179,7 @@
         </div>
       </div>
 
-      <!-- Step 5 -->
+      <!-- Step 5: Lifestyle -->
       <div class="step" id="step5">
         <div class="step-question">How do you use this room?</div>
         <div class="step-hint">Select everything that applies, then add any extra context below.</div>
@@ -193,7 +194,7 @@
           <button class="chip" data-value="Watch TV / movie nights" onclick="toggleChip(this)">Watch TV / movie nights</button>
         </div>
         <div class="field-label">Anything else we should know?</div>
-        <textarea class="text-area" id="lifestyleNotes" placeholder="e.g. Two people work from this room. Storage is a priority."></textarea>
+        <textarea class="text-area" id="lifestyleNotes" placeholder="e.g. Two people work from this room. Storage is a priority. We want the space to feel calm, not cluttered."></textarea>
         <div class="step-nav">
           <button class="back-btn" onclick="goBack(5)">← Back</button>
           <button class="generate-btn" id="generateBtn" onclick="generateLayout()">✦ Get my layout</button>
@@ -210,1210 +211,22 @@
     <div class="results-section" id="resultsSection">
       <div class="results-heading">Your layout recommendation</div>
       <div class="results-subheading" id="resultsSubheading"></div>
-      <div id="layoutCards"></div>
+      <div id="layoutCard"></div>
+
+      <div class="soft-cta">
+        Want to see what this could actually look like in your space? <strong>Studio Lou's virtual design services</strong> take you from a written recommendation to a real, sourced, finished room.
+      </div>
+
       <div class="reset-wrap">
         <button class="reset-btn" onclick="resetTool()">← Start over with a different room</button>
       </div>
     </div>
+
   </div>
-  <script>
-// ============================================================
-// FURNITURE CATALOG - real dimensions in INCHES (w x d)
-// Sourced from Bassett, Beautiful Homes, Standard Furniture Sizes,
-// CoCreative Interiors, and interior design standards guides.
-// ============================================================
-const FURNITURE_CATALOG = {
-  // ─── BEDS ─────────────────────────────────────────────────
-  'bed_crib':      { label: 'Crib',           type: 'bed',    w: 30, d: 54, category: 'Beds', wallRequired: 'head' },
-  'bed_kids_twin': { label: 'Kids twin bed',  type: 'bed',    w: 39, d: 75, category: 'Beds', wallRequired: 'head' },
-  'bed_twin':      { label: 'Twin bed',       type: 'bed',    w: 39, d: 75, category: 'Beds', wallRequired: 'head' },
-  'bed_twin_xl':   { label: 'Twin XL bed',    type: 'bed',    w: 39, d: 80, category: 'Beds', wallRequired: 'head' },
-  'bed_full':      { label: 'Full bed',       type: 'bed',    w: 54, d: 75, category: 'Beds', wallRequired: 'head' },
-  'bed_queen':     { label: 'Queen bed',      type: 'bed',    w: 60, d: 80, category: 'Beds', wallRequired: 'head' },
-  'bed_king':      { label: 'King bed',       type: 'bed',    w: 76, d: 80, category: 'Beds', wallRequired: 'head' },
-  'bed_cal_king':  { label: 'California king bed', type: 'bed', w: 72, d: 84, category: 'Beds', wallRequired: 'head' },
-  'bed_bunk':      { label: 'Bunk bed',       type: 'bed',    w: 42, d: 80, category: 'Beds', wallRequired: 'head' },
-  'bed_daybed':    { label: 'Daybed',         type: 'bed',    w: 42, d: 80, category: 'Beds', wallRequired: 'back' },
 
-  // ─── BEDROOM STORAGE / ACCENTS ────────────────────────────
-  'nightstand_sm': { label: 'Small nightstand', type: 'nightstand', w: 18, d: 16, category: 'Beds', pairsWith: 'bed' },
-  'nightstand':    { label: 'Nightstand',     type: 'nightstand', w: 22, d: 18, category: 'Beds', pairsWith: 'bed' },
-  'nightstand_lg': { label: 'Large nightstand', type: 'nightstand', w: 28, d: 20, category: 'Beds', pairsWith: 'bed' },
-  'dresser_std':   { label: 'Dresser',        type: 'dresser',    w: 60, d: 20, category: 'Storage', wallRequired: 'back' },
-  'dresser_tall':  { label: 'Tall dresser',   type: 'dresser',    w: 36, d: 20, category: 'Storage', wallRequired: 'back' },
-  'chest_drawers': { label: 'Chest of drawers', type: 'dresser',  w: 42, d: 24, category: 'Storage', wallRequired: 'back' },
-  'wardrobe':      { label: 'Wardrobe',       type: 'dresser',    w: 48, d: 24, category: 'Storage', wallRequired: 'back' },
-  'armoire':       { label: 'Armoire',        type: 'dresser',    w: 44, d: 24, category: 'Storage', wallRequired: 'back' },
-  'vanity':        { label: 'Vanity',         type: 'desk',       w: 48, d: 20, category: 'Storage', wallRequired: 'back' },
-  'vanity_stool':  { label: 'Vanity stool',   type: 'chair',      w: 18, d: 18, category: 'Storage', pairsWith: 'vanity' },
-  'bench_bed':     { label: 'Bench (foot of bed)', type: 'bench', w: 48, d: 18, category: 'Storage', pairsWith: 'bed' },
-  'chaise':        { label: 'Chaise lounge',  type: 'chair',      w: 30, d: 60, category: 'Storage' },
-  'changing_table':{ label: 'Changing table', type: 'dresser',    w: 40, d: 20, category: 'Storage', wallRequired: 'back' },
-
-  // ─── LIVING ROOM SEATING ──────────────────────────────────
-  'sofa_apt':      { label: 'Apartment sofa', type: 'sofa',   w: 70, d: 34, category: 'Seating', wallRequired: 'back' },
-  'sofa_love':     { label: 'Loveseat',       type: 'sofa',   w: 60, d: 36, category: 'Seating', wallRequired: 'back' },
-  'sofa_std':      { label: 'Sofa',           type: 'sofa',   w: 84, d: 36, category: 'Seating', wallRequired: 'back' },
-  'sofa_large':    { label: 'Large sofa',     type: 'sofa',   w: 96, d: 38, category: 'Seating', wallRequired: 'back' },
-  'sectional':     { label: 'Sectional',      type: 'sectional', w: 108, d: 68, category: 'Seating', wallRequired: 'corner' },
-  'sectional_lg':  { label: 'Large sectional', type: 'sectional', w: 130, d: 96, category: 'Seating', wallRequired: 'corner' },
-  'armchair':      { label: 'Armchair',       type: 'chair',  w: 34, d: 34, category: 'Seating' },
-  'accent_chair':  { label: 'Accent chair',   type: 'chair',  w: 30, d: 30, category: 'Seating' },
-  'reading_chair': { label: 'Reading chair',  type: 'chair',  w: 32, d: 34, category: 'Seating' },
-  'recliner':      { label: 'Recliner',       type: 'chair',  w: 34, d: 40, category: 'Seating' },
-  'glider':        { label: 'Glider chair',   type: 'chair',  w: 32, d: 34, category: 'Seating' },
-  'ottoman':       { label: 'Ottoman',        type: 'ottoman', w: 24, d: 24, category: 'Seating' },
-  'ottoman_lg':    { label: 'Large ottoman',  type: 'ottoman', w: 36, d: 36, category: 'Seating' },
-  'pouf':          { label: 'Pouf',           type: 'ottoman', w: 20, d: 20, category: 'Seating' },
-
-  // ─── LIVING ROOM TABLES / STORAGE ─────────────────────────
-  'coffee_table':  { label: 'Coffee table',       type: 'coffee-table', w: 48, d: 24, category: 'Tables', pairsWith: 'sofa' },
-  'coffee_round':  { label: 'Round coffee table', type: 'coffee-table', w: 36, d: 36, category: 'Tables', pairsWith: 'sofa' },
-  'side_table':    { label: 'Side table',     type: 'side-table', w: 22, d: 22, category: 'Tables' },
-  'end_table':     { label: 'End table',      type: 'side-table', w: 22, d: 22, category: 'Tables' },
-  'console':       { label: 'Console table',  type: 'console',  w: 48, d: 16, category: 'Tables', wallRequired: 'back' },
-  'tv_stand':      { label: 'TV stand',       type: 'tv-stand', w: 60, d: 18, category: 'Media', wallRequired: 'back' },
-  'tv_stand_lg':   { label: 'Large TV stand', type: 'tv-stand', w: 84, d: 20, category: 'Media', wallRequired: 'back' },
-  'media_console': { label: 'Media console',  type: 'tv-stand', w: 72, d: 18, category: 'Media', wallRequired: 'back' },
-  'bookshelf':     { label: 'Bookshelf',      type: 'bookshelf', w: 36, d: 12, category: 'Storage', wallRequired: 'back' },
-  'bookshelf_tall':{ label: 'Tall bookshelf', type: 'bookshelf', w: 36, d: 12, category: 'Storage', wallRequired: 'back' },
-  'etagere':       { label: 'Etagere',        type: 'bookshelf', w: 28, d: 14, category: 'Storage', wallRequired: 'back' },
-
-  // ─── DINING ───────────────────────────────────────────────
-  'dining_round_4':{ label: 'Round dining table (4)', type: 'dining-table', w: 44, d: 44, category: 'Dining', isCenter: true, seatCount: 4 },
-  'dining_round_6':{ label: 'Round dining table (6)', type: 'dining-table', w: 60, d: 60, category: 'Dining', isCenter: true, seatCount: 6 },
-  'dining_4':      { label: 'Dining table (4)',       type: 'dining-table', w: 48, d: 36, category: 'Dining', isCenter: true, seatCount: 4 },
-  'dining_6':      { label: 'Dining table (6)',       type: 'dining-table', w: 72, d: 40, category: 'Dining', isCenter: true, seatCount: 6 },
-  'dining_8':      { label: 'Dining table (8)',       type: 'dining-table', w: 96, d: 42, category: 'Dining', isCenter: true, seatCount: 8 },
-  'dining_10':     { label: 'Dining table (10)',      type: 'dining-table', w: 108, d: 44, category: 'Dining', isCenter: true, seatCount: 10 },
-  'dining_12':     { label: 'Dining table (12)',      type: 'dining-table', w: 120, d: 44, category: 'Dining', isCenter: true, seatCount: 12 },
-  'dining_chair':  { label: 'Dining chair',   type: 'dining-chair', w: 18, d: 22, category: 'Dining', pairsWith: 'dining-table' },
-  'dining_chair_up':{ label: 'Upholstered dining chair', type: 'dining-chair', w: 20, d: 22, category: 'Dining', pairsWith: 'dining-table' },
-  'dining_bench':  { label: 'Dining bench',   type: 'bench',      w: 60, d: 16, category: 'Dining', pairsWith: 'dining-table' },
-  'buffet':        { label: 'Buffet',         type: 'buffet',     w: 60, d: 20, category: 'Dining', wallRequired: 'back' },
-  'sideboard':     { label: 'Sideboard',      type: 'buffet',     w: 60, d: 18, category: 'Dining', wallRequired: 'back' },
-  'credenza':      { label: 'Credenza',       type: 'buffet',     w: 66, d: 18, category: 'Dining', wallRequired: 'back' },
-  'china_cabinet': { label: 'China cabinet',  type: 'buffet',     w: 54, d: 18, category: 'Dining', wallRequired: 'back' },
-  'hutch':         { label: 'Hutch',          type: 'buffet',     w: 54, d: 18, category: 'Dining', wallRequired: 'back' },
-  'bar_cart':      { label: 'Bar cart',       type: 'bar-cart',   w: 30, d: 18, category: 'Dining' },
-  'wine_cabinet':  { label: 'Wine cabinet',   type: 'buffet',     w: 30, d: 18, category: 'Dining', wallRequired: 'back' },
-
-  // ─── OFFICE ───────────────────────────────────────────────
-  'desk_small':    { label: 'Small desk',     type: 'desk',   w: 42, d: 20, category: 'Office', wallRequired: 'back' },
-  'desk_std':      { label: 'Desk',           type: 'desk',   w: 54, d: 24, category: 'Office', wallRequired: 'back' },
-  'desk_large':    { label: 'Large desk',     type: 'desk',   w: 72, d: 30, category: 'Office', wallRequired: 'back' },
-  'desk_l':        { label: 'L-shape desk',   type: 'desk',   w: 60, d: 60, category: 'Office', wallRequired: 'corner' },
-  'desk_standing': { label: 'Standing desk',  type: 'desk',   w: 54, d: 24, category: 'Office', wallRequired: 'back' },
-  'office_chair':  { label: 'Office chair',   type: 'chair',  w: 26, d: 26, category: 'Office', pairsWith: 'desk' },
-  'filing_cabinet':{ label: 'Filing cabinet', type: 'dresser', w: 18, d: 20, category: 'Office', wallRequired: 'back' },
-  'printer_stand': { label: 'Printer stand',  type: 'side-table', w: 24, d: 18, category: 'Office' },
-  'guest_chair':   { label: 'Guest chair',    type: 'chair',  w: 24, d: 24, category: 'Office' },
-
-  // ─── ENTRYWAY / STUDIO ───────────────────────────────────
-  'bench_entry':   { label: 'Entryway bench', type: 'bench',      w: 48, d: 16, category: 'Entryway', wallRequired: 'back' },
-  'hall_tree':     { label: 'Hall tree',      type: 'bookshelf',  w: 30, d: 18, category: 'Entryway', wallRequired: 'back' },
-  'entryway_cabinet': { label: 'Entryway cabinet', type: 'buffet', w: 40, d: 16, category: 'Entryway', wallRequired: 'back' },
-
-  // ─── RUGS ─────────────────────────────────────────────────
-  'rug_3x5':       { label: '3x5 rug',   type: 'rug', w: 36, d: 60, category: 'Rugs', isRug: true },
-  'rug_4x6':       { label: '4x6 rug',   type: 'rug', w: 48, d: 72, category: 'Rugs', isRug: true },
-  'rug_5x7':       { label: '5x7 rug',   type: 'rug', w: 60, d: 84, category: 'Rugs', isRug: true },
-  'rug_6x9':       { label: '6x9 rug',   type: 'rug', w: 72, d: 108, category: 'Rugs', isRug: true },
-  'rug_8x10':      { label: '8x10 rug',  type: 'rug', w: 96, d: 120, category: 'Rugs', isRug: true },
-  'rug_9x12':      { label: '9x12 rug',  type: 'rug', w: 108, d: 144, category: 'Rugs', isRug: true },
-  'rug_10x14':     { label: '10x14 rug', type: 'rug', w: 120, d: 168, category: 'Rugs', isRug: true },
-  'rug_runner':    { label: 'Runner rug', type: 'rug', w: 30, d: 84, category: 'Rugs', isRug: true },
-
-  // ─── ACCENTS ──────────────────────────────────────────────
-  'floor_lamp':    { label: 'Floor lamp',     type: 'lamp',       w: 16, d: 16, category: 'Accents' },
-  'plant':         { label: 'Plant',          type: 'plant',      w: 20, d: 20, category: 'Accents' },
-  'plant_lg':      { label: 'Large plant',    type: 'plant',      w: 28, d: 28, category: 'Accents' },
-  'room_divider':  { label: 'Room divider',   type: 'divider',    w: 60, d: 4, category: 'Accents' },
-  'mirror_floor':  { label: 'Floor mirror',   type: 'mirror',     w: 24, d: 4, category: 'Accents', wallRequired: 'back' },
-  'toy_storage':   { label: 'Toy storage',    type: 'dresser',    w: 36, d: 16, category: 'Storage', wallRequired: 'back' },
-
-  // ─── KITCHEN-ADJACENT ─────────────────────────────────────
-  'breakfast_table':{ label: 'Breakfast table', type: 'dining-table', w: 42, d: 42, category: 'Dining', isCenter: true, seatCount: 4 },
-  'bar_stool':     { label: 'Bar stool',       type: 'chair',       w: 18, d: 18, category: 'Dining' }
-};
-
-// Default room sizes (feet) if user didn't provide
-const DEFAULT_ROOM_SIZES = {
-  'Bedroom': { length: 12, width: 14 },
-  'Living Room': { length: 15, width: 18 },
-  'Dining Room': { length: 12, width: 14 },
-  'Home Office': { length: 10, width: 12 },
-  'Guest Room': { length: 11, width: 12 },
-  'Studio / Flex Space': { length: 14, width: 16 }
-};
-
-
-// ============================================================
-// FURNITURE TEXT PARSER
-// Matches natural-language furniture descriptions against the catalog.
-// Handles: counts, plurals, sizes in feet/inches, seat counts, synonyms,
-// context ("chairs" in a dining context → dining chairs, not armchairs).
-// ============================================================
-
-const NUMBER_WORDS = {
-  'a': 1, 'an': 1, 'one': 1, 'single': 1,
-  'two': 2, 'a pair of': 2, 'pair of': 2, 'both': 2, 'couple of': 2, 'a couple': 2,
-  'three': 3, 'four': 4, 'five': 5, 'six': 6,
-  'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-  'eleven': 11, 'twelve': 12
-};
-
-// Patterns to match — order matters: more specific first, generic last.
-// Each entry: { key: catalog key, patterns: [regexes], contextRequire?: /re/ }
-// contextRequire is a regex that must match somewhere in the full text for this pattern to apply.
-const FURNITURE_PATTERNS = [
-  // ── BEDS (most specific first) ────────────────────────────
-  { key: 'bed_cal_king',  patterns: [/\bcalifornia\s+king\b/i, /\bcal[.\s-]*king\b/i] },
-  { key: 'bed_king',      patterns: [/\bking[\s-]?(size|sized)?\s*beds?\b/i, /\bkingsize\s*beds?\b/i] },
-  { key: 'bed_queen',     patterns: [/\bqueen[\s-]?(size|sized)?\s*beds?\b/i, /\bqueensize\s*beds?\b/i, /\bqueen\s+beds?\b/i] },
-  { key: 'bed_full',      patterns: [/\bfull[\s-]?(size|sized)?\s*beds?\b/i, /\bdouble\s*beds?\b/i] },
-  { key: 'bed_twin_xl',   patterns: [/\btwin\s+xl\s+beds?\b/i, /\btwin[\s-]xl\b/i] },
-  { key: 'bed_twin',      patterns: [/\btwin[\s-]?(size|sized)?\s*beds?\b/i, /\bsingle\s*beds?\b/i] },
-  { key: 'bed_bunk',      patterns: [/\bbunk\s*beds?\b/i, /\bloft\s*beds?\b/i] },
-  { key: 'bed_daybed',    patterns: [/\bday\s?beds?\b/i, /\btrundle\s+beds?\b/i] },
-  { key: 'bed_crib',      patterns: [/\bcribs?\b/i, /\bbassinets?\b/i] },
-  { key: 'bed_kids_twin', patterns: [/\bkids?\s+beds?\b/i, /\btoddler\s+beds?\b/i, /\bchild(ren)?['s]*\s+beds?\b/i] },
-
-  // ── BEDROOM STORAGE / ACCENTS ─────────────────────────────
-  { key: 'nightstand_lg', patterns: [/\blarge\s+nightstands?\b/i, /\bbig\s+nightstands?\b/i] },
-  { key: 'nightstand_sm', patterns: [/\bsmall\s+nightstands?\b/i, /\bnarrow\s+nightstands?\b/i] },
-  { key: 'nightstand',    patterns: [/\bnightstands?\b/i, /\bnight\s+stands?\b/i, /\bbedside\s+tables?\b/i, /\bnight\s+tables?\b/i] },
-  { key: 'chest_drawers', patterns: [/\bchest\s+of\s+drawers\b/i, /\bhighboys?\b/i, /\btallboys?\b/i] },
-  { key: 'dresser_tall',  patterns: [/\btall\s+dressers?\b/i, /\btall\s+chests?\b/i, /\bvertical\s+dressers?\b/i] },
-  { key: 'wardrobe',      patterns: [/\bwardrobes?\b/i] },
-  { key: 'armoire',       patterns: [/\barmoires?\b/i] },
-  { key: 'dresser_std',   patterns: [/\bdressers?\b/i, /\bbureaus?\b/i, /\blong\s+dressers?\b/i, /\b6[\s-]?drawer\s+dressers?\b/i] },
-  { key: 'vanity_stool',  patterns: [/\bvanity\s+stools?\b/i, /\bvanity\s+chairs?\b/i, /\bmakeup\s+stools?\b/i] },
-  { key: 'vanity',        patterns: [/\bvanit(y|ies)\b/i, /\bmakeup\s+tables?\b/i, /\bdressing\s+tables?\b/i] },
-  { key: 'bench_bed',     patterns: [/\bbench\s+(at\s+the\s+)?(foot|end)\s+of\s+(the\s+)?bed\b/i, /\bfoot[\s-]of[\s-]bed\s+benchs?\b/i, /\bbedroom\s+benchs?\b/i] },
-  { key: 'chaise',        patterns: [/\bchaise\s+lounges?\b/i, /\bchaises?\b/i, /\bfainting\s+couches?\b/i] },
-  { key: 'changing_table',patterns: [/\bchanging\s+tables?\b/i, /\bchanging\s+stations?\b/i] },
-
-  // ── LIVING ROOM SEATING ───────────────────────────────────
-  { key: 'sectional_lg',  patterns: [/\blarge\s+sectionals?\b/i, /\bhuge\s+sectionals?\b/i, /\bu[\s-]shaped?\s+sectionals?\b/i] },
-  { key: 'sectional',     patterns: [/\bsectionals?\b/i, /\bl[\s-]shaped?\s+(sofa|couch)\b/i] },
-  { key: 'sofa_large',    patterns: [/\blarge\s+(sofa|couch)\b/i, /\bbig\s+(sofa|couch)\b/i, /\boversized\s+(sofa|couch)\b/i] },
-  { key: 'sofa_apt',      patterns: [/\bapartment\s+(sofa|couch)\b/i, /\bcondo\s+(sofa|couch)\b/i] },
-  { key: 'sofa_love',     patterns: [/\bloveseats?\b/i, /\blove\s+seats?\b/i, /\bsmall\s+(sofa|couch)\b/i] },
-  { key: 'sofa_std',      patterns: [/\bsofas?\b/i, /\bcouches?\b/i, /\bcouch\b/i, /\bsettees?\b/i] },
-  { key: 'recliner',      patterns: [/\brecliners?\b/i, /\blazy[\s-]boys?\b/i, /\blift\s+chairs?\b/i] },
-  { key: 'glider',        patterns: [/\bgliders?\b/i, /\bnursing\s+chairs?\b/i, /\brocking\s+chairs?\b/i] },
-  { key: 'reading_chair', patterns: [/\breading\s+chairs?\b/i, /\bslipper\s+chairs?\b/i] },
-  { key: 'accent_chair',  patterns: [/\baccent\s+chairs?\b/i, /\bside\s+chairs?\b/i] },
-  { key: 'armchair',      patterns: [/\barmchairs?\b/i, /\barm\s+chairs?\b/i, /\bupholstered\s+chairs?\b/i, /\bwing\s?back\s+chairs?\b/i, /\bclub\s+chairs?\b/i, /\bstatement\s+chairs?\b/i, /\bchairs?\b/i] },
-  { key: 'pouf',          patterns: [/\bpoufs?\b/i, /\bfloor\s+cushions?\b/i] },
-  { key: 'ottoman_lg',    patterns: [/\blarge\s+ottomans?\b/i, /\bstorage\s+ottomans?\b/i] },
-  { key: 'ottoman',       patterns: [/\bottomans?\b/i, /\bfootstools?\b/i, /\bfoot\s+stools?\b/i] },
-
-  // ── LIVING ROOM TABLES / MEDIA ────────────────────────────
-  { key: 'coffee_round',  patterns: [/\bround\s+coffee\s+tables?\b/i] },
-  { key: 'coffee_table',  patterns: [/\bcoffee\s+tables?\b/i, /\bcocktail\s+tables?\b/i] },
-  { key: 'end_table',     patterns: [/\bend\s+tables?\b/i] },
-  { key: 'side_table',    patterns: [/\bside\s+tables?\b/i, /\baccent\s+tables?\b/i, /\bnest\s+of\s+tables?\b/i] },
-  { key: 'console',       patterns: [/\bconsole\s+tables?\b/i, /\bconsoles?\b/i, /\bsofa\s+tables?\b/i, /\bfoyer\s+tables?\b/i, /\bhallway\s+tables?\b/i, /\bentryway\s+tables?\b/i] },
-  { key: 'tv_stand_lg',   patterns: [/\blarge\s+tv\s+stands?\b/i, /\bwide\s+tv\s+stands?\b/i] },
-  { key: 'tv_stand',      patterns: [/\btv\s+stands?\b/i, /\btelevision\s+stands?\b/i, /\bentertainment\s+centers?\b/i] },
-  { key: 'media_console', patterns: [/\bmedia\s+consoles?\b/i, /\bmedia\s+cabinets?\b/i, /\btv\s+consoles?\b/i] },
-  { key: 'bookshelf_tall',patterns: [/\btall\s+bookshel(f|ves)\b/i, /\bfloor[\s-]to[\s-]ceiling\s+shelves\b/i, /\bfloor[\s-]to[\s-]ceiling\s+bookshel(f|ves)\b/i] },
-  { key: 'etagere',       patterns: [/\betager(e|es)\b/i, /\b(open|ladder)\s+shelves?\b/i] },
-  { key: 'bookshelf',     patterns: [/\bbookshel(f|ves)\b/i, /\bbook\s+shel(f|ves)\b/i, /\bbookcases?\b/i, /\bshelving\s+units?\b/i, /\bshelves\b/i, /\bshelving\b/i] },
-
-  // ── DINING ────────────────────────────────────────────────
-  // Table size patterns must come before generic "dining table"
-  { key: 'dining_round_6',patterns: [/\bround\s+dining\s+tables?\s+(that\s+seats?|for|seating)\s+6\b/i, /\b(6|six)[\s-]?(person|seat|top|seater)?\s+round\s+dining\s+tables?\b/i, /\bround\s+dining\s+tables?\b(?=[^.]{0,40}\b6\b)/i] },
-  { key: 'dining_round_4',patterns: [/\bround\s+dining\s+tables?\s+(that\s+seats?|for|seating)\s+4\b/i, /\b(4|four)[\s-]?(person|seat|top|seater)?\s+round\s+dining\s+tables?\b/i, /\bround\s+dining\s+tables?\b/i] },
-  { key: 'dining_12',     patterns: [/\bdining\s+tables?\s+(that\s+seats?|for|seating)\s+(12|twelve)\b/i, /\b(12|twelve)[\s-]?(person|seat|top|seater)?\s+dining\s+tables?\b/i, /\b10\s?[\s-]?(ft|foot|feet)\s+dining\b/i] },
-  { key: 'dining_10',     patterns: [/\bdining\s+tables?\s+(that\s+seats?|for|seating)\s+(10|ten)\b/i, /\b(10|ten)[\s-]?(person|seat|top|seater)?\s+dining\s+tables?\b/i, /\b9\s?[\s-]?(ft|foot|feet)\s+dining\b/i] },
-  { key: 'dining_8',      patterns: [/\bdining\s+tables?\s+(that\s+seats?|for|seating)\s+(8|eight)\b/i, /\b(8|eight)[\s-]?(person|seat|top|seater)?\s+dining\s+tables?\b/i, /\b8\s?[\s-]?(ft|foot|feet)\s+dining\s+tables?\b/i, /\b8['\u2019]?\s+dining\s+tables?\b/i, /\blong\s+dining\s+tables?\b/i, /\blarge\s+dining\s+tables?\b/i] },
-  { key: 'dining_6',      patterns: [/\bdining\s+tables?\s+(that\s+seats?|for|seating)\s+(6|six)\b/i, /\b(6|six)[\s-]?(person|seat|top|seater)?\s+dining\s+tables?\b/i, /\b6\s?[\s-]?(ft|foot|feet)\s+dining\s+tables?\b/i, /\b6['\u2019]?\s+dining\s+tables?\b/i, /\bstandard\s+dining\s+tables?\b/i] },
-  { key: 'dining_4',      patterns: [/\bdining\s+tables?\s+(that\s+seats?|for|seating)\s+(4|four)\b/i, /\b(4|four)[\s-]?(person|seat|top|seater)?\s+dining\s+tables?\b/i, /\b4\s?[\s-]?(ft|foot|feet)\s+dining\s+tables?\b/i, /\bsmall\s+dining\s+tables?\b/i, /\bbistro\s+tables?\b/i, /\bpub\s+tables?\b/i] },
-  { key: 'breakfast_table',patterns: [/\bbreakfast\s+tables?\b/i, /\bkitchen\s+tables?\b/i, /\bnook\s+tables?\b/i] },
-  { key: 'dining_6',      patterns: [/\bdining\s+tables?\b/i, /\bdining\s+sets?\b/i, /\bkitchen\s+tables?\b/i] }, // final catch-all → default 6-person
-  { key: 'dining_chair_up',patterns: [/\bupholstered\s+dining\s+chairs?\b/i, /\bpadded\s+dining\s+chairs?\b/i, /\bfabric\s+dining\s+chairs?\b/i] },
-  { key: 'dining_chair',  patterns: [/\bdining\s+chairs?\b/i, /\bside\s+chairs?\b/i, /\bhead\s+chairs?\b/i, /\bcaptain'?s?\s+chairs?\b/i] },
-  { key: 'dining_bench',  patterns: [/\bdining\s+bench(es)?\b/i, /\bbanquettes?\b/i] },
-  { key: 'buffet',        patterns: [/\bbuffets?\b/i, /\bbuffet\s+cabinets?\b/i, /\bservers?\b/i] },
-  { key: 'sideboard',     patterns: [/\bsideboards?\b/i] },
-  { key: 'credenza',      patterns: [/\bcredenzas?\b/i] },
-  { key: 'china_cabinet', patterns: [/\bchina\s+cabinets?\b/i, /\bchina\s+hutch(es)?\b/i, /\bcurio\s+cabinets?\b/i, /\bdisplay\s+cabinets?\b/i] },
-  { key: 'hutch',         patterns: [/\bhutch(es)?\b/i, /\bwelsh\s+dressers?\b/i] },
-  { key: 'wine_cabinet',  patterns: [/\bwine\s+cabinets?\b/i, /\bwine\s+racks?\b/i, /\bbar\s+cabinets?\b/i] },
-  { key: 'bar_cart',      patterns: [/\bbar\s+carts?\b/i, /\bdrinks\s+trolleys?\b/i] },
-  { key: 'bar_stool',     patterns: [/\bbar\s+stools?\b/i, /\bcounter\s+stools?\b/i] },
-
-  // ── OFFICE ────────────────────────────────────────────────
-  { key: 'desk_standing', patterns: [/\bstanding\s+desks?\b/i, /\bstand[\s-]up\s+desks?\b/i, /\bsit[\s-]stand\s+desks?\b/i] },
-  { key: 'desk_l',        patterns: [/\bl[\s-]shape[d]?\s+desks?\b/i, /\bcorner\s+desks?\b/i] },
-  { key: 'desk_large',    patterns: [/\blarge\s+desks?\b/i, /\bexecutive\s+desks?\b/i, /\bwide\s+desks?\b/i] },
-  { key: 'desk_small',    patterns: [/\bsmall\s+desks?\b/i, /\bwriting\s+desks?\b/i, /\bsecretary\s+desks?\b/i] },
-  { key: 'desk_std',      patterns: [/\bdesks?\b/i, /\bworkstations?\b/i] },
-  { key: 'office_chair',  patterns: [/\boffice\s+chairs?\b/i, /\bdesk\s+chairs?\b/i, /\btask\s+chairs?\b/i, /\brolling\s+chairs?\b/i, /\bergonomic\s+chairs?\b/i] },
-  { key: 'filing_cabinet',patterns: [/\bfiling\s+cabinets?\b/i, /\bfile\s+cabinets?\b/i, /\blateral\s+files?\b/i] },
-  { key: 'printer_stand', patterns: [/\bprinter\s+stands?\b/i, /\bprinter\s+carts?\b/i] },
-  { key: 'guest_chair',   patterns: [/\bguest\s+chairs?\b/i, /\bvisitor\s+chairs?\b/i] },
-
-  // ── ENTRYWAY ──────────────────────────────────────────────
-  { key: 'bench_entry',   patterns: [/\bentryway\s+bench(es)?\b/i, /\bmudroom\s+bench(es)?\b/i, /\bshoe\s+bench(es)?\b/i] },
-  { key: 'hall_tree',     patterns: [/\bhall\s+trees?\b/i, /\bcoat\s+racks?\b/i, /\bumbrella\s+stands?\b/i] },
-  { key: 'entryway_cabinet',patterns: [/\bentryway\s+cabinets?\b/i, /\bshoe\s+cabinets?\b/i] },
-
-  // ── RUGS ──────────────────────────────────────────────────
-  { key: 'rug_10x14',     patterns: [/\b10\s*[x×]\s*14\b/i, /\b10['\u2019]?\s*[x×]\s*14['\u2019]?\b/i] },
-  { key: 'rug_9x12',      patterns: [/\b9\s*[x×]\s*12\b/i, /\b9['\u2019]?\s*[x×]\s*12['\u2019]?\b/i, /\blarge\s+(area\s+)?rugs?\b/i, /\bbig\s+rugs?\b/i] },
-  { key: 'rug_8x10',      patterns: [/\b8\s*[x×]\s*10\b/i, /\b8['\u2019]?\s*[x×]\s*10['\u2019]?\b/i, /\bmedium\s+(area\s+)?rugs?\b/i] },
-  { key: 'rug_6x9',       patterns: [/\b6\s*[x×]\s*9\b/i, /\b6['\u2019]?\s*[x×]\s*9['\u2019]?\b/i] },
-  { key: 'rug_5x7',       patterns: [/\b5\s*[x×]\s*7\b/i, /\b5['\u2019]?\s*[x×]\s*7['\u2019]?\b/i, /\bsmall\s+(area\s+)?rugs?\b/i, /\baccent\s+rugs?\b/i] },
-  { key: 'rug_4x6',       patterns: [/\b4\s*[x×]\s*6\b/i, /\b4['\u2019]?\s*[x×]\s*6['\u2019]?\b/i] },
-  { key: 'rug_3x5',       patterns: [/\b3\s*[x×]\s*5\b/i, /\b3['\u2019]?\s*[x×]\s*5['\u2019]?\b/i] },
-  { key: 'rug_runner',    patterns: [/\brunner\s+rugs?\b/i, /\brunners?\b/i, /\bhallway\s+rugs?\b/i] },
-  { key: 'rug_8x10',      patterns: [/\barea\s+rugs?\b/i, /\brugs?\b/i] }, // catch-all → default 8x10
-
-  // ── ACCENTS ───────────────────────────────────────────────
-  { key: 'floor_lamp',    patterns: [/\bfloor\s+lamps?\b/i, /\bstanding\s+lamps?\b/i, /\btall\s+lamps?\b/i, /\btripod\s+lamps?\b/i, /\barc\s+lamps?\b/i] },
-  { key: 'plant_lg',      patterns: [/\blarge\s+plants?\b/i, /\bbig\s+plants?\b/i, /\bfiddle\s+leaf\b/i, /\bficus\b/i, /\btrees?\b/i] },
-  { key: 'plant',         patterns: [/\bplants?\b/i, /\bmonsteras?\b/i, /\bpothos\b/i] },
-  { key: 'room_divider',  patterns: [/\broom\s+dividers?\b/i, /\bscreens?\b/i, /\bpartitions?\b/i] },
-  { key: 'mirror_floor',  patterns: [/\bfloor\s+mirrors?\b/i, /\bfull[\s-]length\s+mirrors?\b/i, /\btall\s+mirrors?\b/i] },
-  { key: 'toy_storage',   patterns: [/\btoy\s+storages?\b/i, /\btoy\s+chests?\b/i, /\btoy\s+bins?\b/i, /\bkids?\s+storages?\b/i] }
-];
-
-// Openings parser — doors, windows, and archways/large openings
-// Returns { doors: [], windows: [], openings: [] } with wall + rough position on 0-100
-// Positions default to centered if not specified.
-function parseOpenings(text) {
-  const doors = [], windows = [], openings = [];
-  if (!text) return { doors, windows, openings };
-  const lc = text.toLowerCase();
-
-  // Split into clauses so each opening is parsed independently
-  const clauses = lc.split(/[,.;]|\band\b/i).map(c => c.trim()).filter(Boolean);
-
-  clauses.forEach(clause => {
-    const isDoor = /\b(door|entry|entrance)\b/.test(clause) && !/\bdoorway\s+without\b/.test(clause);
-    const isOpening = /\b(opening|archway?|arch|cased\s+opening|pass[\s-]through|wide\s+entry|open\s+to|doorway\s+without)\b/.test(clause);
-    const isWindow = /\bwindows?\b/.test(clause);
-
-    if (!isDoor && !isOpening && !isWindow) return;
-
-    // Wall detection
-    let wall = null;
-    if (/\bnorth\b/.test(clause)) wall = 'north';
-    else if (/\bsouth\b/.test(clause)) wall = 'south';
-    else if (/\beast\b/.test(clause)) wall = 'east';
-    else if (/\bwest\b/.test(clause)) wall = 'west';
-    if (!wall) return; // Skip if we can't identify the wall
-
-    // Position along wall — look for corner references or center
-    let start = 40, end = 60; // default centered, 20-unit wide
-    if (/\bcenter(ed)?\b/.test(clause) || /\bmiddle\b/.test(clause)) { start = 35; end = 65; }
-    else if (/\bwest\s+corner\b/.test(clause) && (wall === 'north' || wall === 'south')) { start = 5; end = 25; }
-    else if (/\beast\s+corner\b/.test(clause) && (wall === 'north' || wall === 'south')) { start = 75; end = 95; }
-    else if (/\bnorth\s+corner\b/.test(clause) && (wall === 'east' || wall === 'west')) { start = 5; end = 25; }
-    else if (/\bsouth\s+corner\b/.test(clause) && (wall === 'east' || wall === 'west')) { start = 75; end = 95; }
-    else if (/\bcorner\b/.test(clause)) { start = 5; end = 25; }
-    else if (/\bnear\s+the\s+west\b/.test(clause) && (wall === 'north' || wall === 'south')) { start = 10; end = 30; }
-    else if (/\bnear\s+the\s+east\b/.test(clause) && (wall === 'north' || wall === 'south')) { start = 70; end = 90; }
-
-    // Widen for "large" or "wide" openings and windows
-    if (/\b(large|wide|big)\b/.test(clause)) {
-      const width = end - start;
-      const extra = 15;
-      start = Math.max(0, start - extra/2);
-      end = Math.min(100, end + extra/2);
-    }
-    if (isOpening && !/\b(large|wide|big|small|narrow)\b/.test(clause)) {
-      // Openings default to wider than doors
-      start = Math.max(0, start - 10);
-      end = Math.min(100, end + 10);
-    }
-
-    if (isDoor) {
-      doors.push({ wall, start, end, swing: 'in-right' });
-    } else if (isOpening) {
-      openings.push({ wall, start, end });
-    } else if (isWindow) {
-      windows.push({ wall, start, end });
-    }
-  });
-
-  return { doors, windows, openings };
-}
-
-// Extract count preceding a matched phrase
-function extractCount(text, matchStart, matchedText) {
-  const lookback = text.substring(Math.max(0, matchStart - 25), matchStart);
-  const digitMatch = lookback.match(/(\d+)\s*(more\s+)?[x×]?\s*$/);
-  if (digitMatch) return parseInt(digitMatch[1], 10);
-  if (/\b(a\s+)?pair\s+of\s*$/i.test(lookback)) return 2;
-  if (/\b(a\s+)?couple\s+(of\s+)?\s*$/i.test(lookback)) return 2;
-  for (const [word, num] of Object.entries(NUMBER_WORDS)) {
-    if (word === 'a' || word === 'an') continue;
-    const re = new RegExp('\\b' + word.replace(/\s+/g, '\\s+') + '\\s*$', 'i');
-    if (re.test(lookback)) return num;
-  }
-  if (/\b(a|an|the|my|our)\s*$/i.test(lookback)) return 1;
-  if (matchedText && /(?:s|ves)$/i.test(matchedText.trim())) return 2;
-  return 1;
-}
-
-// Detect context for ambiguous words like "chairs"
-function getContext(text) {
-  const lc = text.toLowerCase();
-  return {
-    hasDining: /\bdining\b|\bdining\s+table\b|\bdinner\b/.test(lc),
-    hasOffice: /\bdesk\b|\boffice\b|\bworkstation\b/.test(lc),
-    hasBed: /\bbed\b|\bbedroom\b|\bnightstand\b/.test(lc)
-  };
-}
-
-// Look for size hints in the text and pick a better catalog key
-// Example: "8 ft dining table" → dining_8, "72 inch sofa" → sofa_std or sofa_large
-function refineByDimensions(text) {
-  const refinements = {};
-  const lc = text.toLowerCase();
-  // Dining table by feet
-  const dtFt = lc.match(/(\d+)\s*(ft|foot|feet|')\s+dining\s+tables?/);
-  if (dtFt) {
-    const ft = parseInt(dtFt[1], 10);
-    if (ft <= 4) refinements.diningKey = 'dining_4';
-    else if (ft <= 5) refinements.diningKey = 'dining_4';
-    else if (ft <= 6.5) refinements.diningKey = 'dining_6';
-    else if (ft <= 8.5) refinements.diningKey = 'dining_8';
-    else if (ft <= 9.5) refinements.diningKey = 'dining_10';
-    else refinements.diningKey = 'dining_12';
-  }
-  // Sofa by length
-  const sfLen = lc.match(/(\d+)\s*(inch|in|"|inches|ft|foot|feet|')\s+(sofa|couch)/);
-  if (sfLen) {
-    let inches = parseInt(sfLen[1], 10);
-    if (/ft|foot|feet|'/.test(sfLen[2])) inches *= 12;
-    if (inches < 66) refinements.sofaKey = 'sofa_love';
-    else if (inches < 76) refinements.sofaKey = 'sofa_apt';
-    else if (inches < 90) refinements.sofaKey = 'sofa_std';
-    else refinements.sofaKey = 'sofa_large';
-  }
-  return refinements;
-}
-
-function parseFurnitureText(existingText, newText) {
-  const combined = (existingText + ' ' + newText).replace(/\s+/g, ' ');
-  const parsed = {}; // catalogKey -> count
-  const usedRanges = [];
-  const unmatched = [];
-  const context = getContext(combined);
-  const refinements = refineByDimensions(combined);
-
-  // Sort patterns so context-restricted ones can run first
-  for (const entry of FURNITURE_PATTERNS) {
-    const { key, patterns } = entry;
-    for (const re of patterns) {
-      const globalRe = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
-      let m;
-      while ((m = globalRe.exec(combined)) !== null) {
-        const start = m.index, end = start + m[0].length;
-        if (usedRanges.some(r => start < r[1] && end > r[0])) continue;
-        usedRanges.push([start, end]);
-        let finalKey = key;
-
-        // Context-based key remapping
-        if (key === 'armchair' && context.hasDining && !/\barmchair\b/i.test(m[0]) && !/\bupholstered\b/i.test(m[0])) {
-          // "chairs" in a dining-context text — use dining chairs
-          if (/^chairs?$/i.test(m[0].trim())) finalKey = 'dining_chair';
-        }
-        // Refinements from dimension parsing
-        if (finalKey.startsWith('dining_') && finalKey !== 'dining_chair' && finalKey !== 'dining_chair_up' && finalKey !== 'dining_bench' && refinements.diningKey) {
-          finalKey = refinements.diningKey;
-        }
-        if (finalKey === 'sofa_std' && refinements.sofaKey) {
-          finalKey = refinements.sofaKey;
-        }
-
-        const count = extractCount(combined, start, m[0]);
-        parsed[finalKey] = (parsed[finalKey] || 0) + count;
-      }
-    }
-  }
-
-  // Log unmatched furniture-sounding fragments
-  const fragments = combined.split(/[,.;]|\band\b/i).map(f => f.trim()).filter(f => f.length > 2);
-  const furnitureKeywords = /\b(bed|sofa|couch|chair|desk|table|shelf|shelves|dresser|nightstand|cabinet|stand|lamp|ottoman|bench|stool|hutch|vanity|mirror|buffet|sideboard|credenza|rug|bookshelf|armoire|wardrobe|bureau|chest|hutch|console|footrest|footstool)\b/i;
-  fragments.forEach(frag => {
-    if (!furnitureKeywords.test(frag)) return;
-    const fragStart = combined.indexOf(frag);
-    if (fragStart < 0) return;
-    const fragEnd = fragStart + frag.length;
-    const wasMatched = usedRanges.some(r => fragStart < r[1] && fragEnd > r[0]);
-    if (!wasMatched && frag.length < 60) {
-      const kwMatch = frag.match(furnitureKeywords);
-      const kw = kwMatch ? kwMatch[0].toLowerCase() : frag.substring(0, 40);
-      unmatched.push(kw);
-    }
-  });
-
-  const items = Object.entries(parsed).map(([catalogKey, count]) => ({ catalogKey, count }));
-  return { items, unmatched: [...new Set(unmatched)] };
-}
-
-
-// ============================================================
-// SPATIAL ENGINE
-// All layout math done here, deterministically, in inches.
-// Coordinate system:
-//   (0,0) = northwest corner (top-left)
-//   x increases east, y increases south
-// ============================================================
-
-const CLEARANCE = {
-  DOOR_SWING: 32,
-  OPENING_WALKWAY: 36,    // clearance in front of an opening
-  WALKWAY_MAIN: 36,
-  WALKWAY_MINOR: 30,
-  BED_SIDE: 24,
-  BED_FOOT: 30,
-  SOFA_COFFEE: 16,
-  DINING_TABLE_CHAIR: 24, // chair pull-out clearance around dining table
-  DINING_CHAIR_GAP: 6,    // gap between chair edge and table edge (chair tucks under table)
-  DESK_CHAIR: 30
-};
-
-function rectsOverlap(a, b) {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.d && a.y + a.d > b.y;
-}
-function rectInside(r, roomW, roomD) {
-  return r.x >= 0 && r.y >= 0 && r.x + r.w <= roomW && r.y + r.d <= roomD;
-}
-function inflate(r, pad) {
-  return { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, d: r.d + pad * 2 };
-}
-
-// Compute clearance zone for a door (swing area)
-function doorSwingRect(door, roomW, roomD) {
-  const w = door.end - door.start;
-  const swingDepth = Math.max(w, CLEARANCE.DOOR_SWING);
-  const swingWidth = w + 20;
-  if (door.wall === 'north') return { x: door.start - 10, y: 0, w: swingWidth, d: swingDepth };
-  if (door.wall === 'south') return { x: door.start - 10, y: roomD - swingDepth, w: swingWidth, d: swingDepth };
-  if (door.wall === 'west')  return { x: 0, y: door.start - 10, w: swingDepth, d: swingWidth };
-  return { x: roomW - swingDepth, y: door.start - 10, w: swingDepth, d: swingWidth };
-}
-
-// Compute clearance zone for an opening (walkway into room, no swing)
-function openingClearanceRect(opening, roomW, roomD) {
-  const w = opening.end - opening.start;
-  const depth = CLEARANCE.OPENING_WALKWAY;
-  if (opening.wall === 'north') return { x: opening.start, y: 0, w: w, d: depth };
-  if (opening.wall === 'south') return { x: opening.start, y: roomD - depth, w: w, d: depth };
-  if (opening.wall === 'west')  return { x: 0, y: opening.start, w: depth, d: w };
-  return { x: roomW - depth, y: opening.start, w: depth, d: w };
-}
-
-// Try to place a piece against a wall.
-// Longer piece dimension runs along the wall; shorter perpendicular.
-function placeAgainstWall(piece, wall, blockers, roomW, roomD, preferredCenter) {
-  const pw = piece.w, pd = piece.d;
-  const isNorthSouth = (wall === 'north' || wall === 'south');
-  const alongWall = pw;
-  const perpWall = pd;
-
-  let axisMax, y_or_x;
-  if (wall === 'north') { axisMax = roomW - alongWall; y_or_x = 0; }
-  else if (wall === 'south') { axisMax = roomW - alongWall; y_or_x = roomD - perpWall; }
-  else if (wall === 'west') { axisMax = roomD - alongWall; y_or_x = 0; }
-  else { axisMax = roomD - alongWall; y_or_x = roomW - perpWall; }
-
-  if (axisMax < 0) return null;
-
-  const candidates = [];
-  const centerPos = preferredCenter != null ? preferredCenter - alongWall/2 : axisMax/2;
-  candidates.push(Math.max(0, Math.min(axisMax, centerPos)));
-  for (let step = 6; step <= axisMax + alongWall; step += 6) {
-    candidates.push(Math.max(0, Math.min(axisMax, centerPos - step)));
-    candidates.push(Math.max(0, Math.min(axisMax, centerPos + step)));
-  }
-
-  for (const pos of candidates) {
-    let rect;
-    if (isNorthSouth) rect = { x: pos, y: y_or_x, w: alongWall, d: perpWall };
-    else              rect = { x: y_or_x, y: pos, w: perpWall, d: alongWall };
-    if (!rectInside(rect, roomW, roomD)) continue;
-    let ok = true;
-    for (const b of blockers) {
-      if (rectsOverlap(rect, b)) { ok = false; break; }
-    }
-    if (ok) return { ...rect, wall };
-  }
-  return null;
-}
-
-// Place in corner (for sectionals — long side against one wall, other side against perpendicular wall)
-function placeInCorner(piece, corner, blockers, roomW, roomD) {
-  // piece.w = the wider extent (long side), piece.d = the shorter extent
-  // corners: 'nw', 'ne', 'sw', 'se'
-  const orientations = [
-    { w: piece.w, d: piece.d },
-    { w: piece.d, d: piece.w }
-  ];
-  for (const o of orientations) {
-    let rect;
-    if (corner === 'nw') rect = { x: 0, y: 0, w: o.w, d: o.d };
-    else if (corner === 'ne') rect = { x: roomW - o.w, y: 0, w: o.w, d: o.d };
-    else if (corner === 'sw') rect = { x: 0, y: roomD - o.d, w: o.w, d: o.d };
-    else rect = { x: roomW - o.w, y: roomD - o.d, w: o.w, d: o.d };
-    if (!rectInside(rect, roomW, roomD)) continue;
-    let ok = true;
-    for (const b of blockers) if (rectsOverlap(rect, b)) { ok = false; break; }
-    if (ok) return { ...rect, wall: 'corner-' + corner };
-  }
-  return null;
-}
-
-// Place centered/floating in the room (for dining tables)
-function placeFloating(piece, blockers, roomW, roomD, preferredZone) {
-  // preferredZone: 'center' (default), or biased toward a side
-  const orientations = piece.w === piece.d
-    ? [{ w: piece.w, d: piece.d }]
-    : [{ w: piece.w, d: piece.d }, { w: piece.d, d: piece.w }];
-
-  for (const o of orientations) {
-    // Ideal position: center of the room
-    const idealX = (roomW - o.w) / 2;
-    const idealY = (roomD - o.d) / 2;
-    // Try center first, then spiral outward
-    const candidates = [[idealX, idealY]];
-    for (let step = 6; step <= 60; step += 6) {
-      candidates.push([idealX + step, idealY], [idealX - step, idealY], [idealX, idealY + step], [idealX, idealY - step]);
-    }
-    for (const [cx, cy] of candidates) {
-      const rect = { x: cx, y: cy, w: o.w, d: o.d };
-      if (!rectInside(rect, roomW, roomD)) continue;
-      // Must maintain at least 24" from walls (dining table clearance)
-      const wallGap = 24;
-      if (rect.x < wallGap || rect.y < wallGap || rect.x + rect.w > roomW - wallGap || rect.y + rect.d > roomD - wallGap) continue;
-      let ok = true;
-      for (const b of blockers) if (rectsOverlap(rect, b)) { ok = false; break; }
-      if (ok) return { ...rect, wall: 'center' };
-    }
-  }
-  return null;
-}
-
-// Place dining chairs around a dining table.
-// count = total chairs; table = the placed table rect
-// Returns array of chair rects.
-function placeDiningChairs(count, chairPiece, table, blockers, roomW, roomD) {
-  const placed = [];
-  const isRound = Math.abs(table.w - table.d) < 6;
-  const gap = CLEARANCE.DINING_CHAIR_GAP;
-
-  if (isRound) {
-    // Round table — arrange chairs radially
-    const cx = table.x + table.w / 2;
-    const cy = table.y + table.d / 2;
-    const radius = Math.max(table.w, table.d) / 2 + gap + chairPiece.d / 2;
-    for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 * i) / count;
-      const chx = cx + Math.cos(angle) * radius - chairPiece.w / 2;
-      const chy = cy + Math.sin(angle) * radius - chairPiece.d / 2;
-      const rect = { x: chx, y: chy, w: chairPiece.w, d: chairPiece.d };
-      if (rectInside(rect, roomW, roomD) && !blockers.some(b => rectsOverlap(rect, b))) {
-        placed.push({ ...rect, label: 'Dining chair', type: 'dining-chair', catalogKey: 'dining_chair' });
-      }
-    }
-    return placed;
-  }
-
-  // Rectangular table — chairs on long sides + short sides
-  const isXLong = table.w > table.d;
-  const longSideLen = isXLong ? table.w : table.d;
-  const shortSideLen = isXLong ? table.d : table.w;
-
-  // Determine target chair distribution based on count and table size
-  // Try multiple distributions until one works
-  const distributions = [];
-  // First choice based on count
-  if (count <= 4) {
-    distributions.push({ perLong: Math.ceil(count / 2), perShort: 0 });
-    distributions.push({ perLong: Math.floor(count / 2), perShort: Math.ceil((count - Math.floor(count / 2) * 2) / 2) });
-  } else if (count <= 6) {
-    distributions.push({ perLong: 2, perShort: 1 });
-    distributions.push({ perLong: 3, perShort: 0 });
-  } else if (count <= 8) {
-    distributions.push({ perLong: 3, perShort: 1 });
-    distributions.push({ perLong: 2, perShort: 2 });
-    distributions.push({ perLong: 4, perShort: 0 });
-  } else if (count === 10) {
-    distributions.push({ perLong: 4, perShort: 1 });
-    distributions.push({ perLong: 3, perShort: 2 });
-  } else {
-    distributions.push({ perLong: Math.ceil((count - 2) / 2), perShort: 1 });
-  }
-
-  function attemptPlacement(perLong, perShort, count) {
-    const candidateChairs = [];
-    if (isXLong) {
-      // North side (chairs face south)
-      const northY = table.y - gap - chairPiece.d;
-      for (let i = 0; i < perLong; i++) {
-        const spacing = table.w / (perLong + 1);
-        const chx = table.x + spacing * (i + 1) - chairPiece.w / 2;
-        candidateChairs.push({ x: chx, y: northY, w: chairPiece.w, d: chairPiece.d });
-      }
-      // South side
-      const southY = table.y + table.d + gap;
-      for (let i = 0; i < perLong; i++) {
-        const spacing = table.w / (perLong + 1);
-        const chx = table.x + spacing * (i + 1) - chairPiece.w / 2;
-        candidateChairs.push({ x: chx, y: southY, w: chairPiece.w, d: chairPiece.d });
-      }
-      // West side (short)
-      const westX = table.x - gap - chairPiece.d;
-      for (let i = 0; i < perShort; i++) {
-        const spacing = table.d / (perShort + 1);
-        const chy = table.y + spacing * (i + 1) - chairPiece.w / 2;
-        candidateChairs.push({ x: westX, y: chy, w: chairPiece.d, d: chairPiece.w });
-      }
-      // East side (short)
-      const eastX = table.x + table.w + gap;
-      for (let i = 0; i < perShort; i++) {
-        const spacing = table.d / (perShort + 1);
-        const chy = table.y + spacing * (i + 1) - chairPiece.w / 2;
-        candidateChairs.push({ x: eastX, y: chy, w: chairPiece.d, d: chairPiece.w });
-      }
-    } else {
-      // Table is Y-long — west and east are long sides
-      const westX = table.x - gap - chairPiece.d;
-      for (let i = 0; i < perLong; i++) {
-        const spacing = table.d / (perLong + 1);
-        const chy = table.y + spacing * (i + 1) - chairPiece.w / 2;
-        candidateChairs.push({ x: westX, y: chy, w: chairPiece.d, d: chairPiece.w });
-      }
-      const eastX = table.x + table.w + gap;
-      for (let i = 0; i < perLong; i++) {
-        const spacing = table.d / (perLong + 1);
-        const chy = table.y + spacing * (i + 1) - chairPiece.w / 2;
-        candidateChairs.push({ x: eastX, y: chy, w: chairPiece.d, d: chairPiece.w });
-      }
-      const northY = table.y - gap - chairPiece.d;
-      for (let i = 0; i < perShort; i++) {
-        const spacing = table.w / (perShort + 1);
-        const chx = table.x + spacing * (i + 1) - chairPiece.w / 2;
-        candidateChairs.push({ x: chx, y: northY, w: chairPiece.w, d: chairPiece.d });
-      }
-      const southY = table.y + table.d + gap;
-      for (let i = 0; i < perShort; i++) {
-        const spacing = table.w / (perShort + 1);
-        const chx = table.x + spacing * (i + 1) - chairPiece.w / 2;
-        candidateChairs.push({ x: chx, y: southY, w: chairPiece.w, d: chairPiece.d });
-      }
-    }
-    // Try to place each candidate; return only those that fit
-    const result = [];
-    for (const c of candidateChairs) {
-      if (result.length >= count) break;
-      if (!rectInside(c, roomW, roomD)) continue;
-      if (blockers.some(b => rectsOverlap(c, b))) continue;
-      result.push({ ...c, label: 'Dining chair', type: 'dining-chair', catalogKey: 'dining_chair' });
-    }
-    return result;
-  }
-
-  // Try each distribution, keep the one that fits the most chairs
-  let best = [];
-  for (const dist of distributions) {
-    const attempt = attemptPlacement(dist.perLong, dist.perShort, count);
-    if (attempt.length > best.length) best = attempt;
-    if (best.length >= count) break;
-  }
-  return best;
-}
-
-// Normalize openings from 0-100 grid to real inches
-function normalizeOpenings(strategy, roomW, roomD) {
-  const scaleWall = (wall, val) => {
-    const len = (wall === 'north' || wall === 'south') ? roomW : roomD;
-    return (val / 100) * len;
-  };
-  const doors = (strategy.doors || []).map(d => ({ wall: d.wall, start: scaleWall(d.wall, d.start), end: scaleWall(d.wall, d.end), swing: d.swing || 'in-right' }));
-  const windows = (strategy.windows || []).map(w => ({ wall: w.wall, start: scaleWall(w.wall, w.start), end: scaleWall(w.wall, w.end) }));
-  const openings = (strategy.openings || []).map(o => ({ wall: o.wall, start: scaleWall(o.wall, o.start), end: scaleWall(o.wall, o.end) }));
-  return { doors, windows, openings };
-}
-
-// ============================================================
-// MAIN LAYOUT ENGINE
-// ============================================================
-function computeLayout(strategy, roomW, roomD) {
-  const notes = [];
-  const placed = [];
-
-  // Blockers: doors + openings
-  const doorBlockers = strategy.doors.map(d => doorSwingRect(d, roomW, roomD));
-  const openingBlockers = (strategy.openings || []).map(o => openingClearanceRect(o, roomW, roomD));
-  const passageBlockers = [...doorBlockers, ...openingBlockers];
-
-  const walls = ['north','east','south','west'];
-  const wallBlocked = (wall) => strategy.doors.some(d => d.wall === wall) || (strategy.openings || []).some(o => o.wall === wall);
-
-  // Categorize furniture in strategy.assignments
-  const rugAssignments = strategy.assignments.filter(a => FURNITURE_CATALOG[a.catalogKey]?.isRug);
-  const centerAssignments = strategy.assignments.filter(a => FURNITURE_CATALOG[a.catalogKey]?.isCenter);
-  const cornerAssignments = strategy.assignments.filter(a => FURNITURE_CATALOG[a.catalogKey]?.wallRequired === 'corner');
-  const anchorAssignments = strategy.assignments.filter(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return false;
-    if (it.isRug || it.isCenter || it.wallRequired === 'corner') return false;
-    return it.type === 'bed' || it.type === 'sofa' || it.type === 'desk';
-  });
-  const attachedAssignments = strategy.assignments.filter(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return false;
-    if (it.isRug || it.isCenter || it.wallRequired === 'corner') return false;
-    return it.type === 'nightstand' || it.type === 'coffee-table' || it.type === 'side-table' ||
-           it.type === 'dining-chair' || (it.pairsWith && !anchorAssignments.some(x => x.catalogKey === a.catalogKey));
-  });
-  const otherAssignments = strategy.assignments.filter(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return false;
-    return !rugAssignments.includes(a) && !centerAssignments.includes(a) && !cornerAssignments.includes(a) && !anchorAssignments.includes(a) && !attachedAssignments.includes(a);
-  });
-
-  // ── Step 1: Reserve area for the primary center piece (dining table) so rugs can center on it
-  const centerReservations = [];
-  centerAssignments.forEach(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return;
-    // Reserve a virtual "table + chairs" zone in the middle
-    const chairsAssigned = strategy.assignments.filter(x => FURNITURE_CATALOG[x.catalogKey]?.type === 'dining-chair').length;
-    const chairPiece = FURNITURE_CATALOG['dining_chair'];
-    const chairExtent = chairsAssigned > 0 ? chairPiece.d + 6 : 0;
-    const virtualW = it.w + chairExtent * 2;
-    const virtualD = it.d + chairExtent * 2;
-    centerReservations.push({ w: virtualW, d: virtualD, catalogKey: a.catalogKey });
-  });
-
-  // ── Step 2: Place rugs first (they underlay everything)
-  // Rugs prefer to center on the primary anchor (table/sofa/bed) rather than the room center,
-  // but they'll shrink or shift if needed to fit.
-  rugAssignments.forEach(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return;
-
-    // Reserve center for center-anchor rooms — rug goes under table
-    // Otherwise rug goes centered in room
-    let rugW = it.w, rugD = it.d;
-
-    // If rug too big for room, shrink it (with margin)
-    rugW = Math.min(rugW, roomW - 24);
-    rugD = Math.min(rugD, roomD - 24);
-
-    // Try to center on the reserved center piece if there is one
-    let cx, cy;
-    if (centerReservations.length > 0) {
-      const res = centerReservations[0];
-      // Room center aligned with where the table will be
-      cx = (roomW - rugW) / 2;
-      cy = (roomD - rugD) / 2;
-    } else {
-      cx = (roomW - rugW) / 2;
-      cy = (roomD - rugD) / 2;
-    }
-    let rug = { x: cx, y: cy, w: rugW, d: rugD, type: 'rug', label: it.label, catalogKey: a.catalogKey };
-
-    // If rug overlaps a passage blocker, first try to shrink it just enough to clear
-    passageBlockers.forEach(pb => {
-      if (rectsOverlap(rug, pb)) {
-        const isVerticalWall = pb.d > pb.w;
-        if (isVerticalWall) {
-          // Shrink or shift horizontally
-          // How much does the rug intrude into the pb?
-          const intrusion = Math.min(rug.x + rug.w, pb.x + pb.w) - Math.max(rug.x, pb.x);
-          if (intrusion > 0 && intrusion < rug.w) {
-            // Try shrinking width
-            const pbCenterX = pb.x + pb.w / 2;
-            if (pbCenterX >= roomW / 2) {
-              // Opening on east — shrink rug from right side
-              const newW = pb.x - rug.x - 4;
-              if (newW >= 36) rug.w = newW;
-              else {
-                // Can't shrink enough — shift left
-                const newX = Math.max(0, pb.x - rug.w - 4);
-                if (newX >= 0) rug.x = newX;
-              }
-            } else {
-              // Opening on west
-              const newX = pb.x + pb.w + 4;
-              const newW = rug.x + rug.w - newX;
-              if (newW >= 36) { rug.x = newX; rug.w = newW; }
-              else {
-                rug.x = Math.min(roomW - rug.w, pb.x + pb.w + 4);
-              }
-            }
-          }
-        } else {
-          // Horizontal wall — shrink or shift vertically
-          const intrusion = Math.min(rug.y + rug.d, pb.y + pb.d) - Math.max(rug.y, pb.y);
-          if (intrusion > 0 && intrusion < rug.d) {
-            const pbCenterY = pb.y + pb.d / 2;
-            if (pbCenterY >= roomD / 2) {
-              const newD = pb.y - rug.y - 4;
-              if (newD >= 36) rug.d = newD;
-              else {
-                const newY = Math.max(0, pb.y - rug.d - 4);
-                if (newY >= 0) rug.y = newY;
-              }
-            } else {
-              const newY = pb.y + pb.d + 4;
-              const newD = rug.y + rug.d - newY;
-              if (newD >= 36) { rug.y = newY; rug.d = newD; }
-              else {
-                rug.y = Math.min(roomD - rug.d, pb.y + pb.d + 4);
-              }
-            }
-          }
-        }
-      }
-    });
-
-    if (rectInside(rug, roomW, roomD) && rug.w >= 36 && rug.d >= 36) {
-      placed.push(rug);
-    } else {
-      notes.push('The ' + it.label + ' was too large for this room and was omitted.');
-    }
-  });
-
-  // ── Step 3: Place center pieces (dining tables float in room center)
-  centerAssignments.forEach(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return;
-    const blockers = [...placed.filter(p => p.type !== 'rug'), ...passageBlockers];
-    let placement = placeFloating(it, blockers, roomW, roomD);
-    if (!placement) {
-      // Fallback: try smaller virtual clearance
-      placement = placeFloating(it, blockers.filter(b => !passageBlockers.includes(b)), roomW, roomD);
-    }
-    if (placement) {
-      placed.push({ ...placement, type: it.type, label: it.label, catalogKey: a.catalogKey });
-    } else {
-      notes.push('The ' + it.label + ' could not fit as a floating piece in the room and was omitted.');
-    }
-  });
-
-  // ── Step 4: Place corner pieces (sectionals)
-  cornerAssignments.forEach(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return;
-    const blockers = [...placed.filter(p => p.type !== 'rug'), ...passageBlockers];
-    // Prefer corner Claude assigned, else try each
-    const preferred = a.corner || null;
-    const cornerOrder = preferred ? [preferred] : ['nw','ne','sw','se'];
-    let placement = null;
-    for (const c of cornerOrder) {
-      // Skip corners where both walls have doors/openings
-      const walls = { nw: ['north','west'], ne: ['north','east'], sw: ['south','west'], se: ['south','east'] };
-      if (walls[c].every(w => wallBlocked(w))) continue;
-      placement = placeInCorner(it, c, blockers, roomW, roomD);
-      if (placement) break;
-    }
-    if (!placement) {
-      // Try any corner
-      for (const c of ['nw','ne','sw','se']) {
-        placement = placeInCorner(it, c, blockers, roomW, roomD);
-        if (placement) break;
-      }
-    }
-    if (placement) {
-      placed.push({ ...placement, type: it.type, label: it.label, catalogKey: a.catalogKey });
-    } else {
-      notes.push('The ' + it.label + ' did not fit in any corner and was omitted.');
-    }
-  });
-
-  // ── Step 5: Place anchors (bed, sofa, desk against walls, never door walls)
-  anchorAssignments.forEach(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return;
-    const blockers = [...placed.filter(p => p.type !== 'rug').map(b => inflate(b, 10)), ...passageBlockers];
-    const preferredWalls = a.wall ? [a.wall] : walls;
-    // Filter out walls with doors/openings for beds/sofas
-    const safeWalls = preferredWalls.filter(w => !wallBlocked(w));
-    let placement = null;
-    for (const wall of safeWalls) {
-      placement = placeAgainstWall(it, wall, blockers, roomW, roomD);
-      if (placement) break;
-    }
-    if (!placement) {
-      // Retry allowing door walls as last resort
-      for (const wall of walls) {
-        placement = placeAgainstWall(it, wall, blockers, roomW, roomD);
-        if (placement) break;
-      }
-    }
-    if (placement) {
-      placed.push({ ...placement, type: it.type, label: it.label, catalogKey: a.catalogKey });
-    } else {
-      notes.push('The ' + it.label + ' could not fit and was omitted.');
-    }
-  });
-
-  // ── Step 6: Place attached pieces
-  attachedAssignments.forEach(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return;
-    let placement = null;
-    const blockers = [...placed.filter(p => p.type !== 'rug'), ...passageBlockers];
-
-    // Nightstand next to bed
-    if (it.type === 'nightstand') {
-      const bed = placed.find(p => p.type === 'bed' && !p.hasNS_left) || placed.find(p => p.type === 'bed');
-      if (bed) {
-        const bedWall = bed.wall;
-        const candidates = [];
-        if (bedWall === 'north') {
-          candidates.push({ x: bed.x - it.w - 3, y: bed.y, w: it.w, d: it.d, side: 'left' });
-          candidates.push({ x: bed.x + bed.w + 3, y: bed.y, w: it.w, d: it.d, side: 'right' });
-        } else if (bedWall === 'south') {
-          candidates.push({ x: bed.x - it.w - 3, y: bed.y + bed.d - it.d, w: it.w, d: it.d, side: 'left' });
-          candidates.push({ x: bed.x + bed.w + 3, y: bed.y + bed.d - it.d, w: it.w, d: it.d, side: 'right' });
-        } else if (bedWall === 'west') {
-          candidates.push({ x: bed.x, y: bed.y - it.d - 3, w: it.w, d: it.d, side: 'left' });
-          candidates.push({ x: bed.x, y: bed.y + bed.d + 3, w: it.w, d: it.d, side: 'right' });
-        } else if (bedWall === 'east') {
-          candidates.push({ x: bed.x + bed.w - it.w, y: bed.y - it.d - 3, w: it.w, d: it.d, side: 'left' });
-          candidates.push({ x: bed.x + bed.w - it.w, y: bed.y + bed.d + 3, w: it.w, d: it.d, side: 'right' });
-        }
-        // Prefer the side that doesn't have a nightstand already
-        for (const c of candidates) {
-          if (bed['hasNS_' + c.side]) continue;
-          if (!rectInside(c, roomW, roomD)) continue;
-          if (blockers.some(b => rectsOverlap(c, b))) continue;
-          placement = { x: c.x, y: c.y, w: c.w, d: c.d };
-          bed['hasNS_' + c.side] = true;
-          break;
-        }
-      }
-    }
-
-    // Coffee table in front of sofa
-    if (it.type === 'coffee-table') {
-      const sofa = placed.find(p => p.type === 'sofa' || p.type === 'sectional');
-      if (sofa) {
-        const wall = sofa.wall;
-        let c;
-        if (wall === 'north')      c = { x: sofa.x + (sofa.w - it.w)/2, y: sofa.y + sofa.d + CLEARANCE.SOFA_COFFEE, w: it.w, d: it.d };
-        else if (wall === 'south') c = { x: sofa.x + (sofa.w - it.w)/2, y: sofa.y - CLEARANCE.SOFA_COFFEE - it.d, w: it.w, d: it.d };
-        else if (wall === 'west')  c = { x: sofa.x + sofa.w + CLEARANCE.SOFA_COFFEE, y: sofa.y + (sofa.d - it.d)/2, w: it.w, d: it.d };
-        else if (wall === 'east')  c = { x: sofa.x - CLEARANCE.SOFA_COFFEE - it.w, y: sofa.y + (sofa.d - it.d)/2, w: it.w, d: it.d };
-        else if (wall && wall.startsWith('corner-')) {
-          // Sectional in corner — coffee table goes at inside corner
-          const corner = wall.slice(-2);
-          const insideCornerX = corner === 'nw' || corner === 'sw' ? sofa.x + sofa.w : sofa.x - it.w;
-          const insideCornerY = corner === 'nw' || corner === 'ne' ? sofa.y + sofa.d : sofa.y - it.d;
-          // Place coffee table in the L opening
-          if (corner === 'nw') c = { x: sofa.w - it.w - 6, y: sofa.d + 6, w: it.w, d: it.d };
-          else if (corner === 'ne') c = { x: sofa.x + 6, y: sofa.d + 6, w: it.w, d: it.d };
-          else if (corner === 'sw') c = { x: sofa.w - it.w - 6, y: sofa.y - it.d - 6, w: it.w, d: it.d };
-          else c = { x: sofa.x + 6, y: sofa.y - it.d - 6, w: it.w, d: it.d };
-        }
-        if (c && rectInside(c, roomW, roomD) && !blockers.some(b => rectsOverlap(c, b))) {
-          placement = c;
-        }
-      }
-    }
-
-    // Dining chair — placed en-masse via placeDiningChairs, not here
-    if (it.type === 'dining-chair') {
-      // Skip — handled below in bulk
-      placement = null;
-      return; // don't push individual chair to notes
-    }
-
-    // Side table — next to a chair or sofa
-    if (it.type === 'side-table') {
-      const target = placed.find(p => (p.type === 'chair' || p.type === 'sofa') && !p.hasSideTable);
-      if (target) {
-        const candidates = [
-          { x: target.x + target.w + 4, y: target.y, w: it.w, d: it.d },
-          { x: target.x - it.w - 4, y: target.y, w: it.w, d: it.d }
-        ];
-        for (const c of candidates) {
-          if (!rectInside(c, roomW, roomD)) continue;
-          if (blockers.some(b => rectsOverlap(c, b))) continue;
-          placement = c;
-          target.hasSideTable = true;
-          break;
-        }
-      }
-    }
-
-    // Office chair — in front of desk
-    if (it.pairsWith === 'desk' && it.type === 'chair') {
-      const desk = placed.find(p => p.type === 'desk');
-      if (desk) {
-        const wall = desk.wall;
-        let c;
-        if (wall === 'north')      c = { x: desk.x + (desk.w - it.w)/2, y: desk.y + desk.d + 6, w: it.w, d: it.d };
-        else if (wall === 'south') c = { x: desk.x + (desk.w - it.w)/2, y: desk.y - 6 - it.d, w: it.w, d: it.d };
-        else if (wall === 'west')  c = { x: desk.x + desk.w + 6, y: desk.y + (desk.d - it.d)/2, w: it.w, d: it.d };
-        else if (wall === 'east')  c = { x: desk.x - 6 - it.w, y: desk.y + (desk.d - it.d)/2, w: it.w, d: it.d };
-        if (c && rectInside(c, roomW, roomD) && !blockers.some(b => rectsOverlap(c, b))) {
-          placement = c;
-        }
-      }
-    }
-
-    // Bench at foot of bed
-    if (a.catalogKey === 'bench_bed') {
-      const bed = placed.find(p => p.type === 'bed');
-      if (bed) {
-        const wall = bed.wall;
-        let c;
-        if (wall === 'north')      c = { x: bed.x + (bed.w - it.w)/2, y: bed.y + bed.d + 3, w: it.w, d: it.d };
-        else if (wall === 'south') c = { x: bed.x + (bed.w - it.w)/2, y: bed.y - 3 - it.d, w: it.w, d: it.d };
-        else if (wall === 'west')  c = { x: bed.x + bed.w + 3, y: bed.y + (bed.d - it.d)/2, w: it.d, d: it.w };
-        else if (wall === 'east')  c = { x: bed.x - 3 - it.d, y: bed.y + (bed.d - it.d)/2, w: it.d, d: it.w };
-        if (c && rectInside(c, roomW, roomD) && !blockers.some(b => rectsOverlap(c, b))) {
-          placement = c;
-        }
-      }
-    }
-
-    if (placement) {
-      placed.push({ x: placement.x, y: placement.y, w: placement.w, d: placement.d, type: it.type, label: it.label, catalogKey: a.catalogKey });
-    } else {
-      // Fallback: anywhere free
-      const bl = [...placed.filter(p => p.type !== 'rug'), ...passageBlockers];
-      const fallback = placeAnywhereFree(it, bl, roomW, roomD);
-      if (fallback) placed.push({ ...fallback, type: it.type, label: it.label, catalogKey: a.catalogKey });
-      else notes.push('The ' + it.label + ' did not fit and was omitted.');
-    }
-  });
-
-  // ── Step 7a: Place wall-required storage BEFORE dining chairs, so buffets/bookshelves claim wall space first
-  const wallStorageAssignments = otherAssignments.filter(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    return it && it.wallRequired === 'back';
-  });
-  const remainingOthers = otherAssignments.filter(a => !wallStorageAssignments.includes(a));
-
-  wallStorageAssignments.forEach(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return;
-    let placement = null;
-    const blockers = [...placed.filter(p => p.type !== 'rug').map(b => inflate(b, 4)), ...passageBlockers];
-    const wallsPref = walls.sort((x, y) => (wallBlocked(x) ? 1 : 0) - (wallBlocked(y) ? 1 : 0));
-    const tryWalls = a.wall ? [a.wall, ...wallsPref.filter(w => w !== a.wall)] : wallsPref;
-    for (const wall of tryWalls) {
-      placement = placeAgainstWall(it, wall, blockers, roomW, roomD);
-      if (placement) break;
-    }
-    if (placement) {
-      placed.push({ ...placement, type: it.type, label: it.label, catalogKey: a.catalogKey });
-    } else {
-      notes.push('The ' + it.label + ' did not fit and was omitted.');
-    }
-  });
-
-  // ── Step 7b: Place dining chairs around dining table
-  const diningTable = placed.find(p => p.type === 'dining-table');
-  const diningChairCount = attachedAssignments.filter(a => FURNITURE_CATALOG[a.catalogKey]?.type === 'dining-chair').length;
-  if (diningTable && diningChairCount > 0) {
-    const chairPiece = FURNITURE_CATALOG['dining_chair'];
-    const blockers = [...placed.filter(p => p.type !== 'rug' && p !== diningTable), ...passageBlockers];
-    const chairs = placeDiningChairs(diningChairCount, chairPiece, diningTable, blockers, roomW, roomD);
-    chairs.forEach(c => placed.push(c));
-    if (chairs.length < diningChairCount) {
-      notes.push((diningChairCount - chairs.length) + ' dining chair(s) could not fit around the table and were omitted.');
-    }
-  }
-
-  // ── Step 8: Place remaining pieces (non-wall-required: lamps, plants, chairs, etc.)
-  remainingOthers.forEach(a => {
-    const it = FURNITURE_CATALOG[a.catalogKey];
-    if (!it) return;
-    let placement = null;
-    const blockers = [...placed.filter(p => p.type !== 'rug').map(b => inflate(b, 6)), ...passageBlockers];
-
-    if (it.wallRequired === 'back' || it.type === 'chair' || it.type === 'lamp' || it.type === 'plant' || it.type === 'bench') {
-      const wallsPref = walls.sort((x, y) => (wallBlocked(x) ? 1 : 0) - (wallBlocked(y) ? 1 : 0));
-      const tryWalls = a.wall ? [a.wall, ...wallsPref.filter(w => w !== a.wall)] : wallsPref;
-      for (const wall of tryWalls) {
-        placement = placeAgainstWall(it, wall, blockers, roomW, roomD);
-        if (placement) break;
-      }
-    }
-    if (!placement) {
-      const bl = [...placed.filter(p => p.type !== 'rug'), ...passageBlockers];
-      placement = placeAnywhereFree(it, bl, roomW, roomD);
-    }
-    if (placement) {
-      placed.push({ ...placement, type: it.type, label: it.label, catalogKey: a.catalogKey });
-    } else {
-      notes.push('The ' + it.label + ' did not fit and was omitted.');
-    }
-  });
-
-  return { pieces: placed, notes };
-}
-
-function placeAnywhereFree(piece, blockers, roomW, roomD) {
-  const orientations = piece.w === piece.d ? [{ w: piece.w, d: piece.d }] : [{ w: piece.w, d: piece.d }, { w: piece.d, d: piece.w }];
-  for (const o of orientations) {
-    for (let y = 6; y + o.d + 6 <= roomD; y += 6) {
-      for (let x = 6; x + o.w + 6 <= roomW; x += 6) {
-        const rect = { x, y, w: o.w, d: o.d };
-        let ok = true;
-        for (const b of blockers) if (rectsOverlap(rect, b)) { ok = false; break; }
-        if (ok) return rect;
-      }
-    }
-  }
-  return null;
-}
-
-// Validator
-function validateLayout(pieces, blockerZones) {
-  const errors = [];
-  for (let i = 0; i < pieces.length; i++) {
-    for (let j = i + 1; j < pieces.length; j++) {
-      const a = pieces[i], b = pieces[j];
-      if (a.type === 'rug' || b.type === 'rug') continue;
-      // Dining chairs are allowed to overlap the dining table's swept area — but not the table itself
-      if (a.type === 'dining-chair' && b.type === 'dining-table') {
-        if (rectsOverlap(inflate(a, -2), b)) errors.push('Chair overlaps table core: ' + a.label);
-        continue;
-      }
-      if (b.type === 'dining-chair' && a.type === 'dining-table') {
-        if (rectsOverlap(inflate(b, -2), a)) errors.push('Chair overlaps table core: ' + b.label);
-        continue;
-      }
-      if (rectsOverlap(a, b)) errors.push('Overlap: ' + a.label + ' and ' + b.label);
-    }
-  }
-  for (const p of pieces) {
-    if (p.type === 'rug') continue;
-    for (const z of blockerZones) {
-      if (rectsOverlap(p, z)) errors.push('Blocks passage: ' + p.label);
-    }
-  }
-  return errors;
-}
-
-
-// ============================================================
-// APP STATE + STEP FLOW
-// ============================================================
+<script>
 const TOTAL_STEPS = 5;
-const state = {
-  roomType: null,
-  lifestyle: [],
-  existingFurniture: '',
-  newFurniture: ''
-};
+const state = { roomType: null, lifestyle: [] };
 
 function updateProgress(step) {
   document.getElementById('progressLabel').textContent = 'STEP ' + step + ' OF ' + TOTAL_STEPS;
@@ -1443,6 +256,7 @@ function goNext(current) {
   showStep(current + 1);
 }
 function goBack(current) { showStep(current - 1); }
+
 function selectSingle(el, key) {
   el.closest('.chip-group').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
@@ -1460,9 +274,6 @@ function toggleChip(el) {
   }
 }
 
-// ============================================================
-// GENERATE
-// ============================================================
 async function generateLayout() {
   const btn = document.getElementById('generateBtn');
   const loading = document.getElementById('loadingState');
@@ -1473,154 +284,63 @@ async function generateLayout() {
   document.getElementById('quizArea').style.display = 'none';
   loading.style.display = 'block';
 
-  const lengthRaw = parseFloat(document.getElementById('roomLength').value);
-  const widthRaw = parseFloat(document.getElementById('roomWidth').value);
-  const defaults = DEFAULT_ROOM_SIZES[state.roomType] || { length: 12, width: 14 };
-  const usedDefaults = !lengthRaw || !widthRaw;
-  const lengthFt = lengthRaw || defaults.length;
-  const widthFt = widthRaw || defaults.width;
-  const roomLengthIn = lengthFt * 12;
-  const roomWidthIn = widthFt * 12;
-  const windowDoorsText = document.getElementById('windowDoors').value.trim();
+  const length = document.getElementById('roomLength').value;
+  const width = document.getElementById('roomWidth').value;
+  const windowDoors = document.getElementById('windowDoors').value.trim();
+  const existing = document.getElementById('existingFurniture').value.trim();
+  const newFurniture = document.getElementById('newFurniture').value.trim();
   const lifestyleNotes = document.getElementById('lifestyleNotes').value.trim();
-  const lifestyleStr = state.lifestyle.join(', ');
-  const existingRaw = document.getElementById('existingFurniture').value.trim();
-  const newRaw = document.getElementById('newFurniture').value.trim();
+  const dimensionStr = (length && width) ? length + ' ft \u00d7 ' + width + ' ft' : null;
+  const lifestyleStr = state.lifestyle.length > 0 ? state.lifestyle.join(', ') : null;
 
-  // Parse furniture text
-  const parsed = parseFurnitureText(existingRaw, newRaw);
-  const furnitureList = parsed.items.map(({ catalogKey, count }) => {
-    const item = FURNITURE_CATALOG[catalogKey];
-    return { catalogKey, label: item.label, type: item.type, count };
-  });
-  const furnitureDesc = furnitureList.map(f => (f.count > 1 ? f.count + '× ' + f.label : f.label)).join(', ');
-
-  // Parse openings from the user's text
-  const parsedOpenings = parseOpenings(windowDoorsText);
-
-  const parsingNotes = [];
-  if (parsed.unmatched.length > 0) {
-    parsingNotes.push('We couldn\'t match "' + parsed.unmatched.join('", "') + '" to our furniture library, so ' + (parsed.unmatched.length === 1 ? 'it was' : 'they were') + ' left out of the floor plan. The written recommendation still accounts for ' + (parsed.unmatched.length === 1 ? 'it' : 'them') + '.');
-  }
-
-  // Build the prompt — Claude assigns walls/corners, but coordinates come from JS
-  const prompt = 'You are an expert interior designer. Return ONLY a valid JSON object describing your design strategy for one layout. Do NOT compute or return coordinates — layout math is handled separately.\n\n' +
+  const prompt = 'You are an expert interior designer helping a homeowner think through the best layout for their space. Provide exactly ONE well-considered layout recommendation.\n\n' +
     'Room details:\n' +
     '- Type: ' + state.roomType + '\n' +
-    '- Dimensions: ' + widthFt + 'ft wide (east-west) by ' + lengthFt + 'ft deep (north-south)' + (usedDefaults ? ' (ASSUMED — user did not provide)' : '') + '\n' +
-    '- User\'s notes about openings: ' + (windowDoorsText || 'not specified') + '\n' +
-    '- Furniture (parsed): ' + furnitureDesc + '\n' +
-    '- User\'s original words about existing furniture: "' + (existingRaw || 'not specified') + '"\n' +
-    '- User\'s original words about furniture to add: "' + (newRaw || 'not specified') + '"\n' +
-    (parsed.unmatched.length > 0 ? '- Items we couldn\'t match (mention naturally in prose if relevant): ' + parsed.unmatched.join(', ') + '\n' : '') +
-    '- Lifestyle / usage: ' + (lifestyleStr || 'not specified') + '\n' +
-    '- Additional notes: ' + (lifestyleNotes || 'none') + '\n\n' +
-    'The room is oriented with NORTH at the top, SOUTH at the bottom, EAST right, WEST left.\n' +
-    'For each door, window, or opening, return "start" and "end" positions on a 0-100 scale along its wall. Openings are wide arches or cased openings with no door.\n' +
-    'For each furniture piece, specify:\n' +
-    '  - "wall": "north"|"south"|"east"|"west" for pieces that go against a wall\n' +
-    '  - "corner": "nw"|"ne"|"sw"|"se" for sectionals (piece has wallRequired: corner)\n' +
-    '  - omit both for dining tables and other center-floating pieces\n\n' +
-    'Return exactly this schema:\n' +
+    '- Dimensions: ' + (dimensionStr || 'Not provided \u2014 give advice in relative terms and note the assumption') + '\n' +
+    '- Windows and doors: ' + (windowDoors || 'Not specified \u2014 assume standard placement') + '\n' +
+    '- Existing furniture to keep: ' + (existing || 'Not specified') + '\n' +
+    '- Furniture to add: ' + (newFurniture || 'None mentioned') + '\n' +
+    '- Lifestyle / usage: ' + (lifestyleStr || 'Not specified') + '\n' +
+    '- Additional context: ' + (lifestyleNotes || 'None') + '\n\n' +
+    'Return ONLY a valid JSON object. No markdown, no backticks, no commentary before or after. Use this exact structure:\n\n' +
     '{\n' +
-    '  "layoutName": "An evocative name",\n' +
-    '  "summary": "One or two sentences.",\n' +
-    '  "placement": "3-4 sentences of specific placement guidance in prose.",\n' +
-    '  "pros": ["pro 1", "pro 2", "pro 3"],\n' +
-    '  "cons": ["trade-off 1", "trade-off 2"],\n' +
-    '  "bestFor": "One sentence starting with This works best if...",\n' +
-    '  "doors": [ { "wall": "south", "start": 5, "end": 20, "swing": "in-right" } ],\n' +
-    '  "windows": [ { "wall": "north", "start": 30, "end": 60 } ],\n' +
-    '  "openings": [ { "wall": "east", "start": 30, "end": 80 } ],\n' +
-    '  "assignments": [\n' +
-    '    { "catalogKey": "bed_queen", "wall": "north" },\n' +
-    '    { "catalogKey": "nightstand", "wall": "north" }\n' +
-    '  ]\n' +
+    '  "name": "An evocative, specific name (e.g. The North Light Retreat, The Symmetrical Bedroom, The Corner Command)",\n' +
+    '  "summary": "One or two sentences describing the overall approach and feel of this layout.",\n' +
+    '  "placement": "3\u20134 sentences of specific furniture placement advice, referencing actual walls, windows, and doors. Be detailed about where each piece goes and why.",\n' +
+    '  "pros": ["Concrete pro 1", "Concrete pro 2", "Concrete pro 3"],\n' +
+    '  "cons": ["Honest trade-off 1", "Honest trade-off 2"],\n' +
+    '  "best_for": "One sentence starting with This works best if... that tells the homeowner when this layout is the right call."\n' +
     '}\n\n' +
-    'CATALOG KEYS you MUST use (do not invent new ones): ' + furnitureList.map(f => f.catalogKey).join(', ') + '\n' +
     'Rules:\n' +
-    '- Beds, sofas, sectionals must NOT be assigned to a wall that has a door or wide opening.\n' +
-    '- Dining tables are always centered — do not assign a wall.\n' +
-    '- Sectionals go in a corner — always provide a "corner" value.\n' +
-    '- If lifestyle needs were mentioned, address at least one in the placement prose.\n' +
-    '- Do not use em dashes anywhere.';
+    '- Give the layout a distinctive evocative name, not a generic label\n' +
+    '- Make placement advice specific to the actual furniture pieces and room constraints mentioned\n' +
+    '- Pros and cons must be practical and honest, not generic cheerleader language\n' +
+    '- If lifestyle needs were mentioned (pets, kids, WFH, entertaining, etc.), address at least one directly in the placement prose\n' +
+    '- If dimensions were not provided, give useful relative placement guidance and note the assumption in the summary\n' +
+    '- Do not use em dashes anywhere';
 
   try {
     const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system: 'You are an interior design strategist. Return only valid JSON. No markdown, no backticks, no text before or after the JSON object.',
+        system: 'You are an expert interior designer. Respond only with valid JSON. No markdown, no backticks, no text before or after the JSON object.',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2000
+        max_tokens: 1500
       })
     });
+
     if (!res.ok) throw new Error('API returned ' + res.status);
     const data = await res.json();
-    if (!data.content || !data.content[0] || !data.content[0].text) throw new Error('Bad response shape');
+    if (!data.content || !data.content[0] || !data.content[0].text) {
+      throw new Error('Unexpected API response shape');
+    }
     const raw = data.content[0].text.trim().replace(/```json|```/g, '').trim();
-    const strategy = JSON.parse(raw);
-
-    // If Claude didn't return openings, use our parsed ones as fallback
-    if ((!strategy.openings || strategy.openings.length === 0) && parsedOpenings.openings.length > 0) {
-      strategy.openings = parsedOpenings.openings;
-    }
-    if ((!strategy.doors || strategy.doors.length === 0) && parsedOpenings.doors.length > 0) {
-      strategy.doors = parsedOpenings.doors;
-    }
-    if ((!strategy.windows || strategy.windows.length === 0) && parsedOpenings.windows.length > 0) {
-      strategy.windows = parsedOpenings.windows;
-    }
-
-    // Expand assignments to individual pieces (multiply by count)
-    const expanded = [];
-    strategy.assignments.forEach(a => {
-      const chosen = furnitureList.find(f => f.catalogKey === a.catalogKey);
-      const count = chosen ? chosen.count : 1;
-      for (let i = 0; i < count; i++) expanded.push({ ...a });
-    });
-    // Ensure every parsed piece appears at least once (Claude sometimes drops items)
-    furnitureList.forEach(f => {
-      const claudeCount = strategy.assignments.filter(a => a.catalogKey === f.catalogKey).length;
-      const neededMultiplier = f.count;
-      const gap = neededMultiplier - (expanded.filter(e => e.catalogKey === f.catalogKey).length);
-      for (let i = 0; i < gap; i++) expanded.push({ catalogKey: f.catalogKey });
-    });
-
-    const strategyExpanded = { ...strategy, assignments: expanded };
-
-    const normalized = normalizeOpenings(strategyExpanded, roomWidthIn, roomLengthIn);
-    strategyExpanded.doors = normalized.doors;
-    strategyExpanded.windows = normalized.windows;
-    strategyExpanded.openings = normalized.openings;
-
-    const result = computeLayout(strategyExpanded, roomWidthIn, roomLengthIn);
-
-    const doorBlockers = strategyExpanded.doors.map(d => doorSwingRect(d, roomWidthIn, roomLengthIn));
-    const openingBlockers = strategyExpanded.openings.map(o => openingClearanceRect(o, roomWidthIn, roomLengthIn));
-    const errors = validateLayout(result.pieces, [...doorBlockers, ...openingBlockers]);
-    if (errors.length > 0) console.warn('Layout warnings:', errors);
+    const layout = JSON.parse(raw);
 
     loading.style.display = 'none';
+    renderResults(layout, dimensionStr);
 
-    const finalLayout = {
-      name: strategy.layoutName || 'Your layout',
-      summary: strategy.summary || '',
-      placement: strategy.placement || '',
-      pros: strategy.pros || [],
-      cons: strategy.cons || [],
-      bestFor: strategy.bestFor || '',
-      pieces: result.pieces,
-      windows: strategyExpanded.windows,
-      doors: strategyExpanded.doors,
-      openings: strategyExpanded.openings,
-      notes: [...parsingNotes, ...result.notes],
-      usedDefaults: usedDefaults,
-      defaultsDesc: usedDefaults ? 'We assumed a ' + widthFt + 'ft × ' + lengthFt + 'ft room since dimensions weren\'t provided.' : '',
-      roomWidthIn: roomWidthIn,
-      roomLengthIn: roomLengthIn
-    };
-    renderResults(finalLayout);
   } catch (err) {
     console.error('Room layout error:', err);
     loading.style.display = 'none';
@@ -1630,173 +350,56 @@ async function generateLayout() {
   }
 }
 
-// ============================================================
-// RENDER
-// ============================================================
-function renderResults(layout) {
-  const dimStr = layout.usedDefaults ? '' : ' (' + (layout.roomWidthIn/12) + ' ft × ' + (layout.roomLengthIn/12) + ' ft)';
-  document.getElementById('resultsSubheading').textContent = 'A layout recommendation for your ' + state.roomType.toLowerCase() + dimStr + '.';
-  const cards = document.getElementById('layoutCards');
-  cards.innerHTML = '';
-  const prosHTML = layout.pros.map(p => '<li>' + escapeHTML(p) + '</li>').join('');
-  const consHTML = layout.cons.map(c => '<li>' + escapeHTML(c) + '</li>').join('');
-  const notesHTML = (layout.usedDefaults || layout.notes.length > 0)
-    ? '<div class="assumptions-note">' + [layout.defaultsDesc, ...layout.notes].filter(Boolean).map(escapeHTML).join(' ') + '</div>'
-    : '';
+function renderResults(layout, dimensionStr) {
+  const subheading = document.getElementById('resultsSubheading');
+  const dim = dimensionStr ? ' (' + dimensionStr + ')' : '';
+  subheading.textContent = 'A layout recommendation for your ' + state.roomType.toLowerCase() + dim + '.';
 
-  const card = document.createElement('div');
-  card.className = 'layout-card';
-  card.innerHTML =
+  const card = document.getElementById('layoutCard');
+  card.innerHTML = '';
+
+  const prosHTML = (layout.pros || []).map(p => '<li>' + escapeHTML(p) + '</li>').join('');
+  const consHTML = (layout.cons || []).map(c => '<li>' + escapeHTML(c) + '</li>').join('');
+
+  const el = document.createElement('div');
+  el.className = 'layout-card';
+  el.innerHTML =
     '<div class="layout-card-header">' +
       '<div class="layout-name">' + escapeHTML(layout.name) + '</div>' +
       '<div class="layout-summary">' + escapeHTML(layout.summary) + '</div>' +
     '</div>' +
     '<div class="layout-card-body">' +
-      '<div class="floorplan-label">Floor plan</div>' +
-      '<div class="floorplan-wrap">' + renderFloorplan(layout) + '</div>' +
-      notesHTML +
       '<div class="placement-label">Furniture placement</div>' +
       '<div class="placement-text">' + escapeHTML(layout.placement) + '</div>' +
       '<div class="pros-cons-grid">' +
-        '<div class="pros-block"><div class="pros-cons-label pros-label">What works</div><ul class="pros-list">' + prosHTML + '</ul></div>' +
-        '<div class="cons-block"><div class="pros-cons-label cons-label">Trade-offs</div><ul class="cons-list">' + consHTML + '</ul></div>' +
+        '<div class="pros-block">' +
+          '<div class="pros-cons-label pros-label">What works</div>' +
+          '<ul class="pros-list">' + prosHTML + '</ul>' +
+        '</div>' +
+        '<div class="cons-block">' +
+          '<div class="pros-cons-label cons-label">Trade-offs</div>' +
+          '<ul class="cons-list">' + consHTML + '</ul>' +
+        '</div>' +
       '</div>' +
-      '<div class="best-for"><strong>Best for:</strong> ' + escapeHTML(layout.bestFor) + '</div>' +
+      '<div class="best-for"><strong>Best for:</strong> ' + escapeHTML(layout.best_for) + '</div>' +
     '</div>';
-  cards.appendChild(card);
+  card.appendChild(el);
+
   const section = document.getElementById('resultsSection');
   section.style.display = 'block';
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-// SVG floor plan — neutral gray linework
-function renderFloorplan(layout) {
-  const roomW = layout.roomWidthIn;
-  const roomD = layout.roomLengthIn;
-  const PAD = 20;
-  const maxSize = 500;
-  const scale = Math.min(maxSize / roomW, maxSize / roomD);
-  const boxW = roomW * scale;
-  const boxD = roomD * scale;
-  const VB_W = boxW + PAD * 2;
-  const VB_H = boxD + PAD * 2;
-
-  const strokeMain = '#6b6560';
-  const strokeSub = '#a39d92';
-  const fillFurn = '#f5f0e8';
-
-  const S = (v) => v * scale;
-  const wallCoord = (wall, pos) => {
-    const p = pos * scale;
-    if (wall === 'north') return { x: PAD + p, y: PAD };
-    if (wall === 'south') return { x: PAD + p, y: PAD + boxD };
-    if (wall === 'west')  return { x: PAD, y: PAD + p };
-    return { x: PAD + boxW, y: PAD + p };
-  };
-
-  let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + VB_W + ' ' + VB_H + '" style="width:100%; height:auto; display:block; max-width:520px; margin:0 auto;">';
-  svg += '<rect x="' + PAD + '" y="' + PAD + '" width="' + boxW + '" height="' + boxD + '" fill="#ffffff" stroke="' + strokeMain + '" stroke-width="2.5"/>';
-
-  // Windows
-  (layout.windows || []).forEach(w => {
-    const s = wallCoord(w.wall, w.start);
-    const e = wallCoord(w.wall, w.end);
-    svg += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + e.x + '" y2="' + e.y + '" stroke="#ffffff" stroke-width="4"/>';
-    svg += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + e.x + '" y2="' + e.y + '" stroke="' + strokeMain + '" stroke-width="1.5" stroke-dasharray="4,2"/>';
-  });
-
-  // Openings (wide arches) — just a gap in the wall
-  (layout.openings || []).forEach(o => {
-    const s = wallCoord(o.wall, o.start);
-    const e = wallCoord(o.wall, o.end);
-    // Clear the wall segment (white overwrite)
-    svg += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + e.x + '" y2="' + e.y + '" stroke="#ffffff" stroke-width="6"/>';
-    // Small tick marks at ends to show wall termination
-    const tick = 6;
-    if (o.wall === 'north' || o.wall === 'south') {
-      svg += '<line x1="' + s.x + '" y1="' + (s.y - tick/2) + '" x2="' + s.x + '" y2="' + (s.y + tick/2) + '" stroke="' + strokeMain + '" stroke-width="1.5"/>';
-      svg += '<line x1="' + e.x + '" y1="' + (e.y - tick/2) + '" x2="' + e.x + '" y2="' + (e.y + tick/2) + '" stroke="' + strokeMain + '" stroke-width="1.5"/>';
-    } else {
-      svg += '<line x1="' + (s.x - tick/2) + '" y1="' + s.y + '" x2="' + (s.x + tick/2) + '" y2="' + s.y + '" stroke="' + strokeMain + '" stroke-width="1.5"/>';
-      svg += '<line x1="' + (e.x - tick/2) + '" y1="' + e.y + '" x2="' + (e.x + tick/2) + '" y2="' + e.y + '" stroke="' + strokeMain + '" stroke-width="1.5"/>';
-    }
-  });
-
-  // Doors with swing arc
-  (layout.doors || []).forEach(door => {
-    const s = wallCoord(door.wall, door.start);
-    const e = wallCoord(door.wall, door.end);
-    const doorLenIn = door.end - door.start;
-    const doorLen = doorLenIn * scale;
-    svg += '<line x1="' + s.x + '" y1="' + s.y + '" x2="' + e.x + '" y2="' + e.y + '" stroke="#ffffff" stroke-width="5"/>';
-    const swing = door.swing || 'in-right';
-    const isRight = swing.endsWith('right');
-    const hinge = isRight ? e : s;
-    const tip = isRight ? s : e;
-    let px = 0, py = 0;
-    if (door.wall === 'north') py = doorLen;
-    else if (door.wall === 'south') py = -doorLen;
-    else if (door.wall === 'west') px = doorLen;
-    else px = -doorLen;
-    const arcEnd = { x: hinge.x + px, y: hinge.y + py };
-    svg += '<path d="M ' + tip.x + ' ' + tip.y + ' A ' + doorLen + ' ' + doorLen + ' 0 0 1 ' + arcEnd.x + ' ' + arcEnd.y + '" fill="none" stroke="' + strokeSub + '" stroke-width="1" stroke-dasharray="3,2"/>';
-    svg += '<line x1="' + hinge.x + '" y1="' + hinge.y + '" x2="' + arcEnd.x + '" y2="' + arcEnd.y + '" stroke="' + strokeSub + '" stroke-width="1"/>';
-  });
-
-  // Rugs first
-  const rugs = layout.pieces.filter(p => p.type === 'rug');
-  const rest = layout.pieces.filter(p => p.type !== 'rug');
-  rugs.forEach(p => {
-    const x = PAD + S(p.x), y = PAD + S(p.y);
-    svg += '<rect x="' + x + '" y="' + y + '" width="' + S(p.w) + '" height="' + S(p.d) + '" fill="none" stroke="' + strokeSub + '" stroke-width="1" stroke-dasharray="4,3"/>';
-  });
-
-  // Furniture
-  rest.forEach(p => {
-    const x = PAD + S(p.x), y = PAD + S(p.y);
-    const w = S(p.w), h = S(p.d);
-    if (p.type === 'lamp' || p.type === 'plant') {
-      const r = Math.min(w, h) / 2;
-      svg += '<circle cx="' + (x + w/2) + '" cy="' + (y + h/2) + '" r="' + r + '" fill="' + fillFurn + '" stroke="' + strokeMain + '" stroke-width="1.2"/>';
-    } else {
-      svg += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + fillFurn + '" stroke="' + strokeMain + '" stroke-width="1.5"/>';
-      if (p.type === 'bed') {
-        const pillowD = Math.min(h, w) * 0.18;
-        let hx, hy, hw, hh;
-        if (p.wall === 'north')      { hx = x; hy = y; hw = w; hh = pillowD; }
-        else if (p.wall === 'south') { hx = x; hy = y + h - pillowD; hw = w; hh = pillowD; }
-        else if (p.wall === 'west')  { hx = x; hy = y; hw = pillowD; hh = h; }
-        else if (p.wall === 'east')  { hx = x + w - pillowD; hy = y; hw = pillowD; hh = h; }
-        if (hx != null) svg += '<rect x="' + hx + '" y="' + hy + '" width="' + hw + '" height="' + hh + '" fill="none" stroke="' + strokeSub + '" stroke-width="0.8"/>';
-      } else if (p.type === 'sofa' || p.type === 'sectional') {
-        const inset = 4;
-        let x1, y1, x2, y2;
-        if (p.wall === 'north')      { x1 = x + inset; y1 = y + h * 0.4; x2 = x + w - inset; y2 = y1; }
-        else if (p.wall === 'south') { x1 = x + inset; y1 = y + h * 0.6; x2 = x + w - inset; y2 = y1; }
-        else if (p.wall === 'west')  { x1 = x + w * 0.4; y1 = y + inset; x2 = x1; y2 = y + h - inset; }
-        else if (p.wall === 'east')  { x1 = x + w * 0.6; y1 = y + inset; x2 = x1; y2 = y + h - inset; }
-        if (x1 != null) svg += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + strokeSub + '" stroke-width="0.8"/>';
-      } else if (p.type === 'chair' || p.type === 'dining-chair') {
-        svg += '<line x1="' + (x + 2) + '" y1="' + (y + 3) + '" x2="' + (x + w - 2) + '" y2="' + (y + 3) + '" stroke="' + strokeSub + '" stroke-width="0.8"/>';
-      }
-    }
-  });
-
-  svg += '</svg>';
-  return svg;
 }
 
 function escapeHTML(str) {
   if (!str) return '';
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
 function resetTool() {
   state.roomType = null;
   state.lifestyle = [];
-  state.existingFurniture = '';
-  state.newFurniture = '';
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  ['roomLength','roomWidth','windowDoors','lifestyleNotes','existingFurniture','newFurniture'].forEach(id => document.getElementById(id).value = '');
+  ['roomLength','roomWidth','windowDoors','existingFurniture','newFurniture','lifestyleNotes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('generateBtn').disabled = false;
   document.getElementById('errorMessage').style.display = 'none';
   document.getElementById('step1Hint').style.display = 'none';
@@ -1805,7 +408,6 @@ function resetTool() {
   document.getElementById('quizArea').style.display = 'block';
   showStep(1);
 }
-
 </script>
 </body>
 </html>
