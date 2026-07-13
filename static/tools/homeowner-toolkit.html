@@ -229,12 +229,8 @@
 
     /* Three label tiers: full on desktop, tablet labels 601-900px, short on mobile */
     function updateLabels() {
-      var w = window.innerWidth;
       document.querySelectorAll('.tab-btn').forEach(function(btn) {
-        var label = w <= 600 ? btn.dataset.short
-                  : w <= 900 ? btn.dataset.tablet
-                  : btn.dataset.full;
-        btn.querySelector('span').textContent = label;
+        btn.querySelector('span').textContent = btn.dataset.full;
       });
       setTimeout(updateTabPaths, 50);
     }
