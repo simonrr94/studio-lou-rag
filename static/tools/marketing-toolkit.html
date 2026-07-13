@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketing Toolkit · Studio Lou</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: auto; }
+    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; }
+
+    .tab-bar {
+      display: flex;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      border-bottom: 2px solid #e8e2d9;
+      background: #FAF9F6;
+      padding: 0 8px;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+      flex-shrink: 0;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b6560;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 13px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      margin-bottom: -2px;
+      transition: color 0.15s;
+    }
+    .tab-btn.active { color: #582b36; border-bottom-color: #582b36; }
+    .tab-btn:hover:not(.active) { color: #433E3C; }
+
+    #toolFrame {
+      width: 100%;
+      border: none;
+      display: block;
+      min-height: 800px;
+      transition: height 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="tab-bar" id="tabBar">
+    <button class="tab-btn active" onclick="loadTool(this,'marketing-audit')">Marketing Audit</button>
+    <button class="tab-btn" onclick="loadTool(this,'bio-generator')">Platform Bio Generator</button>
+    <button class="tab-btn" onclick="loadTool(this,'content-brief')">Content Brief Generator</button>
+    <button class="tab-btn" onclick="loadTool(this,'hashtag-research')">Hashtag + Keyword Research</button>
+  </div>
+  <iframe id="toolFrame" src="https://studio-lou-rag.onrender.com/tools/marketing-audit" scrolling="no"></iframe>
+
+  <script>
+    var frame = document.getElementById('toolFrame');
+    var tabBar = document.getElementById('tabBar');
+    var lastH = 0;
+    var BASE = 'https://studio-lou-rag.onrender.com/tools/';
+
+    function loadTool(btn, name) {
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      frame.style.height = '800px';
+      lastH = 0;
+      frame.src = BASE + name;
+    }
+
+    function syncHeight() {
+      try {
+        var doc = frame.contentDocument || frame.contentWindow.document;
+        var h = Math.max(
+          doc.body.scrollHeight,
+          doc.documentElement.scrollHeight
+        );
+        if (h > 100 && h !== lastH) {
+          lastH = h;
+          frame.style.height = h + 'px';
+          var total = h + tabBar.offsetHeight + 4;
+          window.parent.postMessage({ height: total }, '*');
+        }
+      } catch(e) {
+        // cross-origin guard (shouldn't happen since same origin)
+      }
+    }
+
+    setInterval(syncHeight, 300);
+  </script>
+</body>
+</html>
