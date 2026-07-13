@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Homeowner Design Tools · Studio Lou</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: auto; }
+    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; }
+
+    /* Outer wrapper: holds the green line */
+    .tab-bar-outer {
+      position: relative;
+      background: #FAF9F6;
+      padding-top: 12px;
+      border-bottom: 3px solid #A6BE47;
+    }
+
+    /* Inner scrollable row */
+    .tab-bar {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      padding: 12px 24px 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+
+    /* filter on PARENT of clip-path element */
+    .tab-wrap {
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(-6px 0 5px rgba(0,0,0,0.18))
+              drop-shadow(6px 0 5px rgba(0,0,0,0.18))
+              drop-shadow(0 -3px 5px rgba(0,0,0,0.09));
+    }
+    .tab-wrap.is-active { z-index: 3; }
+
+    .tab-btn {
+      display: block;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #6b6560;
+      background: #ffffff;
+      border: none;
+      padding: 12px 36px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tab-btn span { display: inline-block; }
+    .tab-btn.active { background: #A6BE47; color: #fff; }
+    .tab-btn:hover:not(.active) { color: #433E3C; }
+
+    /* Scroll arrows — mobile only */
+    .tab-arrow {
+      display: none;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(67,62,60,0.42);
+      cursor: pointer;
+      font-size: 22px;
+      font-weight: 300;
+      color: #ffffff;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: opacity 0.2s;
+      line-height: 1;
+    }
+    .tab-arrow-left  { left: 6px; }
+    .tab-arrow-right { right: 6px; }
+    .tab-arrow.hidden { opacity: 0; pointer-events: none; }
+
+    .tab-fade-right {
+      display: none;
+      position: absolute;
+      right: 0; top: 0; bottom: 3px;
+      width: 72px;
+      background: linear-gradient(to right, transparent, #FAF9F6 80%);
+      pointer-events: none;
+      z-index: 5;
+    }
+    .tab-fade-left {
+      display: none;
+      position: absolute;
+      left: 0; top: 0; bottom: 3px;
+      width: 72px;
+      background: linear-gradient(to left, transparent, #FAF9F6 80%);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* Tablet (601-900px): stretch tabs to fill width */
+    @media (min-width: 601px) and (max-width: 900px) {
+      .tab-bar { overflow-x: visible; }
+      .tab-wrap { flex: 1; }
+      .tab-btn  { width: 100%; text-align: center; font-size: 14px; padding: 11px 16px; }
+    }
+
+    /* Mobile (<=600px): scroll + arrows */
+    @media (max-width: 600px) {
+      .tab-arrow { display: flex; }
+      .tab-fade-right, .tab-fade-left { display: block; }
+      .tab-btn { font-size: 13px; padding: 10px 20px; }
+    }
+
+    #toolFrame {
+      width: 100%;
+      border: none;
+      display: block;
+      min-height: 800px;
+      transition: height 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="tab-bar-outer" id="tabBar">
+    <div class="tab-bar" id="tabScroll">
+
+      <!-- TOOL 1: Design Style Quiz -->
+      <div class="tab-wrap is-active">
+        <button class="tab-btn active"
+          onclick="loadTool(this,'design-style-quiz')"
+          data-full="Design Style Quiz"
+          data-tablet="Style Quiz"
+          data-short="Style Quiz">
+          <span>Design Style Quiz</span>
+        </button>
+      </div>
+
+      <!-- TOOL 2: Color Palette Generator -->
+      <div class="tab-wrap">
+        <button class="tab-btn"
+          onclick="loadTool(this,'color-palette-generator')"
+          data-full="Color Palette Generator"
+          data-tablet="Color Palette"
+          data-short="Color">
+          <span>Color Palette Generator</span>
+        </button>
+      </div>
+
+      <!-- TOOL 3: Room Layout Helper -->
+      <div class="tab-wrap">
+        <button class="tab-btn"
+          onclick="loadTool(this,'room-layout-helper')"
+          data-full="Room Layout Helper"
+          data-tablet="Layout Helper"
+          data-short="Layout">
+          <span>Room Layout Helper</span>
+        </button>
+      </div>
+
+      <!-- TOOL 4: Renovation Budget Estimator -->
+      <div class="tab-wrap">
+        <button class="tab-btn"
+          onclick="loadTool(this,'renovation-budget-estimator')"
+          data-full="Renovation Budget Estimator"
+          data-tablet="Budget Estimator"
+          data-short="Budget">
+          <span>Renovation Budget Estimator</span>
+        </button>
+      </div>
+
+    </div>
+
+    <div class="tab-fade-left"  id="fadeLeft"></div>
+    <div class="tab-fade-right" id="fadeRight"></div>
+    <button class="tab-arrow tab-arrow-left hidden"  id="arrowLeft"  aria-label="Scroll tabs left">&#8249;</button>
+    <button class="tab-arrow tab-arrow-right"        id="arrowRight" aria-label="Scroll tabs right">&#8250;</button>
+  </div>
+
+  <iframe id="toolFrame" src="https://studio-lou-rag.onrender.com/tools/design-style-quiz" scrolling="no"></iframe>
+
+  <script>
+    var frame      = document.getElementById('toolFrame');
+    var tabBar     = document.getElementById('tabBar');
+    var tabScroll  = document.getElementById('tabScroll');
+    var arrowLeft  = document.getElementById('arrowLeft');
+    var arrowRight = document.getElementById('arrowRight');
+    var fadeLeft   = document.getElementById('fadeLeft');
+    var fadeRight  = document.getElementById('fadeRight');
+    var lastH = 0;
+    var BASE = 'https://studio-lou-rag.onrender.com/tools/';
+
+    function loadTool(btn, name) {
+      document.querySelectorAll('.tab-btn').forEach(function(b)  { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-wrap').forEach(function(w) { w.classList.remove('is-active'); });
+      btn.classList.add('active');
+      btn.closest('.tab-wrap').classList.add('is-active');
+      frame.style.height = '800px';
+      lastH = 0;
+      frame.src = BASE + name;
+    }
+
+    /* Rounded trapezoid clip-path — wider at bottom, opposite angles on each side */
+    function trapPath(w, h, inset, r) {
+      var L  = Math.sqrt(inset * inset + h * h);
+      var ux = inset / L, uy = h / L;
+      var tlx0 = inset - ux * r, tly0 = uy * r;
+      var tlx1 = inset + r,      tly1 = 0;
+      var trx0 = (w - inset) - r, try0 = 0;
+      var trx1 = (w - inset) + ux * r, try1 = uy * r;
+      return ['M',f(tlx0),f(tly0),'Q',inset,0,f(tlx1),f(tly1),
+              'L',f(trx0),f(try0),'Q',(w-inset),0,f(trx1),f(try1),
+              'L',w,h,'L',0,h,'Z'].join(' ');
+    }
+    function f(n) { return n.toFixed(2); }
+
+    function updateTabPaths() {
+      document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        var w = btn.offsetWidth, h = btn.offsetHeight;
+        if (w > 0 && h > 0) {
+          btn.style.clipPath = 'path("' + trapPath(w, h, 18, 12) + '")';
+        }
+      });
+    }
+
+    /* Three label tiers: full on desktop, tablet labels 601-900px, short on mobile */
+    function updateLabels() {
+      var w = window.innerWidth;
+      document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        var label = w <= 600 ? btn.dataset.short
+                  : w <= 900 ? btn.dataset.tablet
+                  : btn.dataset.full;
+        btn.querySelector('span').textContent = label;
+      });
+      setTimeout(updateTabPaths, 50);
+    }
+
+    function updateArrows() {
+      if (window.innerWidth > 600) return;
+      var sl  = tabScroll.scrollLeft;
+      var max = tabScroll.scrollWidth - tabScroll.clientWidth;
+      arrowLeft.classList.toggle('hidden',  sl < 10);
+      fadeLeft.style.opacity  = sl < 10 ? '0' : '1';
+      arrowRight.classList.toggle('hidden', sl > max - 10);
+      fadeRight.style.opacity = sl > max - 10 ? '0' : '1';
+    }
+
+    arrowRight.addEventListener('click', function() { tabScroll.scrollBy({ left: 160, behavior: 'smooth' }); });
+    arrowLeft.addEventListener('click',  function() { tabScroll.scrollBy({ left: -160, behavior: 'smooth' }); });
+    tabScroll.addEventListener('scroll', updateArrows);
+
+    function init() { updateLabels(); updateArrows(); }
+    window.addEventListener('resize', init);
+    setTimeout(init, 60);
+
+    /* Iframe height sync — relays to Framer Code Component via postMessage */
+    function syncHeight() {
+      try {
+        var doc = frame.contentDocument || frame.contentWindow.document;
+        var h = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight);
+        if (h > 100 && h !== lastH) {
+          lastH = h;
+          frame.style.height = h + 'px';
+          window.parent.postMessage({ height: h + tabBar.offsetHeight + 4 }, '*');
+        }
+      } catch(e) {}
+    }
+    setInterval(syncHeight, 300);
+  </script>
+</body>
+</html>

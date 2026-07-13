@@ -621,6 +621,11 @@ def home():
 def marketing_toolkit():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "marketing-toolkit.html")
 
+@app.route("/tools/homeowner-toolkit")
+def homeowner_toolkit():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "homeowner-toolkit.html")
+
+
 @app.route("/tools/content-brief")
 def content_brief():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "content-brief.html")
