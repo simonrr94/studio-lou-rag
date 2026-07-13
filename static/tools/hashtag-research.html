@@ -321,5 +321,14 @@ function downloadPDF() {
   doc.save('studio-lou-hashtags-'+Date.now()+'.pdf');
 }
 </script>
+
+<script>
+  function reportHeight() {
+    var h = document.documentElement.scrollHeight;
+    window.parent.postMessage({ type: 'iframeResize', height: h }, '*');
+  }
+  new ResizeObserver(reportHeight).observe(document.body);
+  reportHeight();
+</script>
 </body>
 </html>
