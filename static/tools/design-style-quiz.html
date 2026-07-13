@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Design Style Quiz — Studio Lou</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300;1,9..40,400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -305,10 +305,47 @@
       .result-primary { font-size: 28px; }
       .question-text { font-size: 19px; }
     }
+
+    /* ── TOOL HEADER ── */
+    .tool-header { padding: 36px 0 8px; }
+    .tool-title {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      color: #582B36;
+      font-size: 44px;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 6px;
+    }
+    .tool-num {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      color: #433E3C;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 0;
+    }
+    .tool-desc {
+      font-family: 'Crimson Text', serif;
+      font-weight: 400;
+      color: #433E3C;
+      font-size: 26px;
+      letter-spacing: -0.06em;
+      line-height: 1.2;
+      padding-top: 24px;
+      padding-bottom: 24px;
+    }
   </style>
 </head>
 <body>
 <div class="quiz-wrap">
+  <div class="tool-header">
+    <h1 class="tool-title">Design Style Quiz</h1>
+    <div class="tool-num">TOOL 01</div>
+    <p class="tool-desc">What does your home actually want to be? Most people spend years collecting inspiration without a clear sense of what ties it all together. Answer 8 questions and walk away with a defined style direction: your primary aesthetic and the secondary influence that makes it yours.</p>
+  </div>
 
   <!-- PROGRESS BAR -->
   <div class="progress-bar-track" id="progressTrack">

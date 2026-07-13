@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Color Palette Generator — Studio Lou</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {  background: #FAF9F6; font-family: 'DM Sans', sans-serif; color: #433E3C; }
@@ -57,10 +57,47 @@
     .divider { height: 1px; background: #d0c9bc; margin: 32px 0; }
     .restart-wrap { text-align: center; margin-top: 24px; }
     .restart-btn { background: none; border: none; font-size: 13px; color: #6b6560; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
+
+    /* ── TOOL HEADER ── */
+    .tool-header { padding: 36px 0 8px; }
+    .tool-title {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      color: #582B36;
+      font-size: 44px;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 6px;
+    }
+    .tool-num {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      color: #433E3C;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 0;
+    }
+    .tool-desc {
+      font-family: 'Crimson Text', serif;
+      font-weight: 400;
+      color: #433E3C;
+      font-size: 26px;
+      letter-spacing: -0.06em;
+      line-height: 1.2;
+      padding-top: 24px;
+      padding-bottom: 24px;
+    }
   </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="tool-header">
+    <h1 class="tool-title">Color Palette Generator</h1>
+    <div class="tool-num">TOOL 02</div>
+    <p class="tool-desc">Working around an art piece, an existing paint color, or just need a starting point? Answer a few quick questions and we'll build a complete four-color palette (primary wall, secondary surface, accent, and trim) with real Sherwin-Williams and Benjamin Moore color recommendations for each.</p>
+  </div>
 
   <div id="quizArea">
     <div class="progress-wrap">
