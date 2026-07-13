@@ -37,20 +37,25 @@
       color: #6b6560;
       background: #ffffff;
       border: none;
-      border-radius: 18px 18px 0 0;
-      padding: 12px 24px;
+      border-radius: 10px 10px 0 0;
+      padding: 12px 28px;
       cursor: pointer;
       white-space: nowrap;
       transition: all 0.15s;
       position: relative;
       z-index: 1;
-      box-shadow: -5px 0 10px rgba(0,0,0,0.13), 5px 0 10px rgba(0,0,0,0.13);
+      transform: skewX(-10deg);
+      box-shadow: -5px 0 7px -2px rgba(0,0,0,0.18), 5px 0 7px -2px rgba(0,0,0,0.18);
+    }
+    .tab-btn span {
+      display: inline-block;
+      transform: skewX(10deg);
     }
     .tab-btn.active {
       background: #A6BE47;
       color: #fff;
       z-index: 3;
-      box-shadow: -6px 0 12px rgba(0,0,0,0.22), 6px 0 12px rgba(0,0,0,0.22);
+      box-shadow: -5px 0 7px -2px rgba(0,0,0,0.18), 5px 0 7px -2px rgba(0,0,0,0.18);
     }
     .tab-btn:hover:not(.active) { color: #433E3C; }
 
@@ -65,10 +70,10 @@
 </head>
 <body>
   <div class="tab-bar" id="tabBar">
-    <button class="tab-btn active" onclick="loadTool(this,'marketing-audit')">Marketing Audit</button>
-    <button class="tab-btn" onclick="loadTool(this,'bio-generator')">Platform Bio Generator</button>
-    <button class="tab-btn" onclick="loadTool(this,'content-brief')">Content Brief Generator</button>
-    <button class="tab-btn" onclick="loadTool(this,'hashtag-research')">Hashtag + Keyword Research</button>
+    <button class="tab-btn active" onclick="loadTool(this,'marketing-audit')"><span>Marketing Audit</span></button>
+    <button class="tab-btn" onclick="loadTool(this,'bio-generator')"><span>Platform Bio Generator</span></button>
+    <button class="tab-btn" onclick="loadTool(this,'content-brief')"><span>Content Brief Generator</span></button>
+    <button class="tab-btn" onclick="loadTool(this,'hashtag-research')"><span>Hashtag + Keyword Research</span></button>
   </div>
   <iframe id="toolFrame" src="https://studio-lou-rag.onrender.com/tools/marketing-audit" scrolling="no"></iframe>
 
