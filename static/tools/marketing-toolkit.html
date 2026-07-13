@@ -35,7 +35,9 @@
       flex-shrink: 0;
       position: relative;
       z-index: 1;
-      filter: drop-shadow(-6px 0 5px rgba(0,0,0,0.18)) drop-shadow(6px 0 5px rgba(0,0,0,0.18));
+      filter: drop-shadow(-6px 0 5px rgba(0,0,0,0.18))
+              drop-shadow(6px 0 5px rgba(0,0,0,0.18))
+              drop-shadow(0 -3px 5px rgba(0,0,0,0.09));
     }
     .tab-wrap.is-active { z-index: 3; }
 
@@ -58,31 +60,32 @@
     .tab-btn.active { background: #A6BE47; color: #fff; }
     .tab-btn:hover:not(.active) { color: #433E3C; }
 
-    /* ── Scroll arrows (mobile/tablet only) ── */
+    /* ── Scroll arrows (mobile only) ── */
     .tab-arrow {
       display: none;
       position: absolute;
       top: 50%;
       transform: translateY(-50%);
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       border: none;
-      background: rgba(255,255,255,0.92);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      background: rgba(67,62,60,0.42);
       cursor: pointer;
-      font-size: 18px;
-      color: #433E3C;
+      font-size: 22px;
+      font-weight: 300;
+      color: #ffffff;
       align-items: center;
       justify-content: center;
       z-index: 10;
       transition: opacity 0.2s;
+      line-height: 1;
     }
     .tab-arrow-left  { left: 6px; }
     .tab-arrow-right { right: 6px; }
     .tab-arrow.hidden { opacity: 0; pointer-events: none; }
 
-    /* Right-edge fade gradient (mobile/tablet only) */
+    /* Edge fade gradients (mobile only) */
     .tab-fade-right {
       display: none;
       position: absolute;
@@ -102,11 +105,18 @@
       z-index: 5;
     }
 
-    /* ── Responsive ── */
-    @media (max-width: 900px) {
+    /* ── Tablet (601-900px): stretch tabs to fill width ── */
+    @media (min-width: 601px) and (max-width: 900px) {
+      .tab-bar { overflow-x: visible; }
+      .tab-wrap { flex: 1; }
+      .tab-btn  { width: 100%; text-align: center; font-size: 14px; padding: 11px 16px; }
+    }
+
+    /* ── Mobile (≤600px): scroll + arrows + abbreviated labels ── */
+    @media (max-width: 600px) {
       .tab-arrow { display: flex; }
       .tab-fade-right, .tab-fade-left { display: block; }
-      .tab-btn { font-size: 13px; padding: 10px 22px; }
+      .tab-btn { font-size: 13px; padding: 10px 20px; }
     }
 
     /* ── Tool iframe ── */
@@ -209,18 +219,18 @@
       });
     }
 
-    /* ── Abbreviated labels on small screens ── */
+    /* ── Abbreviated labels on mobile only ── */
     function updateLabels() {
-      var small = window.innerWidth <= 900;
+      var mobile = window.innerWidth <= 600;
       document.querySelectorAll('.tab-btn').forEach(function(btn) {
-        btn.querySelector('span').textContent = small ? btn.dataset.short : btn.dataset.full;
+        btn.querySelector('span').textContent = mobile ? btn.dataset.short : btn.dataset.full;
       });
       setTimeout(updateTabPaths, 50);
     }
 
     /* ── Arrow + fade state ── */
     function updateArrows() {
-      if (window.innerWidth > 900) return;
+      if (window.innerWidth > 600) return;
       var sl  = tabScroll.scrollLeft;
       var max = tabScroll.scrollWidth - tabScroll.clientWidth;
       arrowLeft.classList.toggle('hidden',  sl < 10);
