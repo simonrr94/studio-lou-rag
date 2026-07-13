@@ -14,16 +14,17 @@
     .tab-bar-outer {
       position: relative;
       background: #FAF9F6;
-      padding-top: 24px;
+      padding-top: 12px;
       border-bottom: 3px solid #A6BE47;
     }
 
     /* ── Inner scrollable row ── */
+    /* padding-top gives top shadow room before overflow-x clips it */
     .tab-bar {
       display: flex;
       align-items: flex-end;
       gap: 6px;
-      padding: 0 24px;
+      padding: 12px 24px 0;
       overflow-x: auto;
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
@@ -136,6 +137,7 @@
         <button class="tab-btn active"
           onclick="loadTool(this,'marketing-audit')"
           data-full="Marketing Audit"
+          data-tablet="Marketing Audit"
           data-short="Marketing Audit">
           <span>Marketing Audit</span>
         </button>
@@ -144,6 +146,7 @@
         <button class="tab-btn"
           onclick="loadTool(this,'bio-generator')"
           data-full="Platform Bio Generator"
+          data-tablet="Bio Generator"
           data-short="Bio Generator">
           <span>Platform Bio Generator</span>
         </button>
@@ -152,6 +155,7 @@
         <button class="tab-btn"
           onclick="loadTool(this,'content-brief')"
           data-full="Content Brief Generator"
+          data-tablet="Content Brief"
           data-short="Content Brief">
           <span>Content Brief Generator</span>
         </button>
@@ -160,6 +164,7 @@
         <button class="tab-btn"
           onclick="loadTool(this,'hashtag-research')"
           data-full="Hashtag + Keyword Research"
+          data-tablet="Hashtag + Keywords"
           data-short="Hashtags">
           <span>Hashtag + Keyword Research</span>
         </button>
@@ -219,11 +224,14 @@
       });
     }
 
-    /* ── Abbreviated labels on mobile only ── */
+    /* ── Labels: full on desktop, tablet labels 601-900, short on mobile ── */
     function updateLabels() {
-      var mobile = window.innerWidth <= 600;
+      var w = window.innerWidth;
       document.querySelectorAll('.tab-btn').forEach(function(btn) {
-        btn.querySelector('span').textContent = mobile ? btn.dataset.short : btn.dataset.full;
+        var label = w <= 600 ? btn.dataset.short
+                  : w <= 900 ? btn.dataset.tablet
+                  : btn.dataset.full;
+        btn.querySelector('span').textContent = label;
       });
       setTimeout(updateTabPaths, 50);
     }
