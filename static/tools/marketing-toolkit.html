@@ -11,13 +11,20 @@
     body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; }
 
     .tab-bar {
+      background: #FAF9F6;
+      padding: 20px 16px;
       display: flex;
       justify-content: center;
+    }
+
+    .tab-pill-wrap {
+      display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      background: #FAF9F6;
-      padding: 20px 16px 20px;
-      border-bottom: 2px dashed #A6BE47;
+      justify-content: center;
+      background: #ffffff;
+      border-radius: 50px;
+      padding: 6px;
     }
 
     .tab-btn {
@@ -48,10 +55,12 @@
 </head>
 <body>
   <div class="tab-bar" id="tabBar">
-    <button class="tab-btn active" onclick="loadTool(this,'marketing-audit')">Marketing Audit</button>
-    <button class="tab-btn" onclick="loadTool(this,'bio-generator')">Platform Bio Generator</button>
-    <button class="tab-btn" onclick="loadTool(this,'content-brief')">Content Brief Generator</button>
-    <button class="tab-btn" onclick="loadTool(this,'hashtag-research')">Hashtag + Keyword Research</button>
+    <div class="tab-pill-wrap">
+      <button class="tab-btn active" onclick="loadTool(this,'marketing-audit')">Marketing Audit</button>
+      <button class="tab-btn" onclick="loadTool(this,'bio-generator')">Platform Bio Generator</button>
+      <button class="tab-btn" onclick="loadTool(this,'content-brief')">Content Brief Generator</button>
+      <button class="tab-btn" onclick="loadTool(this,'hashtag-research')">Hashtag + Keyword Research</button>
+    </div>
   </div>
   <iframe id="toolFrame" src="https://studio-lou-rag.onrender.com/tools/marketing-audit" scrolling="no"></iframe>
 
