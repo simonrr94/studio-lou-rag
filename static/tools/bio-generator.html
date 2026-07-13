@@ -8,7 +8,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { min-height: 1800px; }
     body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; color: #433E3C; padding: 32px 24px 80px; }
     .wrap { max-width: 720px; margin: 0 auto; }
     /* Step system */
@@ -47,7 +46,7 @@
     .error { margin-top: 16px; padding: 12px 16px; background: #fdecea; color: #c0392b; border-radius: 10px; font-size: 15px; display: none; }
     /* Output */
     .output { margin-top: 40px; padding-top: 32px; border-top: 1px solid #e8e0d5; display: none; }
-    .output-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .output-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
     .output-header h2 { font-size: 20px; font-weight: 600; }
     .output-actions { display: flex; gap: 8px; }
     .btn-secondary { font-family: 'DM Sans', sans-serif; font-size: 14px; color: #433E3C; background: none; border: 1px solid #d0c9bc; border-radius: 50px; padding: 6px 16px; cursor: pointer; }
@@ -63,6 +62,10 @@
     .bio-divider { border: none; border-top: 1px solid #e8e0d5; margin: 12px 0; }
     .restart-wrap { text-align: center; margin-top: 24px; }
     .restart-btn { background: none; border: none; font-size: 13px; color: #6b6560; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
+    /* Responsive */
+    @media (max-width: 600px) {
+      .grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -219,7 +222,7 @@ function applyFirmDefaults() {
   const val = document.getElementById('firmType').value;
   const defaults = FIRM_DEFAULTS[val] || [];
   document.querySelectorAll('.chip').forEach(c => c.classList.toggle('selected', defaults.includes(c.dataset.platform)));
-  document.getElementById('platformLabel').textContent = val ? 'Platforms \u00b7 recommended pre-selected for your firm type' : 'Platforms';
+  document.getElementById('platformLabel').textContent = val ? 'Platforms · recommended pre-selected for your firm type' : 'Platforms';
 }
 function togglePlatform(el) { el.classList.toggle('selected'); }
 function getSelectedPlatforms() { return [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.platform); }
@@ -276,8 +279,8 @@ function renderBios(bios, platforms) {
     const isLinkedIn = platform === 'LinkedIn' && typeof bios[platform] === 'object';
     const bioText = isLinkedIn ? bios[platform].headline + '\n\n' + bios[platform].summary : bios[platform];
     const content = isLinkedIn ? '<div class="bio-sublabel">Headline</div><div class="bio-content">' + bios[platform].headline + '</div><hr class="bio-divider" /><div class="bio-sublabel">Summary</div><div class="bio-content">' + bios[platform].summary + '</div>' : '<div class="bio-content">' + bios[platform] + '</div>';
-    block.innerHTML = '<div class="bio-block-header"><div><span class="bio-block-label">' + PLATFORM_ICONS[platform] + ' ' + platform + '</span><span class="bio-limit"> \u00b7 ' + PLATFORM_LIMITS[platform] + '</span></div><button class="btn-copy-bio">Copy</button></div>' + content;
-    block.querySelector('.btn-copy-bio').addEventListener('click', function() { navigator.clipboard.writeText(bioText); this.textContent = '\u2713'; setTimeout(() => this.textContent = 'Copy', 2000); });
+    block.innerHTML = '<div class="bio-block-header"><div><span class="bio-block-label">' + PLATFORM_ICONS[platform] + ' ' + platform + '</span><span class="bio-limit"> · ' + PLATFORM_LIMITS[platform] + '</span></div><button class="btn-copy-bio">Copy</button></div>' + content;
+    block.querySelector('.btn-copy-bio').addEventListener('click', function() { navigator.clipboard.writeText(bioText); this.textContent = '✓'; setTimeout(() => this.textContent = 'Copy', 2000); });
     container.appendChild(block);
   });
   document.getElementById('output').style.display = 'block';
@@ -288,7 +291,7 @@ function copyAll() {
   if (!currentBios) return;
   const text = currentPlatforms.filter(p => currentBios[p]).map(p => p === 'LinkedIn' && typeof currentBios[p] === 'object' ? 'LinkedIn Headline\n' + currentBios[p].headline + '\n\nLinkedIn Summary\n' + currentBios[p].summary : p + '\n' + currentBios[p]).join('\n\n---\n\n');
   navigator.clipboard.writeText(text);
-  const btn = event.target; btn.textContent = '\u2713 Copied'; setTimeout(() => btn.textContent = 'Copy all', 2000);
+  const btn = event.target; btn.textContent = '✓ Copied'; setTimeout(() => btn.textContent = 'Copy all', 2000);
 }
 
 function restartTool() {
@@ -319,12 +322,12 @@ function downloadPDF() {
   doc.text('SL',margin+18,37,{align:'center'});
   doc.setTextColor(88,43,54); doc.setFontSize(16); doc.text('Platform Bios',margin+48,30);
   doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(100,80,80);
-  doc.text((firmName||'Interior Design Firm')+' \u00b7 Studio Lou',margin+48,46);
+  doc.text((firmName||'Interior Design Firm')+' · Studio Lou',margin+48,46);
   doc.setFontSize(9); doc.setTextColor(140,120,120);
   doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),pageW-margin,46,{align:'right'});
   y=90; doc.setFillColor(245,242,238); doc.roundedRect(margin,y,contentW,36,4,4,'F');
   doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(88,43,54);
-  const meta=[firmType&&'Firm: '+firmType,location&&'Location: '+location,designStyle&&'Style: '+designStyle].filter(Boolean).join('   \u00b7   ');
+  const meta=[firmType&&'Firm: '+firmType,location&&'Location: '+location,designStyle&&'Style: '+designStyle].filter(Boolean).join('   ·   ');
   doc.text(meta,margin+12,y+22); y+=52;
   currentPlatforms.filter(p=>currentBios[p]).forEach(platform=>{
     if(y>650){doc.addPage();y=margin;}
@@ -346,9 +349,18 @@ function downloadPDF() {
   });
   doc.setFillColor(215,232,188); doc.rect(0,doc.internal.pageSize.getHeight()-28,pageW,28,'F');
   doc.setFontSize(8); doc.setTextColor(88,43,54); doc.setFont('helvetica','normal');
-  doc.text('Generated by Studio Lou \u00b7 studiolouinteriors.com',pageW/2,doc.internal.pageSize.getHeight()-10,{align:'center'});
+  doc.text('Generated by Studio Lou · studiolouinteriors.com',pageW/2,doc.internal.pageSize.getHeight()-10,{align:'center'});
   doc.save('studio-lou-bios-'+Date.now()+'.pdf');
 }
+
+// Dynamic height — tells Framer parent the real document height
+function _notifyHeight() {
+  window.parent.postMessage({ height: document.body.scrollHeight }, '*');
+}
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(_notifyHeight).observe(document.body);
+}
+_notifyHeight();
 </script>
 
 <script>
