@@ -37,25 +37,20 @@
       color: #6b6560;
       background: #ffffff;
       border: none;
-      border-radius: 10px 10px 0 0;
-      padding: 12px 28px;
+      padding: 12px 36px;
       cursor: pointer;
       white-space: nowrap;
-      transition: all 0.15s;
+      transition: background 0.15s, color 0.15s;
       position: relative;
       z-index: 1;
-      transform: skewX(-10deg);
-      box-shadow: -5px 0 7px -2px rgba(0,0,0,0.18), 5px 0 7px -2px rgba(0,0,0,0.18);
+      clip-path: polygon(14px 0%, calc(100% - 14px) 0%, 100% 100%, 0% 100%);
+      filter: drop-shadow(-5px 0 4px rgba(0,0,0,0.16)) drop-shadow(5px 0 4px rgba(0,0,0,0.16));
     }
-    .tab-btn span {
-      display: inline-block;
-      transform: skewX(10deg);
-    }
+    .tab-btn span { display: inline-block; }
     .tab-btn.active {
       background: #A6BE47;
       color: #fff;
       z-index: 3;
-      box-shadow: -5px 0 7px -2px rgba(0,0,0,0.18), 5px 0 7px -2px rgba(0,0,0,0.18);
     }
     .tab-btn:hover:not(.active) { color: #433E3C; }
 
