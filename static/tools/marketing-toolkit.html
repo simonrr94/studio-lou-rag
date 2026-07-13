@@ -16,7 +16,7 @@
       display: flex;
       align-items: flex-end;
       gap: 6px;
-      border-bottom: 2px solid #d0c9bc;
+      border-bottom: 3px solid #A6BE47;
     }
 
     .tab-btn {
@@ -26,24 +26,26 @@
       font-weight: 600;
       color: #6b6560;
       background: #ffffff;
-      border: 1.5px solid #d0c9bc;
-      border-bottom: none;
+      border: none;
       border-radius: 10px 10px 0 0;
       padding: 12px 24px;
       cursor: pointer;
       white-space: nowrap;
       transition: all 0.15s;
       position: relative;
-      bottom: -2px;
+      bottom: -3px;
+      box-shadow: inset 0 -4px 10px rgba(0,0,0,0.07);
     }
     .tab-btn.active {
       background: #A6BE47;
-      border-color: #A6BE47;
       color: #fff;
-      box-shadow: 0 -4px 14px rgba(0,0,0,0.10);
+      box-shadow:
+        0 -8px 20px rgba(0,0,0,0.18),
+        -4px -4px 12px rgba(0,0,0,0.08),
+        4px -4px 12px rgba(0,0,0,0.08);
       z-index: 1;
     }
-    .tab-btn:hover:not(.active) { color: #433E3C; border-color: #b5ae9f; }
+    .tab-btn:hover:not(.active) { color: #433E3C; }
 
     #toolFrame {
       width: 100%;
