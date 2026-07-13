@@ -134,8 +134,8 @@
         <button class="tab-btn active"
           onclick="loadTool(this,'design-style-quiz')"
           data-full="Design Style Quiz"
-          data-tablet="Style Quiz"
-          data-short="Style Quiz">
+          data-tablet="Design Style Quiz"
+          data-short="Design Style Quiz">
           <span>Design Style Quiz</span>
         </button>
       </div>
@@ -145,8 +145,8 @@
         <button class="tab-btn"
           onclick="loadTool(this,'color-palette-generator')"
           data-full="Color Palette Generator"
-          data-tablet="Color Palette"
-          data-short="Color">
+          data-tablet="Color Palette Generator"
+          data-short="Color Palette Generator">
           <span>Color Palette Generator</span>
         </button>
       </div>
@@ -156,8 +156,8 @@
         <button class="tab-btn"
           onclick="loadTool(this,'room-layout-helper')"
           data-full="Room Layout Helper"
-          data-tablet="Layout Helper"
-          data-short="Layout">
+          data-tablet="Room Layout Helper"
+          data-short="Room Layout Helper">
           <span>Room Layout Helper</span>
         </button>
       </div>
@@ -168,7 +168,7 @@
           onclick="loadTool(this,'renovation-budget-estimator')"
           data-full="Renovation Budget Estimator"
           data-tablet="Budget Estimator"
-          data-short="Budget">
+          data-short="Budget Estimator">
           <span>Renovation Budget Estimator</span>
         </button>
       </div>
@@ -229,8 +229,12 @@
 
     /* Three label tiers: full on desktop, tablet labels 601-900px, short on mobile */
     function updateLabels() {
+      var w = window.innerWidth;
       document.querySelectorAll('.tab-btn').forEach(function(btn) {
-        btn.querySelector('span').textContent = btn.dataset.full;
+        var label = w <= 600 ? btn.dataset.short
+                  : w <= 900 ? btn.dataset.tablet
+                  : btn.dataset.full;
+        btn.querySelector('span').textContent = label;
       });
       setTimeout(updateTabPaths, 50);
     }
