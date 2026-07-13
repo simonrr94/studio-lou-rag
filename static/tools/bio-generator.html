@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bio Generator · Studio Lou</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400;1,600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -66,10 +66,26 @@
     @media (max-width: 600px) {
       .grid { grid-template-columns: 1fr; }
     }
+
+    /* Tool header */
+    .tool-header { padding: 40px 0 32px; }
+    .tool-num { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #6b6560; margin-bottom: 10px; }
+    .tool-title { font-family: 'Crimson Pro', serif; font-size: 48px; font-weight: 600; color: #433E3C; line-height: 1.1; margin-bottom: 16px; }
+    .tool-desc { font-family: 'Crimson Pro', serif; font-size: 20px; color: #433E3C; line-height: 1.65; max-width: 620px; margin-bottom: 40px; }
+    .tool-divider { border: none; border-top: 1px solid #d0c9bc; margin-bottom: 36px; }
   </style>
 </head>
 <body>
 <div class="wrap">
+
+<div class="tool-header">
+  <div class="tool-num">TOOL 02</div>
+  <h1 class="tool-title">Platform Bio Generator</h1>
+  <p class="tool-desc">Your bio is the first thing a potential client reads — and most designer bios sound exactly the same. Tell us about your firm and we'll write platform-native bios tailored to your voice, your ideal client, and the character limits of each platform you're on.</p>
+</div>
+<hr class="tool-divider" />
+
+
 
   <div id="quizArea">
     <div class="progress-wrap">
