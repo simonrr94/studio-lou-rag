@@ -12,14 +12,13 @@
 
     .tab-bar {
       display: flex;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      border-bottom: 2px solid #e8e2d9;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
       background: #FAF9F6;
-      padding: 0 8px;
+      padding: 20px 16px 16px;
+      border-bottom: 1px solid #e8e2d9;
     }
-    .tab-bar::-webkit-scrollbar { display: none; }
 
     .tab-btn {
       flex-shrink: 0;
@@ -28,16 +27,15 @@
       font-weight: 600;
       color: #6b6560;
       background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      padding: 13px 14px;
+      border: 1.5px solid #d0c9bc;
+      border-radius: 50px;
+      padding: 8px 18px;
       cursor: pointer;
       white-space: nowrap;
-      margin-bottom: -2px;
-      transition: color 0.15s;
+      transition: all 0.15s;
     }
-    .tab-btn.active { color: #582b36; border-bottom-color: #582b36; }
-    .tab-btn:hover:not(.active) { color: #433E3C; }
+    .tab-btn.active { background: #A6BE47; border-color: #A6BE47; color: #fff; }
+    .tab-btn:hover:not(.active) { border-color: #433E3C; color: #433E3C; }
 
     #toolFrame {
       width: 100%;
