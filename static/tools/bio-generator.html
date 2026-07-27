@@ -8,7 +8,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; color: #433E3C; padding: 32px 24px 80px; }
+    html { background: transparent; }
+    body { font-family: 'DM Sans', sans-serif; background: transparent; color: #433E3C; padding: 0; }
     .wrap { max-width: 720px; margin: 0 auto; }
     /* Step system */
     .step { display: none; }
@@ -130,7 +131,7 @@
     <!-- Step 3: Design style -->
     <div class="step" id="step3">
       <div class="step-question">How would you describe your design style?</div>
-      <div class="step-hint">A few words or a phrase — this is how it'll appear in your bios.</div>
+      <div class="step-hint">A few words or a phrase. This is how it'll appear in your bios.</div>
       <div class="form-group"><label>Design style</label><input id="designStyle" type="text" placeholder="e.g. modern organic, coastal, transitional, maximalist" /></div>
       <div class="validation-hint" id="hint3">Please describe your design style to continue.</div>
       <div class="step-nav">
@@ -153,7 +154,7 @@
     <!-- Step 5: Specialties -->
     <div class="step" id="step5">
       <div class="step-question">What are your specialties or services?</div>
-      <div class="step-hint">List anything you want highlighted — service types, project types, room types.</div>
+      <div class="step-hint">List anything you want highlighted: service types, project types, room types.</div>
       <div class="form-group"><label>Specialties / services</label><input id="specialties" type="text" placeholder="e.g. full-service design, e-design, kitchen + bath, new construction" /></div>
       <div class="step-nav">
         <button class="back-link" onclick="goBack(5)">← Back</button>
@@ -368,23 +369,34 @@ function downloadPDF() {
   doc.save('studio-lou-bios-'+Date.now()+'.pdf');
 }
 
-// Dynamic height — tells Framer parent the real document height
-function _notifyHeight() {
-  window.parent.postMessage({ height: document.body.scrollHeight }, '*');
-}
-if (typeof ResizeObserver !== 'undefined') {
-  new ResizeObserver(_notifyHeight).observe(document.body);
-}
-_notifyHeight();
 </script>
 
 <script>
-  function reportHeight() {
-    var h = document.documentElement.scrollHeight;
-    window.parent.postMessage({ type: 'iframeResize', height: h }, '*');
-  }
-  new ResizeObserver(reportHeight).observe(document.body);
-  reportHeight();
+  /* Report tool height to the marketing-toolkit wrapper.
+     The wrapper listens for postMessage({ height: N }) and resizes the iframe
+     containing this tool to match. Guarded against spam by only posting when
+     the value actually changes. */
+  (function () {
+    var lastHeight = 0;
+    function reportHeight() {
+      var h = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.documentElement ? document.documentElement.scrollHeight : 0
+      );
+      if (h !== lastHeight) {
+        lastHeight = h;
+        try {
+          window.parent.postMessage({ height: h }, '*');
+        } catch (e) { /* parent unreachable in some preview contexts */ }
+      }
+    }
+    window.addEventListener('load', reportHeight);
+    window.addEventListener('resize', reportHeight);
+    if (typeof ResizeObserver !== 'undefined' && document.body) {
+      new ResizeObserver(reportHeight).observe(document.body);
+    }
+    reportHeight();
+  })();
 </script>
 </body>
 </html>

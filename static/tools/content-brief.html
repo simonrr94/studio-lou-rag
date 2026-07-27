@@ -8,7 +8,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; color: #433E3C; padding: 32px 24px 80px; }
+    html { background: transparent; }
+    body { font-family: 'DM Sans', sans-serif; background: transparent; color: #433E3C; padding: 0; }
     .wrap { max-width: 720px; margin: 0 auto; }
     .step { display: none; } .step.active { display: block; }
     .progress-wrap { margin-bottom: 28px; }
@@ -92,7 +93,7 @@
     <!-- Step 2: Content topic -->
     <div class="step" id="step2">
       <div class="step-question">What's this content about?</div>
-      <div class="step-hint">Give us the topic or focus — a project reveal, a behind-the-scenes moment, a sourcing story, anything.</div>
+      <div class="step-hint">Give us the topic or focus: a project reveal, a behind-the-scenes moment, a sourcing story, anything.</div>
       <div class="field-group"><label>Content topic / focus</label><input id="topic" type="text" placeholder="e.g. master suite reveal, sourcing trip to High Point, boutique hotel lobby project" /></div>
       <div class="validation-hint" id="hint2">Please enter a content topic to continue.</div>
       <div class="step-nav"><button class="back-link" onclick="goBack(2)">← Back</button><button class="next-btn" onclick="goNext(2)">Next →</button></div>
@@ -101,7 +102,7 @@
     <!-- Step 3: Project type + Design style -->
     <div class="step" id="step3">
       <div class="step-question">Tell us about the project.</div>
-      <div class="step-hint">Both fields are optional — add what's relevant.</div>
+      <div class="step-hint">Both fields are optional. Add what's relevant.</div>
       <div class="grid">
         <div class="field-group"><label>Project type</label><input id="projectType" type="text" placeholder="e.g. full home renovation, hotel lobby" /></div>
         <div class="field-group"><label>Design style</label><input id="designStyle" type="text" placeholder="e.g. modern organic, coastal, transitional" /></div>
@@ -120,7 +121,7 @@
     <!-- Step 5: Platforms -->
     <div class="step" id="step5">
       <div class="step-question">Which platforms are you creating content for?</div>
-      <div class="step-hint">We've pre-selected the best channels for your firm type — adjust as needed.</div>
+      <div class="step-hint">We've pre-selected the best channels for your firm type. Adjust as needed.</div>
       <label id="platformLabel">Platforms</label>
       <div class="platforms" id="platforms">
         <div class="chip" data-platform="Instagram" onclick="togglePlatform(this)">Instagram</div>
@@ -296,23 +297,34 @@ function downloadPDF() {
   doc.save('studio-lou-content-brief-'+Date.now()+'.pdf');
 }
 
-// Dynamic height — tells Framer parent the real document height
-function _notifyHeight() {
-  window.parent.postMessage({ height: document.body.scrollHeight }, '*');
-}
-if (typeof ResizeObserver !== 'undefined') {
-  new ResizeObserver(_notifyHeight).observe(document.body);
-}
-_notifyHeight();
 </script>
 
 <script>
-  function reportHeight() {
-    var h = document.documentElement.scrollHeight;
-    window.parent.postMessage({ type: 'iframeResize', height: h }, '*');
-  }
-  new ResizeObserver(reportHeight).observe(document.body);
-  reportHeight();
+  /* Report tool height to the marketing-toolkit wrapper.
+     The wrapper listens for postMessage({ height: N }) and resizes the iframe
+     containing this tool to match. Guarded against spam by only posting when
+     the value actually changes. */
+  (function () {
+    var lastHeight = 0;
+    function reportHeight() {
+      var h = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.documentElement ? document.documentElement.scrollHeight : 0
+      );
+      if (h !== lastHeight) {
+        lastHeight = h;
+        try {
+          window.parent.postMessage({ height: h }, '*');
+        } catch (e) { /* parent unreachable in some preview contexts */ }
+      }
+    }
+    window.addEventListener('load', reportHeight);
+    window.addEventListener('resize', reportHeight);
+    if (typeof ResizeObserver !== 'undefined' && document.body) {
+      new ResizeObserver(reportHeight).observe(document.body);
+    }
+    reportHeight();
+  })();
 </script>
 </body>
 </html>
