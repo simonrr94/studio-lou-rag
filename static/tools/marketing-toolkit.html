@@ -121,35 +121,8 @@
     filter: drop-shadow(0 4px 5px rgba(0,0,0,0.22));
   }
 
-  /* Tool title / eyebrow / description block (renders on the graph paper, above the iframe) */
-  .tool-title {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 54px;
-    font-weight: 700;
-    color: #582b36;
-    letter-spacing: -0.02em;
-    margin: 0;
-    line-height: 1;
-  }
-  .tool-eyebrow {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
-    font-weight: 700;
-    color: #582b36;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    margin: 12px 0 32px;
-  }
-  .tool-desc {
-    font-family: 'Crimson Text', serif;
-    font-size: 20px;
-    color: #433E3C;
-    line-height: 1.4;
-    margin: 0 0 40px;
-    max-width: 96%;
-  }
-
-  /* The actual tool iframe. Lives inside the graph paper on desktop, or inside the active mobile folder. */
+  /* The actual tool iframe. Lives inside the graph paper on desktop, or inside the active mobile folder.
+     The tool file provides its own title, eyebrow, and description block above its quiz. */
   .tool-iframe {
     width: 100%;
     height: 800px; /* Fallback height before first postMessage from the tool arrives. */
@@ -310,18 +283,6 @@
       0 8px 16px rgba(0,0,0,0.18);
     border-radius: 1px;
   }
-  .m-graph-paper .tool-title {
-    font-size: 34px;
-    line-height: 1.02;
-  }
-  .m-graph-paper .tool-eyebrow {
-    margin: 10px 0 22px;
-  }
-  .m-graph-paper .tool-desc {
-    font-size: 16px;
-    margin-bottom: 26px;
-    max-width: 100%;
-  }
 </style>
 </head>
 <body>
@@ -364,10 +325,7 @@
               opacity="0.7" />
       </svg>
 
-      <h1 class="tool-title" id="desktop-title">Marketing Audit</h1>
-      <div class="tool-eyebrow" id="desktop-eyebrow">TOOL 01</div>
-      <p class="tool-desc" id="desktop-desc">Most interior design firms are undermarketing without knowing it. Answer seven questions and get an honest, section-by-section audit of your presence. Graded across positioning, content strategy, web discoverability, and lead capture, with specific next steps for each.</p>
-      <!-- .tool-iframe is moved in here on desktop viewports -->
+      <!-- .tool-iframe is moved in here on desktop viewports. Tool file provides its own header. -->
     </div>
   </div>
 </div>
@@ -381,10 +339,7 @@
     <div class="m-body">
       <div class="m-paper-behind"></div>
       <div class="m-graph-paper">
-        <h1 class="tool-title">Marketing Audit</h1>
-        <div class="tool-eyebrow">TOOL 01</div>
-        <p class="tool-desc">Most interior design firms are undermarketing without knowing it. Answer seven questions and get an honest, section-by-section audit of your presence. Graded across positioning, content strategy, web discoverability, and lead capture, with specific next steps for each.</p>
-        <!-- .tool-iframe is moved in here on mobile viewports when this folder is active -->
+        <!-- .tool-iframe is moved in here on mobile viewports when this folder is active. Tool file provides its own header. -->
       </div>
     </div>
   </div>
@@ -394,9 +349,6 @@
     <div class="m-body">
       <div class="m-paper-behind"></div>
       <div class="m-graph-paper">
-        <h1 class="tool-title">Platform Bio Generator</h1>
-        <div class="tool-eyebrow">TOOL 02</div>
-        <p class="tool-desc">Your bio is the first thing a potential client reads, and most designer bios sound exactly the same. Tell us about your firm and we'll write platform-native bios tailored to your voice.</p>
       </div>
     </div>
   </div>
@@ -406,9 +358,6 @@
     <div class="m-body">
       <div class="m-paper-behind"></div>
       <div class="m-graph-paper">
-        <h1 class="tool-title">Content Brief Generator</h1>
-        <div class="tool-eyebrow">TOOL 03</div>
-        <p class="tool-desc">A post without a strategy is just noise. Give us your topic and firm type and we'll build a complete content brief covering platform selection, caption angles, and SEO keywords.</p>
       </div>
     </div>
   </div>
@@ -418,9 +367,6 @@
     <div class="m-body">
       <div class="m-paper-behind"></div>
       <div class="m-graph-paper">
-        <h1 class="tool-title">Hashtag + Keyword Research</h1>
-        <div class="tool-eyebrow">TOOL 04</div>
-        <p class="tool-desc">Generic hashtags don't get you found. Tell us about your project, design style, and audience and we'll generate curated hashtags and keywords for each platform.</p>
       </div>
     </div>
   </div>
@@ -443,38 +389,17 @@
   /* -----------------------------------------------------
      Tool metadata + URLs
      ----------------------------------------------------- */
+  // Each tool file supplies its own title, eyebrow, and description above its quiz,
+  // so the wrapper only needs to know each tool's URL.
   const TOOLS = {
-    audit: {
-      eyebrow: 'TOOL 01',
-      title:   'Marketing Audit',
-      desc:    "Most interior design firms are undermarketing without knowing it. Answer seven questions and get an honest, section-by-section audit of your presence. Graded across positioning, content strategy, web discoverability, and lead capture, with specific next steps for each.",
-      url:     'https://studio-lou-rag.onrender.com/tools/marketing-audit'
-    },
-    bio: {
-      eyebrow: 'TOOL 02',
-      title:   'Platform Bio Generator',
-      desc:    "Your bio is the first thing a potential client reads, and most designer bios sound exactly the same. Tell us about your firm and we'll write platform-native bios tailored to your voice.",
-      url:     'https://studio-lou-rag.onrender.com/tools/bio-generator'
-    },
-    brief: {
-      eyebrow: 'TOOL 03',
-      title:   'Content Brief Generator',
-      desc:    "A post without a strategy is just noise. Give us your topic and firm type and we'll build a complete content brief covering platform selection, caption angles, and SEO keywords.",
-      url:     'https://studio-lou-rag.onrender.com/tools/content-brief'
-    },
-    hashtags: {
-      eyebrow: 'TOOL 04',
-      title:   'Hashtag + Keyword Research',
-      desc:    "Generic hashtags don't get you found. Tell us about your project, design style, and audience and we'll generate curated hashtags and keywords for each platform.",
-      url:     'https://studio-lou-rag.onrender.com/tools/hashtag-research'
-    }
+    audit:    { url: 'https://studio-lou-rag.onrender.com/tools/marketing-audit'  },
+    bio:      { url: 'https://studio-lou-rag.onrender.com/tools/bio-generator'    },
+    brief:    { url: 'https://studio-lou-rag.onrender.com/tools/content-brief'    },
+    hashtags: { url: 'https://studio-lou-rag.onrender.com/tools/hashtag-research' }
   };
 
   const iframe = document.querySelector('.tool-iframe');
-  const desktopTitle   = document.getElementById('desktop-title');
-  const desktopEyebrow = document.getElementById('desktop-eyebrow');
-  const desktopDesc    = document.getElementById('desktop-desc');
-  const desktopGraph   = document.getElementById('desktop-graph-paper');
+  const desktopGraph = document.getElementById('desktop-graph-paper');
 
   let activeTool = 'audit';
 
@@ -505,11 +430,6 @@
     const isSameTool = toolKey === activeTool;
     activeTool = toolKey;
     const t = TOOLS[toolKey];
-
-    // Desktop metadata
-    desktopTitle.textContent   = t.title;
-    desktopEyebrow.textContent = t.eyebrow;
-    desktopDesc.textContent    = t.desc;
 
     // Desktop tab active state
     document.querySelectorAll('.tab').forEach(tab => {
