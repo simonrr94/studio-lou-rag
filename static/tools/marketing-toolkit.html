@@ -87,7 +87,7 @@
     box-shadow: 0 3px 10px rgba(0,0,0,0.08);
   }
 
-  /* Graph paper — the active content surface */
+  /* Graph paper: the active content surface */
   .graph-paper {
     position: relative;
     background: #faf6ea;
@@ -238,15 +238,18 @@
     overflow: hidden;
     padding: 0 14px;
     position: relative;
-    transition: max-height 450ms ease, padding 300ms ease;
+    /* No transition here: closing (folder loses .active) snaps to 0 instantly.
+       Prevents the just-deactivated folder from briefly showing its graph paper
+       after its stack position snaps up (order: 99 is removed). */
   }
   /* Bumped from mockup's 3200px to 10000px so tall tool content isn't clipped when the folder is active. */
   .m-folder.active .m-body {
     max-height: 10000px;
     padding: 14px 14px 30px;
+    transition: max-height 450ms ease, padding 300ms ease;
   }
 
-  /* Paper peeking out from behind the graph paper — mobile analog of the desktop .paper-behind.
+  /* Paper peeking out from behind the graph paper (mobile analog of the desktop .paper-behind.
      Only rendered on the active folder. */
   .m-paper-behind {
     display: none;
@@ -517,13 +520,13 @@
       try {
         window.parent.postMessage({ height: h }, '*');
       } catch (err) {
-        // Silent — Framer may not be reachable in some preview contexts.
+        // Silent: Framer may not be reachable in some preview contexts.
       }
     }
   }
 
   /* -----------------------------------------------------
-     Resize handling — move the iframe if we've crossed the
+     Resize handling: move the iframe if we've crossed the
      640px breakpoint between desktop and mobile layouts.
      ----------------------------------------------------- */
   let resizeTimer;
@@ -531,9 +534,51 @@
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       placeIframe();
+      applyTabPaths();
       reportHeight();
     }, 120);
   });
+
+  /* -----------------------------------------------------
+     Rounded tab corners.
+     Computes a clip-path per tab based on its actual rendered width,
+     since tabs are variable-width (Content Brief expands past min-width).
+     A hard-coded path would misalign on the wider tab; per-tab measurement
+     handles all widths correctly. Falls back to the CSS polygon if this
+     script fails to run.
+     ----------------------------------------------------- */
+  function computeTabPath(width, height, radius) {
+    var inset = 0.1 * width;                             // top-edge inset for the trapezoid angle
+    var edgeLen = Math.sqrt(inset * inset + height * height);
+    var c = radius * height / (edgeLen + inset);         // tangent distance from top corner
+    var cX = c * inset / edgeLen;
+    var cY = c * height / edgeLen;
+
+    var bottomY = 200;                                   // extended below actual tab so tall (active) tabs aren't clipped
+    var rightExt = width - inset + bottomY * inset / height;
+    var leftExt = inset - bottomY * inset / height;
+
+    var f = function (n) { return n.toFixed(2); };
+    return 'M ' + f(inset - cX) + ' ' + f(cY) +
+           ' A ' + radius + ' ' + radius + ' 0 0 1 ' + f(inset + c) + ' 0' +
+           ' L ' + f(width - inset - c) + ' 0' +
+           ' A ' + radius + ' ' + radius + ' 0 0 1 ' + f(width - inset + cX) + ' ' + f(cY) +
+           ' L ' + f(rightExt) + ' ' + bottomY +
+           ' L ' + f(leftExt) + ' ' + bottomY + ' Z';
+  }
+
+  function applyTabPaths() {
+    document.querySelectorAll('.tab').forEach(function (tab) {
+      var rect = tab.getBoundingClientRect();
+      if (rect.width < 10) return;                       // skip if not laid out yet
+      tab.style.clipPath = 'path("' + computeTabPath(rect.width, 48, 8) + '")';
+    });
+    document.querySelectorAll('.m-tab').forEach(function (tab) {
+      var rect = tab.getBoundingClientRect();
+      if (rect.width < 10) return;
+      tab.style.clipPath = 'path("' + computeTabPath(rect.width, 47, 8) + '")';
+    });
+  }
 
   /* -----------------------------------------------------
      Observe body size changes (tab switches, folder expand/
@@ -550,12 +595,19 @@
      ----------------------------------------------------- */
   window.addEventListener('load', () => {
     placeIframe();
+    applyTabPaths();
     reportHeight();
   });
 
   // Also run placement immediately in case load already fired
   placeIframe();
+  applyTabPaths();
   reportHeight();
+
+  // Re-apply tab paths after fonts finish loading. Content Brief's width depends on font metrics.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(applyTabPaths);
+  }
 </script>
 
 </body>
