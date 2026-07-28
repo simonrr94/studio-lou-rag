@@ -15,7 +15,6 @@
     background: #FAF9F6;
     font-family: 'DM Sans', sans-serif;
     color: #433E3C;
-    min-height: 1800px; /* Safety net during cold start / first paint. Real height is driven by postMessage. */
   }
   body {
     padding: 80px 24px 100px;
@@ -26,7 +25,7 @@
      ========================================================= */
   .folder-wrap {
     position: relative;
-    max-width: 820px;
+    max-width: 1000px;
     margin: 0 auto;
   }
 
@@ -133,7 +132,7 @@
   }
 
   /* =========================================================
-     MOBILE STACKED FOLDER (below 720px)
+     MOBILE STACKED FOLDER (below 640px)
      ========================================================= */
   .mobile-stack {
     display: none;
@@ -141,7 +140,7 @@
     margin: 0 auto;
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 640px) {
     body { padding: 56px 12px 60px; }
     .folder-wrap { display: none; }
     .mobile-stack { display: flex; flex-direction: column; }
@@ -408,7 +407,7 @@
      current viewport. Called on load, resize, tab click.
      ----------------------------------------------------- */
   function placeIframe() {
-    const isMobile = window.matchMedia('(max-width: 720px)').matches;
+    const isMobile = window.matchMedia('(max-width: 640px)').matches;
     let target;
     if (isMobile) {
       const activeFolder = document.querySelector('.m-folder.active');
@@ -525,7 +524,7 @@
 
   /* -----------------------------------------------------
      Resize handling — move the iframe if we've crossed the
-     720px breakpoint between desktop and mobile layouts.
+     640px breakpoint between desktop and mobile layouts.
      ----------------------------------------------------- */
   let resizeTimer;
   window.addEventListener('resize', () => {
