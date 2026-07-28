@@ -46,8 +46,14 @@
     color: #6b4a1c;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
-    min-width: 140px;
+    /* Rounded top corners via clip-path: path (polygon can't do curves).
+       Path assumes 140x48 base geometry:
+         - Top-left rounded arc: tangent points at (12.32, 5.76) on left edge and (20, 0) on top
+         - Top-right rounded arc: tangent points at (120, 0) on top and (127.68, 5.76) on right edge
+         - Bottom extended to y=200 so tall (active) tabs aren't clipped short
+       Requires width: 140px so element geometry matches path. */
+    clip-path: path("M 12.32 5.76 A 8 8 0 0 1 20 0 L 120 0 A 8 8 0 0 1 127.68 5.76 L 184.33 200 L -44.33 200 Z");
+    width: 140px;
     text-align: center;
     box-shadow: 0 -2px 8px rgba(0,0,0,0.15) inset;
     cursor: pointer;
@@ -226,10 +232,12 @@
     color: #6b4a1c;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
+    /* Rounded top corners via clip-path: path. Path assumes 120x47 base geometry.
+       Requires width: 120px so element geometry matches path. */
+    clip-path: path("M 10.46 6.02 A 8 8 0 0 1 18.21 0 L 101.79 0 A 8 8 0 0 1 109.54 6.02 L 159.06 200 L -39.06 200 Z");
     cursor: pointer;
     user-select: none;
-    min-width: 96px;
+    width: 120px;
     text-align: center;
   }
 
