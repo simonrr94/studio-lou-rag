@@ -10,18 +10,18 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      
-      background: #FAF9F6;
+      background: transparent;
       font-family: 'DM Sans', sans-serif;
       color: #433E3C;
       font-size: 15px;
       line-height: 1.55;
+      padding: 0;
     }
 
     .container {
       max-width: 720px;
       margin: 0 auto;
-      padding: 36px 24px 100px;
+      padding: 0;
     }
 
     /* ── Progress bar ── */
@@ -456,7 +456,7 @@
     }
 
     /* ── TOOL HEADER ── */
-    .tool-header { padding: 36px 0 8px; }
+    .tool-header { padding: 0 0 8px; }
     .tool-title {
       font-family: 'DM Sans', sans-serif;
       font-weight: 500;
@@ -532,15 +532,15 @@
     <div class="chip-cards-grid" id="projectChips">
       <div class="chip-card" data-value="Cosmetic refresh">
         <div class="chip-card-title">Cosmetic refresh</div>
-        <div class="chip-card-desc">Paint, fixtures, hardware, lighting — no structural changes</div>
+        <div class="chip-card-desc">Paint, fixtures, hardware, lighting: no structural changes</div>
       </div>
       <div class="chip-card" data-value="Partial renovation">
         <div class="chip-card-title">Partial renovation</div>
-        <div class="chip-card-desc">Updating select elements — cabinets, surfaces, or fixtures</div>
+        <div class="chip-card-desc">Updating select elements: cabinets, surfaces, or fixtures</div>
       </div>
       <div class="chip-card" data-value="Full gut renovation">
         <div class="chip-card-title">Full gut renovation</div>
-        <div class="chip-card-desc">Everything out, starting fresh — new layout possible</div>
+        <div class="chip-card-desc">Everything out, starting fresh: new layout possible</div>
       </div>
       <div class="chip-card" data-value="New build or addition">
         <div class="chip-card-title">New build / addition</div>
@@ -601,7 +601,7 @@
       <div class="chip" data-value="Budget-friendly (builder grade, stock options)">Budget-friendly</div>
       <div class="chip" data-value="Mid-range (semi-custom, solid quality)">Mid-range</div>
       <div class="chip" data-value="High-end (custom, premium materials)">High-end</div>
-      <div class="chip" data-value="Mix (splurge on key items, save elsewhere)">Mix — splurge on some, save on others</div>
+      <div class="chip" data-value="Mix (splurge on key items, save elsewhere)">Mix: splurge on some, save on others</div>
     </div>
 
     <hr class="section-divider" />
@@ -623,7 +623,7 @@
   <!-- ──────────────── STEP 6: Home age ──────────────── -->
   <div class="step" id="step6">
     <div class="step-question">How old is your home?</div>
-    <div class="step-subtext">Older homes often carry hidden costs — outdated wiring, plumbing surprises, or materials that need special handling.</div>
+    <div class="step-subtext">Older homes often carry hidden costs: outdated wiring, plumbing surprises, or materials that need special handling.</div>
     <div class="chips" id="ageChips">
       <div class="chip" data-value="2015 or newer">2015 or newer</div>
       <div class="chip" data-value="2000–2014">2000–2014</div>
@@ -642,15 +642,15 @@
   <!-- ──────────────── STEP 7: Timeline ──────────────── -->
   <div class="step" id="step7">
     <div class="step-question">What's your timeline?</div>
-    <div class="step-subtext">Compressed schedules typically cost more — contractors charge a premium for rushed bookings.</div>
+    <div class="step-subtext">Compressed schedules typically cost more: contractors charge a premium for rushed bookings.</div>
     <div class="chip-cards-grid" id="timelineChips">
       <div class="chip-card" data-value="Standard timeline (flexible schedule)">
         <div class="chip-card-title">Standard timeline</div>
-        <div class="chip-card-desc">No hard deadline — schedule when it works for the contractor</div>
+        <div class="chip-card-desc">No hard deadline: schedule when it works for the contractor</div>
       </div>
       <div class="chip-card" data-value="Need it done fast (under 3 months)">
         <div class="chip-card-title">Need it done fast</div>
-        <div class="chip-card-desc">Under 3 months — expect a premium on contractor scheduling</div>
+        <div class="chip-card-desc">Under 3 months: expect a premium on contractor scheduling</div>
       </div>
     </div>
     <div class="hint" id="hint7">Please select a timeline to continue.</div>
@@ -663,7 +663,7 @@
   <!-- ──────────────── STEP 8: Additional notes ──────────────── -->
   <div class="step" id="step8">
     <div class="step-question">Anything else we should know?</div>
-    <div class="step-subtext">Optional — share any details that might affect your estimate. Skip this if nothing comes to mind.</div>
+    <div class="step-subtext">Optional: share any details that might affect your estimate. Skip this if nothing comes to mind.</div>
     <textarea
       id="notesInput"
       placeholder="e.g. We're keeping the existing layout but replacing everything else. The bathroom hasn't been updated since the 1970s. We're hoping to add a double vanity."
@@ -689,7 +689,7 @@
     <!-- Total range card -->
     <div class="total-card">
       <div class="total-label">Estimated total range</div>
-      <div class="total-range" id="totalRange">—</div>
+      <div class="total-range" id="totalRange">–</div>
       <div class="total-sub" id="totalSub"></div>
     </div>
 
@@ -723,7 +723,7 @@
 
     <!-- Disclaimer (hard-coded per spec) -->
     <div class="disclaimer" id="disclaimerText">
-      These ranges reflect general 2025–2026 market conditions for renovation costs (labor, materials, permits, contractors). They do not include furnishings, decor, window treatments, or styling — those are typically budgeted separately. Construction costs vary significantly by your specific zip code, contractor availability, and project complexity. Get 2–3 contractor quotes to validate ranges for your project.
+      These ranges reflect general 2025–2026 market conditions for renovation costs (labor, materials, permits, contractors). They do not include furnishings, decor, window treatments, or styling: those are typically budgeted separately. Construction costs vary significantly by your specific zip code, contractor availability, and project complexity. Get 2–3 contractor quotes to validate ranges for your project.
     </div>
 
     <!-- Actions -->
@@ -738,7 +738,7 @@
 
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
-// SYSTEM PROMPT — paste Lauren's prompt here before deploying
+// SYSTEM PROMPT: paste Lauren's prompt here before deploying
 // ─────────────────────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are a renovation budget estimator for Studio Lou, a Phoenix-based interior 
 design and growth marketing consultancy run by Lauren Simon. You are speaking 
@@ -748,14 +748,14 @@ data-backed budget range based on their inputs.
 # YOUR VOICE
 
 Write like a designer giving honest advice to a friend. Professional, opinionated, 
-and grounded in real experience — not generic. Warmer than a contractor estimate, 
+and grounded in real experience: not generic. Warmer than a contractor estimate, 
 sharper than a Pinterest article.
 
 - Use "we" for Studio Lou perspective ("we'd spend on...", "we'd save on...")
 - No em dashes. Ever. Use commas, periods, or rewrite the sentence.
 - Be specific. "A Bosch dishwasher" beats "a quality appliance."
 - Take a position on where to spend vs save. Don't hedge.
-- Avoid generic phrases like "every project is unique" — that's the disclaimer's job.
+- Avoid generic phrases like "every project is unique": that's the disclaimer's job.
 
 # OUTPUT FORMAT
 
@@ -780,14 +780,14 @@ The JSON structure must match this schema exactly:
   "spend_on": "A short 2-3 sentence Studio Lou recommendation on where to invest. Specific.",
   "save_on": "A short 2-3 sentence Studio Lou recommendation on where to cut. Specific.",
   "what_could_change": [
-    "First factor — 1 sentence, tied to their inputs (home age, location, scope).",
-    "Second factor — 1 sentence.",
-    "Third factor — 1 sentence."
+    "First factor: 1 sentence, tied to their inputs (home age, location, scope).",
+    "Second factor: 1 sentence.",
+    "Third factor: 1 sentence."
   ]
 }
 
 All dollar values are whole numbers (no cents, no commas, no $ signs in the JSON).
-The breakdown categories should reflect the room type and scope — Kitchen will 
+The breakdown categories should reflect the room type and scope: Kitchen will 
 have cabinets/appliances/countertops; Bathroom will have fixtures/tile/vanity; 
 Living room will have flooring/built-ins/lighting; etc. Always include Labor, 
 Permits & design fees, and Contingency as line items.
@@ -891,18 +891,18 @@ The spend_on and save_on fields should reflect their specific selections,
 not generic advice. Use these designer-and-contractor-validated patterns:
 
 ## Kitchen
-Spend on: cabinets (30-40% of budget for a reason — cheap cabinets fail fast, 
+Spend on: cabinets (30-40% of budget for a reason: cheap cabinets fail fast, 
 take up 75% of visual space), countertops (especially the island if budget 
-is tight — quartzite, quartz, or honed marble holds up), and ventilation 
-(boring but real — a properly vented hood is non-negotiable).
+is tight: quartzite, quartz, or honed marble holds up), and ventilation 
+(boring but real: a properly vented hood is non-negotiable).
 Save on: cabinet hardware and pendant lighting (easy to swap in a few years), 
 mid-range appliances from Bosch, GE, Jenn-Air, or Fisher & Paykel (skip 
 Sub-Zero/Wolf unless you cook professionally), and backsplash tile beyond 
 a focal section.
 
 ## Bathroom
-Spend on: the shower (waterproofing matters, you cannot redo it cheaply 
-— invest in treated glass like StayCLEAN, proper waterproofing systems 
+Spend on: the shower (waterproofing matters, you cannot redo it cheaply: 
+invest in treated glass like StayCLEAN, proper waterproofing systems 
 like Schluter), floor tile (high-traffic, hardest to redo), and plumbing 
 fixtures from a brand with a real warranty.
 Save on: the toilet (American Standard is genuinely excellent at its price), 
@@ -932,7 +932,7 @@ over form on the actual fixtures.
 
 ## Laundry room
 Spend on: the appliances (this is the one room where the appliances ARE 
-the room — invest in a quality washer/dryer pair) and counter surface for 
+the room: invest in a quality washer/dryer pair) and counter surface for 
 folding.
 Save on: cabinet finishes (utility space, no one's photographing it), 
 backsplash tile, and decorative lighting.
@@ -947,7 +947,7 @@ Generate 3 factors tied to THEIR specific inputs. Use these triggers:
 If home age is pre-1980:
 - Hidden electrical issues (knob-and-tube wiring, undersized panels) can 
   add $5,000–$15,000 once walls are opened
-- Asbestos in flooring, insulation, or popcorn ceilings — abatement runs 
+- Asbestos in flooring, insulation, or popcorn ceilings: abatement runs 
   $2,000–$10,000 if found
 - Lead paint (anything pre-1978) requires certified handling, $3–$10 per 
   square foot of affected surface
@@ -957,7 +957,7 @@ If layout change was selected:
   estimate, especially if a structural engineer is required
 
 If new build or full gut:
-- Permit timelines vary wildly by jurisdiction — major metros can take 
+- Permit timelines vary wildly by jurisdiction: major metros can take 
   2–6 months for approval
 - Long-lead items (custom cabinets, specialty tile, appliances) can have 
   8–16 week lead times that extend timelines and carrying costs
@@ -980,11 +980,11 @@ Always include something about getting 2–3 contractor quotes to validate.
 
 - Never quote a single number. Always a range.
 - Never include furnishings, decor, window treatments, or styling in the 
-  breakdown — these are explicitly excluded.
+  breakdown: these are explicitly excluded.
 - Round all dollar values to the nearest $100 for cleanliness.
 - The "low" of the total range should equal the sum of the breakdown lows.
 - The "high" of the total range should equal the sum of the breakdown highs.
-  (Math must reconcile — the breakdown adds up to the total.)
+  (Math must reconcile: the breakdown adds up to the total.)
 - Never use em dashes.
 - Never use the word "curious" in any output.
 - Spend/save sections are 2–3 sentences MAX each. Tight.
@@ -1096,7 +1096,7 @@ const FOCUS_OPTIONS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Size options — ranges differ by room type
+// Size options: ranges differ by room type
 // ─────────────────────────────────────────────────────────────────────────────
 function getSizeOptions(room) {
   if (room === 'Kitchen' || room === 'Living room') {
@@ -1475,7 +1475,7 @@ function downloadPDF() {
   // ── What could change ──
   checkPage(60);
   const changeItems = Array.from(document.querySelectorAll('#changeList li')).map(li => li.textContent);
-  // Set font BEFORE splitTextToSize — width calc must match render size
+  // Set font BEFORE splitTextToSize: width calc must match render size
   // Use ASCII hyphen: jsPDF built-in Helvetica is latin-1 only, Unicode arrows corrupt the line
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -1563,6 +1563,30 @@ document.addEventListener('DOMContentLoaded', () => {
   initCardSelect('timelineChips', 'timeline');
   // sizeChips and focusChips are populated dynamically on step transition
 });
+</script>
+<script>
+  /* Report tool height to the toolkit wrapper. */
+  (function () {
+    var lastHeight = 0;
+    function reportHeight() {
+      var h = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.documentElement ? document.documentElement.scrollHeight : 0
+      );
+      if (h !== lastHeight) {
+        lastHeight = h;
+        try {
+          window.parent.postMessage({ height: h }, '*');
+        } catch (e) { /* parent unreachable in some preview contexts */ }
+      }
+    }
+    window.addEventListener('load', reportHeight);
+    window.addEventListener('resize', reportHeight);
+    if (typeof ResizeObserver !== 'undefined' && document.body) {
+      new ResizeObserver(reportHeight).observe(document.body);
+    }
+    reportHeight();
+  })();
 </script>
 </body>
 </html>

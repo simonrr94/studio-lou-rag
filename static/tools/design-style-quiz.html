@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Design Style Quiz — Studio Lou</title>
+  <title>Design Style Quiz: Studio Lou</title>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      
-      background: #FAF9F6;
+      background: transparent;
       font-family: 'DM Sans', sans-serif;
       color: #433E3C;
+      padding: 0;
     }
 
     .quiz-wrap {
       max-width: 680px;
       margin: 0 auto;
-      padding: 32px 24px 80px;
+      padding: 0;
     }
 
     /* ── PROGRESS BAR ── */
@@ -307,7 +307,7 @@
     }
 
     /* ── TOOL HEADER ── */
-    .tool-header { padding: 36px 0 8px; }
+    .tool-header { padding: 0 0 8px; }
     .tool-title {
       font-family: 'DM Sans', sans-serif;
       font-weight: 500;
@@ -367,7 +367,7 @@
   <div class="screen" id="screen-email">
     <p class="intro-eyebrow">Almost there</p>
     <h2 class="gate-headline">Where should we send your style profile?</h2>
-    <p class="gate-sub">We'll show your results right here — and send a copy to your inbox so you have it when you're ready to act on it.</p>
+    <p class="gate-sub">We'll show your results right here: and send a copy to your inbox so you have it when you're ready to act on it.</p>
     <div class="error-msg" id="emailError">Please enter a valid email address.</div>
     <input type="email" class="email-input" id="emailInput" placeholder="your@email.com" />
     <p class="email-note">No spam, ever. Just your results.</p>
@@ -417,54 +417,54 @@
       text: "When you walk into a room and immediately feel at home, it usually looks like:",
       options: [
         "Clean lines, minimal clutter, everything has a purpose",
-        "Layered and collected — art, books, objects that tell a story",
-        "Warm and timeless — quality furniture, classic silhouettes",
-        "Retro-inspired with character — tapered legs, bold accent colors, vintage finds"
+        "Layered and collected: art, books, objects that tell a story",
+        "Warm and timeless: quality furniture, classic silhouettes",
+        "Retro-inspired with character: tapered legs, bold accent colors, vintage finds"
       ]
     },
     {
       text: "Your ideal color palette is:",
       options: [
-        "Warm neutrals — cream, linen, camel, soft terracotta",
-        "Cool and crisp — white, grey, black, the occasional pop",
-        "Rich and saturated — deep green, navy, burgundy, cognac",
-        "Earthy and natural — sage, clay, sand, warm wood tones"
+        "Warm neutrals: cream, linen, camel, soft terracotta",
+        "Cool and crisp: white, grey, black, the occasional pop",
+        "Rich and saturated: deep green, navy, burgundy, cognac",
+        "Earthy and natural: sage, clay, sand, warm wood tones"
       ]
     },
     {
       text: "When it comes to pattern and texture, you:",
       options: [
-        "Keep it subtle — texture yes, pattern rarely",
-        "Love a mix — layered rugs, throw pillows, a printed wallpaper moment",
-        "Go bold — pattern is a design statement, not an afterthought",
-        "Let materials do the talking — linen, marble, cane, raw wood"
+        "Keep it subtle: texture yes, pattern rarely",
+        "Love a mix: layered rugs, throw pillows, a printed wallpaper moment",
+        "Go bold: pattern is a design statement, not an afterthought",
+        "Let materials do the talking: linen, marble, cane, raw wood"
       ]
     },
     {
       text: "Your ideal Saturday at home looks like:",
       options: [
-        "Everything in its place, calm and quiet — your home is your reset",
-        "People over — it's a space meant to be lived in loudly",
-        "Cozy and atmospheric — soft lighting, layers, a candle burning somewhere",
-        "Productive but beautiful — you work from home and your space needs to do both"
+        "Everything in its place, calm and quiet: your home is your reset",
+        "People over: it's a space meant to be lived in loudly",
+        "Cozy and atmospheric: soft lighting, layers, a candle burning somewhere",
+        "Productive but beautiful: you work from home and your space needs to do both"
       ]
     },
     {
       text: "When you're shopping for furniture, you gravitate toward:",
       options: [
-        "Investment pieces — fewer things, better quality",
-        "The find — vintage, one-of-a-kind, something with history",
-        "Accessible but elevated — CB2, Article, West Elm done right",
+        "Investment pieces: fewer things, better quality",
+        "The find: vintage, one-of-a-kind, something with history",
+        "Accessible but elevated: CB2, Article, West Elm done right",
         "The statement piece first, then build around it"
       ]
     },
     {
       text: "Clutter in your home makes you feel:",
       options: [
-        "Genuinely anxious — a clear space is a clear mind",
-        "Kind of fine actually — organized chaos is still cozy",
+        "Genuinely anxious: a clear space is a clear mind",
+        "Kind of fine actually: organized chaos is still cozy",
         "Motivated to edit, but you like having things around",
-        "Like something needs to change — you want beauty and function equally"
+        "Like something needs to change: you want beauty and function equally"
       ]
     },
     {
@@ -479,7 +479,7 @@
     {
       text: "Where are you in your design process?",
       options: [
-        "Early stages — gathering inspiration and figuring out my style",
+        "Early stages: gathering inspiration and figuring out my style",
         "I know what I want, I just need help executing it",
         "I'm in the middle of a move or renovation",
         "I've been sitting on this project for a while and I'm ready to actually do it"
@@ -580,12 +580,12 @@
       return 'Q' + (i + 1) + ': ' + q.text + '\nAnswer: ' + chosenText;
     }).join('\n\n');
 
-    const systemPrompt = `You are a professional interior designer and brand voice for Studio Lou, a Phoenix-based virtual interior design consultancy run by Lauren Payne. Your tone is warm, opinionated, and direct — like a designer friend giving real advice, not generic lifestyle copy.
+    const systemPrompt = `You are a professional interior designer and brand voice for Studio Lou, a Phoenix-based virtual interior design consultancy run by Lauren Payne. Your tone is warm, opinionated, and direct: like a designer friend giving real advice, not generic lifestyle copy.
 
 You will receive the answers to an 8-question design style quiz from a homeowner. Based on their answers, determine:
 1. Their PRIMARY design style (choose exactly one from: Modern, Traditional, Transitional, Mid-Century Modern, Contemporary)
 2. Their SECONDARY influence (choose exactly one from: Japandi, Moody, Glam, Eclectic, Coastal, Organic, Maximalist, Bohemian, Grandmillennial, Minimalist)
-3. A 3-paragraph result description written in Studio Lou voice — warm, specific, earned. First paragraph describes their primary style and what it says about them. Second paragraph brings in the secondary influence and how it nuances the primary. Third paragraph gives one concrete piece of design direction they can act on.
+3. A 3-paragraph result description written in Studio Lou voice: warm, specific, earned. First paragraph describes their primary style and what it says about them. Second paragraph brings in the secondary influence and how it nuances the primary. Third paragraph gives one concrete piece of design direction they can act on.
 4. Exactly 4 brand/retailer callouts that genuinely fit this combination (real brands: e.g. Serena & Lily, CB2, Article, Rejuvenation, Anthropologie Home, McGee & Co, Lulu and Georgia, West Elm, RH, World Market, Arhaus, Pottery Barn, IKEA, Crate & Barrel, Room & Board, Blu Dot, etc.)
 
 Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exactly this shape:
@@ -688,8 +688,32 @@ Return ONLY a valid JSON object with no markdown, no backticks, no preamble. Exa
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
-    }).catch(() => {}); // Silent fail — don't block the result screen
+    }).catch(() => {}); // Silent fail: don't block the result screen
   }
+</script>
+<script>
+  /* Report tool height to the toolkit wrapper. */
+  (function () {
+    var lastHeight = 0;
+    function reportHeight() {
+      var h = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.documentElement ? document.documentElement.scrollHeight : 0
+      );
+      if (h !== lastHeight) {
+        lastHeight = h;
+        try {
+          window.parent.postMessage({ height: h }, '*');
+        } catch (e) { /* parent unreachable in some preview contexts */ }
+      }
+    }
+    window.addEventListener('load', reportHeight);
+    window.addEventListener('resize', reportHeight);
+    if (typeof ResizeObserver !== 'undefined' && document.body) {
+      new ResizeObserver(reportHeight).observe(document.body);
+    }
+    reportHeight();
+  })();
 </script>
 </body>
 </html>
