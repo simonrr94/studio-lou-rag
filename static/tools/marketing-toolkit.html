@@ -25,7 +25,6 @@
      ========================================================= */
   .folder-wrap {
     position: relative;
-    max-width: 1000px;
     margin: 0 auto;
   }
 
@@ -286,6 +285,11 @@
 </head>
 <body>
 
+<!-- DEBUG READOUT — remove after diagnosing width issue -->
+<div id="debug-width" style="position: fixed; top: 8px; right: 8px; z-index: 9999; background: #582b36; color: #fff; padding: 6px 10px; font-family: monospace; font-size: 12px; border-radius: 4px; pointer-events: none;">
+  viewport: <span id="debug-w">?</span>px
+</div>
+
 <!-- =========================================================
      DESKTOP LAYOUT
      ========================================================= -->
@@ -407,6 +411,10 @@
      current viewport. Called on load, resize, tab click.
      ----------------------------------------------------- */
   function placeIframe() {
+    // DEBUG: update the visible viewport width readout
+    var debugEl = document.getElementById('debug-w');
+    if (debugEl) debugEl.textContent = window.innerWidth;
+
     const isMobile = window.matchMedia('(max-width: 640px)').matches;
     let target;
     if (isMobile) {
