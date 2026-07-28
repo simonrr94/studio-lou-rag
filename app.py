@@ -658,6 +658,10 @@ def room_layout_helper():
 def renovation_budget_estimator():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "renovation-budget-estimator.html")
 
+@app.route("/tools/homeowner-toolkit")
+def homeowner_toolkit():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "homeowner-toolkit.html")
+
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)

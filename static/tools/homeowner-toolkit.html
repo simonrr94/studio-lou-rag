@@ -1,275 +1,564 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Homeowner Design Tools · Studio Lou</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: auto; }
-    body { font-family: 'DM Sans', sans-serif; background: #FAF9F6; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studio Lou · Homeowner Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Crimson+Text:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #FAF9F6;
+    font-family: 'DM Sans', sans-serif;
+    color: #433E3C;
+  }
+  body {
+    padding: 80px 24px 100px;
+  }
 
-    /* Outer wrapper: holds the green line */
-    .tab-bar-outer {
-      position: relative;
-      background: #FAF9F6;
-      padding-top: 12px;
-      border-bottom: 3px solid #A6BE47;
-    }
+  /* =========================================================
+     DESKTOP: single folder shell with 4 tabs across the top
+     ========================================================= */
+  .folder-wrap {
+    position: relative;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
 
-    /* Inner scrollable row */
-    .tab-bar {
-      display: flex;
-      align-items: flex-end;
-      gap: 6px;
-      padding: 12px 24px 0;
-      overflow-x: auto;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
-    }
-    .tab-bar::-webkit-scrollbar { display: none; }
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-left: 40px;
+    position: relative;
+    z-index: 3;
+  }
+  .tab {
+    background: #d9b565;
+    padding: 14px 22px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b4a1c;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
+    /* 170px keeps the four homeowner tabs visually balanced.
+       Longest label ("Budget Estimator") lands at ~182px natural width; the other three sit at 170. */
+    min-width: 170px;
+    text-align: center;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.15) inset;
+    cursor: pointer;
+    user-select: none;
+    transition: background 150ms ease;
+  }
+  .tab:hover { background: #d4ac52; }
+  .tab.active {
+    background: #E8C97A;
+    color: #3b2a0f;
+    padding-bottom: 26px;
+    margin-bottom: -6px;
+    z-index: 4;
+    position: relative;
+    box-shadow: none;
+  }
 
-    /* filter on PARENT of clip-path element */
-    .tab-wrap {
-      flex-shrink: 0;
-      position: relative;
-      z-index: 1;
-      filter: drop-shadow(-6px 0 5px rgba(0,0,0,0.18))
-              drop-shadow(6px 0 5px rgba(0,0,0,0.18))
-              drop-shadow(0 -3px 5px rgba(0,0,0,0.09));
-    }
-    .tab-wrap.is-active { z-index: 3; }
+  /* Folder body */
+  .folder {
+    background: #E8C97A;
+    border-radius: 2px 14px 10px 10px;
+    padding: 44px 40px 56px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.14);
+    position: relative;
+  }
 
-    .tab-btn {
-      display: block;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 15px;
-      font-weight: 600;
-      color: #6b6560;
-      background: #ffffff;
-      border: none;
-      padding: 12px 36px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.15s, color 0.15s;
-    }
-    .tab-btn span { display: inline-block; }
-    .tab-btn.active { background: #A6BE47; color: #fff; }
-    .tab-btn:hover:not(.active) { color: #433E3C; }
+  /* Paper peeking out from behind the graph paper (inside the folder) */
+  .paper-behind {
+    position: absolute;
+    top: 28px;
+    right: 24px;
+    bottom: 32px;
+    left: 40px;
+    background: #ffffff;
+    transform: rotate(0.8deg);
+    border-radius: 2px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+  }
 
-    /* Scroll arrows — mobile only */
-    .tab-arrow {
-      display: none;
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      border: none;
-      background: rgba(67,62,60,0.42);
-      cursor: pointer;
-      font-size: 22px;
-      font-weight: 300;
-      color: #ffffff;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      transition: opacity 0.2s;
-      line-height: 1;
-    }
-    .tab-arrow-left  { left: 6px; }
-    .tab-arrow-right { right: 6px; }
-    .tab-arrow.hidden { opacity: 0; pointer-events: none; }
+  /* Graph paper: the active content surface */
+  .graph-paper {
+    position: relative;
+    background: #faf6ea;
+    background-image:
+      linear-gradient(#c9c3b3 0.5px, transparent 0.5px),
+      linear-gradient(90deg, #c9c3b3 0.5px, transparent 0.5px);
+    background-size: 24px 24px;
+    background-position: 20px 20px;
+    padding: 64px 56px 56px;
+    transform: rotate(-1.2deg);
+    box-shadow:
+      0 2px 4px rgba(0,0,0,0.16),
+      0 10px 24px rgba(0,0,0,0.22);
+    border-radius: 1px;
+    min-height: 520px;
+  }
 
-    .tab-fade-right {
-      display: none;
-      position: absolute;
-      right: 0; top: 0; bottom: 3px;
-      width: 72px;
-      background: linear-gradient(to right, transparent, #FAF9F6 80%);
-      pointer-events: none;
-      z-index: 5;
-    }
-    .tab-fade-left {
-      display: none;
-      position: absolute;
-      left: 0; top: 0; bottom: 3px;
-      width: 72px;
-      background: linear-gradient(to left, transparent, #FAF9F6 80%);
-      pointer-events: none;
-      z-index: 5;
-    }
+  /* Paperclip
+     Positioning math:
+     - SVG viewBox is 0 0 40 110
+     - Top curve occupies y=4 (peak) to y=14 (base, where wire straightens)
+     - top: -14px lifts the SVG so y=14 aligns with the graph paper's top edge
+     - Result: rounded top curve is visible above the paper edge, vertical lines start at the edge
+  */
+  .paperclip {
+    position: absolute;
+    top: -14px;
+    right: 66px;
+    z-index: 5;
+    filter: drop-shadow(0 4px 5px rgba(0,0,0,0.22));
+  }
 
-    /* Tablet (601-900px): stretch tabs to fill width */
-    @media (min-width: 601px) and (max-width: 900px) {
-      .tab-bar { overflow-x: visible; }
-      .tab-wrap { flex: 1; }
-      .tab-btn  { width: 100%; text-align: center; font-size: 14px; padding: 11px 16px; }
-    }
+  /* The actual tool iframe. Lives inside the graph paper on desktop, or inside the active mobile folder.
+     The tool file provides its own title, eyebrow, and description block above its quiz. */
+  .tool-iframe {
+    width: 100%;
+    height: 800px; /* Fallback height before first postMessage from the tool arrives. */
+    border: 0;
+    display: block;
+    background: transparent;
+    color-scheme: light;
+  }
 
-    /* Mobile (<=600px): scroll + arrows */
-    @media (max-width: 600px) {
-      .tab-arrow { display: flex; }
-      .tab-fade-right, .tab-fade-left { display: block; }
-      .tab-btn { font-size: 13px; padding: 10px 20px; }
-    }
+  /* =========================================================
+     MOBILE STACKED FOLDER (below 640px)
+     ========================================================= */
+  .mobile-stack {
+    display: none;
+    max-width: 440px;
+    margin: 0 auto;
+  }
 
-    #toolFrame {
-      width: 100%;
-      border: none;
-      display: block;
-      min-height: 800px;
-      transition: height 0.2s ease;
-    }
-  </style>
+  @media (max-width: 640px) {
+    body { padding: 56px 12px 60px; }
+    .folder-wrap { display: none; }
+    .mobile-stack { display: flex; flex-direction: column; }
+  }
+
+  /* Base folder: strip of body visible below the tab, next folder overlaps into it.
+     Subtle upward shadow on top edge defines the folder layer against the folder above. */
+  .m-folder {
+    position: relative;
+    border-radius: 3px 3px 0 0;
+    padding-bottom: 60px;
+    margin-bottom: -20px;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.12);
+    transition: padding 300ms ease, margin 300ms ease, border-radius 300ms ease, box-shadow 300ms ease;
+  }
+
+  /* Cap: covers the tab's bottom edges + shadow that extend into the folder body.
+     Paints above the tab-row (z-index 3 > tab-row's z-index 2) so the tab looks
+     seamlessly attached to its folder rather than floating on top of it. */
+  .m-folder::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 22px;
+    z-index: 3;
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    pointer-events: none;
+  }
+
+  /* Shade progression: darkest at back, lightest at front.
+     Each tab inherits its parent folder's shade so the tab reads against the folder above it.
+     The ::before cap also inherits the shade so it seamlessly covers the tab bottom. */
+  .m-folder:nth-child(1),
+  .m-folder:nth-child(1) .m-tab,
+  .m-folder:nth-child(1)::before { background: #D6B15E; }
+  .m-folder:nth-child(2),
+  .m-folder:nth-child(2) .m-tab,
+  .m-folder:nth-child(2)::before { background: #DDB868; }
+  .m-folder:nth-child(3),
+  .m-folder:nth-child(3) .m-tab,
+  .m-folder:nth-child(3)::before { background: #E1C070; }
+  .m-folder:nth-child(4),
+  .m-folder:nth-child(4) .m-tab,
+  .m-folder:nth-child(4)::before { background: #E8C97A; }
+
+  /* Active folder: drops to the bottom of the stack, gets rounded bottom + shadow,
+     and always shows the lightest brand manila regardless of its DOM position. */
+  .m-folder.active,
+  .m-folder.active .m-tab,
+  .m-folder.active::before { background: #E8C97A; }
+  .m-folder.active {
+    order: 99;
+    z-index: 5;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.12), 0 10px 24px rgba(0,0,0,0.18);
+    border-radius: 3px 3px 12px 12px;
+    padding-bottom: 22px;
+    margin-bottom: 0;
+  }
+  .m-folder.active .m-tab {
+    color: #3b2a0f;
+  }
+
+  .m-tab-row {
+    display: flex;
+    margin-top: -34px;
+    position: relative;
+    z-index: 2;
+    filter: drop-shadow(0 -1px 3px rgba(0,0,0,0.18));
+  }
+  .m-folder:nth-child(1) .m-tab-row { justify-content: flex-start; padding-left: 20px; }
+  .m-folder:nth-child(2) .m-tab-row { justify-content: flex-end;   padding-right: 32%; }
+  .m-folder:nth-child(3) .m-tab-row { justify-content: flex-end;   padding-right: 20px; }
+  .m-folder:nth-child(4) .m-tab-row { justify-content: flex-start; padding-left: 34%; }
+
+  .m-tab {
+    padding: 12px 22px 22px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #6b4a1c;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
+    cursor: pointer;
+    user-select: none;
+    min-width: 96px;
+    text-align: center;
+  }
+
+  .m-body {
+    max-height: 0;
+    overflow: hidden;
+    padding: 0 14px;
+    position: relative;
+    transition: max-height 450ms ease, padding 300ms ease;
+  }
+  /* Bumped from mockup's 3200px to 10000px so tall tool content isn't clipped when the folder is active. */
+  .m-folder.active .m-body {
+    max-height: 10000px;
+    padding: 14px 14px 30px;
+  }
+
+  /* Paper peeking out from behind the graph paper (mobile analog of the desktop .paper-behind).
+     Only rendered on the active folder. */
+  .m-paper-behind {
+    display: none;
+  }
+  .m-folder.active .m-paper-behind {
+    display: block;
+    position: absolute;
+    top: 20px;
+    left: 4px;
+    right: 4px;
+    bottom: 16px;
+    background: #ffffff;
+    border-radius: 2px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+    transform: rotate(0.8deg);
+    pointer-events: none;
+  }
+  .m-folder.active .m-graph-paper {
+    position: relative;
+    z-index: 1;
+  }
+
+  .m-graph-paper {
+    background: #faf6ea;
+    background-image:
+      linear-gradient(#c9c3b3 0.5px, transparent 0.5px),
+      linear-gradient(90deg, #c9c3b3 0.5px, transparent 0.5px);
+    background-size: 20px 20px;
+    background-position: 10px 10px;
+    padding: 32px 24px 32px;
+    box-shadow:
+      0 2px 4px rgba(0,0,0,0.14),
+      0 8px 16px rgba(0,0,0,0.18);
+    border-radius: 1px;
+  }
+</style>
 </head>
 <body>
-  <div class="tab-bar-outer" id="tabBar">
-    <div class="tab-bar" id="tabScroll">
 
-      <!-- TOOL 1: Design Style Quiz -->
-      <div class="tab-wrap is-active">
-        <button class="tab-btn active"
-          onclick="loadTool(this,'design-style-quiz')"
-          data-full="Design Style Quiz"
-          data-tablet="Design Style Quiz"
-          data-short="Design Style Quiz">
-          <span>Design Style Quiz</span>
-        </button>
-      </div>
-
-      <!-- TOOL 2: Color Palette Generator -->
-      <div class="tab-wrap">
-        <button class="tab-btn"
-          onclick="loadTool(this,'color-palette-generator')"
-          data-full="Color Palette Generator"
-          data-tablet="Color Palette Generator"
-          data-short="Color Palette Generator">
-          <span>Color Palette Generator</span>
-        </button>
-      </div>
-
-      <!-- TOOL 3: Room Layout Helper -->
-      <div class="tab-wrap">
-        <button class="tab-btn"
-          onclick="loadTool(this,'room-layout-helper')"
-          data-full="Room Layout Helper"
-          data-tablet="Room Layout Helper"
-          data-short="Room Layout Helper">
-          <span>Room Layout Helper</span>
-        </button>
-      </div>
-
-      <!-- TOOL 4: Renovation Budget Estimator -->
-      <div class="tab-wrap">
-        <button class="tab-btn"
-          onclick="loadTool(this,'renovation-budget-estimator')"
-          data-full="Renovation Budget Estimator"
-          data-tablet="Budget Estimator"
-          data-short="Budget Estimator">
-          <span>Renovation Budget Estimator</span>
-        </button>
-      </div>
-
-    </div>
-
-    <div class="tab-fade-left"  id="fadeLeft"></div>
-    <div class="tab-fade-right" id="fadeRight"></div>
-    <button class="tab-arrow tab-arrow-left hidden"  id="arrowLeft"  aria-label="Scroll tabs left">&#8249;</button>
-    <button class="tab-arrow tab-arrow-right"        id="arrowRight" aria-label="Scroll tabs right">&#8250;</button>
+<!-- =========================================================
+     DESKTOP LAYOUT
+     ========================================================= -->
+<div class="folder-wrap">
+  <div class="tabs" role="tablist" aria-label="Homeowner Toolkit">
+    <div class="tab active" data-tool="style"   role="tab" tabindex="0" aria-selected="true">Style Quiz</div>
+    <div class="tab"        data-tool="palette" role="tab" tabindex="0" aria-selected="false">Color Palette</div>
+    <div class="tab"        data-tool="layout"  role="tab" tabindex="0" aria-selected="false">Room Layout</div>
+    <div class="tab"        data-tool="budget"  role="tab" tabindex="0" aria-selected="false">Budget Estimator</div>
   </div>
 
-  <iframe id="toolFrame" src="https://studio-lou-rag.onrender.com/tools/design-style-quiz" scrolling="no"></iframe>
+  <div class="folder">
+    <div class="paper-behind"></div>
 
-  <script>
-    var frame      = document.getElementById('toolFrame');
-    var tabBar     = document.getElementById('tabBar');
-    var tabScroll  = document.getElementById('tabScroll');
-    var arrowLeft  = document.getElementById('arrowLeft');
-    var arrowRight = document.getElementById('arrowRight');
-    var fadeLeft   = document.getElementById('fadeLeft');
-    var fadeRight  = document.getElementById('fadeRight');
-    var lastH = 0;
-    var BASE = 'https://studio-lou-rag.onrender.com/tools/';
+    <div class="graph-paper" id="desktop-graph-paper">
+      <svg class="paperclip" width="40" height="110" viewBox="0 0 40 110" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M 5 40
+                 L 5 96
+                 Q 5 106, 15 106
+                 L 25 106
+                 Q 35 106, 35 96
+                 L 35 14
+                 Q 35 4, 25 4
+                 L 15 4
+                 Q 5 4, 5 14"
+              stroke="#8a8a8a"
+              stroke-width="2.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              fill="none" />
+        <path d="M 8 48 L 8 88"
+              stroke="#c8c8c8"
+              stroke-width="0.9"
+              stroke-linecap="round"
+              fill="none"
+              opacity="0.7" />
+      </svg>
 
-    function loadTool(btn, name) {
-      document.querySelectorAll('.tab-btn').forEach(function(b)  { b.classList.remove('active'); });
-      document.querySelectorAll('.tab-wrap').forEach(function(w) { w.classList.remove('is-active'); });
-      btn.classList.add('active');
-      btn.closest('.tab-wrap').classList.add('is-active');
-      frame.style.height = '800px';
-      lastH = 0;
-      frame.src = BASE + name;
+      <!-- .tool-iframe is moved in here on desktop viewports. Tool file provides its own header. -->
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     MOBILE LAYOUT (stacked folders)
+     ========================================================= -->
+<div class="mobile-stack" role="tablist" aria-label="Homeowner Toolkit">
+  <div class="m-folder active" data-tool="style">
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="true">Style Quiz</div></div>
+    <div class="m-body">
+      <div class="m-paper-behind"></div>
+      <div class="m-graph-paper">
+        <!-- .tool-iframe is moved in here on mobile viewports when this folder is active. Tool file provides its own header. -->
+      </div>
+    </div>
+  </div>
+
+  <div class="m-folder" data-tool="palette">
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Color Palette</div></div>
+    <div class="m-body">
+      <div class="m-paper-behind"></div>
+      <div class="m-graph-paper">
+      </div>
+    </div>
+  </div>
+
+  <div class="m-folder" data-tool="layout">
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Room Layout</div></div>
+    <div class="m-body">
+      <div class="m-paper-behind"></div>
+      <div class="m-graph-paper">
+      </div>
+    </div>
+  </div>
+
+  <div class="m-folder" data-tool="budget">
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Budget Estimator</div></div>
+    <div class="m-body">
+      <div class="m-paper-behind"></div>
+      <div class="m-graph-paper">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     THE TOOL IFRAME
+     Single element. Moved between the desktop graph-paper and
+     the active mobile folder's m-graph-paper based on viewport.
+     ========================================================= -->
+<iframe
+  class="tool-iframe"
+  src="https://studio-lou-rag.onrender.com/tools/design-style-quiz"
+  title="Studio Lou tool"
+  loading="eager"
+  scrolling="no"
+></iframe>
+
+<script>
+  /* -----------------------------------------------------
+     Tool metadata + URLs
+     ----------------------------------------------------- */
+  // Each tool file supplies its own title, eyebrow, and description above its quiz,
+  // so the wrapper only needs to know each tool's URL.
+  const TOOLS = {
+    style:   { url: 'https://studio-lou-rag.onrender.com/tools/design-style-quiz'           },
+    palette: { url: 'https://studio-lou-rag.onrender.com/tools/color-palette-generator'     },
+    layout:  { url: 'https://studio-lou-rag.onrender.com/tools/room-layout-helper'          },
+    budget:  { url: 'https://studio-lou-rag.onrender.com/tools/renovation-budget-estimator' }
+  };
+
+  const iframe = document.querySelector('.tool-iframe');
+  const desktopGraph = document.getElementById('desktop-graph-paper');
+
+  let activeTool = 'style';
+
+  /* -----------------------------------------------------
+     Place the iframe in the correct container for the
+     current viewport. Called on load, resize, tab click.
+     ----------------------------------------------------- */
+  function placeIframe() {
+    const isMobile = window.matchMedia('(max-width: 640px)').matches;
+    let target;
+    if (isMobile) {
+      const activeFolder = document.querySelector('.m-folder.active');
+      target = activeFolder ? activeFolder.querySelector('.m-graph-paper') : null;
+    } else {
+      target = desktopGraph;
+    }
+    if (target && iframe.parentNode !== target) {
+      target.appendChild(iframe);
+    }
+  }
+
+  /* -----------------------------------------------------
+     Switch tools: update desktop metadata, active state
+     on tabs + mobile folders, swap iframe src, reposition.
+     ----------------------------------------------------- */
+  function switchTool(toolKey) {
+    if (!TOOLS[toolKey]) return;
+    const isSameTool = toolKey === activeTool;
+    activeTool = toolKey;
+    const t = TOOLS[toolKey];
+
+    // Desktop tab active state
+    document.querySelectorAll('.tab').forEach(tab => {
+      const isActive = tab.dataset.tool === toolKey;
+      tab.classList.toggle('active', isActive);
+      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
+    // Mobile folder active state
+    document.querySelectorAll('.m-folder').forEach(f => {
+      const isActive = f.dataset.tool === toolKey;
+      f.classList.toggle('active', isActive);
+      const mtab = f.querySelector('.m-tab');
+      if (mtab) mtab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+
+    // Only swap src if we actually changed tools (avoid tearing down the current tool on a no-op click)
+    if (!isSameTool) {
+      // Reset iframe height to the fallback so the previous tool's tall content doesn't leave a gap
+      // while the new tool loads and eventually posts its own height.
+      iframe.style.height = '800px';
+      iframe.src = t.url;
     }
 
-    /* Rounded trapezoid clip-path — wider at bottom, opposite angles on each side */
-    function trapPath(w, h, inset, r) {
-      var L  = Math.sqrt(inset * inset + h * h);
-      var ux = inset / L, uy = h / L;
-      var tlx0 = inset - ux * r, tly0 = uy * r;
-      var tlx1 = inset + r,      tly1 = 0;
-      var trx0 = (w - inset) - r, try0 = 0;
-      var trx1 = (w - inset) + ux * r, try1 = uy * r;
-      return ['M',f(tlx0),f(tly0),'Q',inset,0,f(tlx1),f(tly1),
-              'L',f(trx0),f(try0),'Q',(w-inset),0,f(trx1),f(try1),
-              'L',w,h,'L',0,h,'Z'].join(' ');
+    placeIframe();
+    reportHeight();
+  }
+
+  /* -----------------------------------------------------
+     Desktop tab click + keyboard
+     ----------------------------------------------------- */
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => switchTool(tab.dataset.tool));
+    tab.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        switchTool(tab.dataset.tool);
+      }
+    });
+  });
+
+  /* -----------------------------------------------------
+     Mobile tab click + keyboard
+     Match mockup behaviour: clicking the currently active
+     folder's tab does nothing (one folder always open).
+     ----------------------------------------------------- */
+  document.querySelectorAll('.m-tab').forEach(mtab => {
+    const handler = () => {
+      const folder = mtab.closest('.m-folder');
+      if (!folder || folder.classList.contains('active')) return;
+      switchTool(folder.dataset.tool);
+    };
+    mtab.addEventListener('click', handler);
+    mtab.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handler();
+      }
+    });
+  });
+
+  /* -----------------------------------------------------
+     postMessage bridge
+     - Inner tool iframe posts { height: number } → we size the iframe
+     - Wrapper posts { height: number } → Framer sizes the outer embed
+     ----------------------------------------------------- */
+  window.addEventListener('message', (e) => {
+    // Filter to messages from the tool iframe only
+    if (!e.data || typeof e.data.height !== 'number') return;
+    if (iframe.contentWindow && e.source !== iframe.contentWindow) return;
+
+    const newHeight = Math.max(0, Math.round(e.data.height));
+    // Guard against messaging loops: only update when the height actually changed
+    if (iframe.style.height !== newHeight + 'px') {
+      iframe.style.height = newHeight + 'px';
     }
-    function f(n) { return n.toFixed(2); }
+    reportHeight();
+  });
 
-    function updateTabPaths() {
-      document.querySelectorAll('.tab-btn').forEach(function(btn) {
-        var w = btn.offsetWidth, h = btn.offsetHeight;
-        if (w > 0 && h > 0) {
-          btn.style.clipPath = 'path("' + trapPath(w, h, 18, 12) + '")';
-        }
-      });
-    }
-
-    /* Three label tiers: full on desktop, tablet labels 601-900px, short on mobile */
-    function updateLabels() {
-      var w = window.innerWidth;
-      document.querySelectorAll('.tab-btn').forEach(function(btn) {
-        var label = w <= 600 ? btn.dataset.short
-                  : w <= 900 ? btn.dataset.tablet
-                  : btn.dataset.full;
-        btn.querySelector('span').textContent = label;
-      });
-      setTimeout(updateTabPaths, 50);
-    }
-
-    function updateArrows() {
-      if (window.innerWidth > 600) return;
-      var sl  = tabScroll.scrollLeft;
-      var max = tabScroll.scrollWidth - tabScroll.clientWidth;
-      arrowLeft.classList.toggle('hidden',  sl < 10);
-      fadeLeft.style.opacity  = sl < 10 ? '0' : '1';
-      arrowRight.classList.toggle('hidden', sl > max - 10);
-      fadeRight.style.opacity = sl > max - 10 ? '0' : '1';
-    }
-
-    arrowRight.addEventListener('click', function() { tabScroll.scrollBy({ left: 160, behavior: 'smooth' }); });
-    arrowLeft.addEventListener('click',  function() { tabScroll.scrollBy({ left: -160, behavior: 'smooth' }); });
-    tabScroll.addEventListener('scroll', updateArrows);
-
-    function init() { updateLabels(); updateArrows(); }
-    window.addEventListener('resize', init);
-    setTimeout(init, 60);
-
-    /* Iframe height sync — relays to Framer Code Component via postMessage */
-    function syncHeight() {
+  let lastReportedHeight = 0;
+  function reportHeight() {
+    // Report the wrapper's own scrollHeight to Framer so the outer embed can resize.
+    const h = document.body.scrollHeight;
+    if (h !== lastReportedHeight) {
+      lastReportedHeight = h;
       try {
-        var doc = frame.contentDocument || frame.contentWindow.document;
-        var h = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight);
-        if (h > 100 && h !== lastH) {
-          lastH = h;
-          frame.style.height = h + 'px';
-          window.parent.postMessage({ height: h + tabBar.offsetHeight + 4 }, '*');
-        }
-      } catch(e) {}
+        window.parent.postMessage({ height: h }, '*');
+      } catch (err) {
+        // Silent: Framer may not be reachable in some preview contexts.
+      }
     }
-    setInterval(syncHeight, 300);
-  </script>
+  }
+
+  /* -----------------------------------------------------
+     Resize handling: move the iframe if we've crossed the
+     640px breakpoint between desktop and mobile layouts.
+     ----------------------------------------------------- */
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      placeIframe();
+      reportHeight();
+    }, 120);
+  });
+
+  /* -----------------------------------------------------
+     Observe body size changes (tab switches, folder expand/
+     collapse transitions, font load reflow) and report to
+     Framer so the outer embed stays sized correctly.
+     ----------------------------------------------------- */
+  if (typeof ResizeObserver !== 'undefined') {
+    const bodyObserver = new ResizeObserver(() => reportHeight());
+    bodyObserver.observe(document.body);
+  }
+
+  /* -----------------------------------------------------
+     Initial placement + initial height report
+     ----------------------------------------------------- */
+  window.addEventListener('load', () => {
+    placeIframe();
+    reportHeight();
+  });
+
+  // Also run placement immediately in case load already fired
+  placeIframe();
+  reportHeight();
+</script>
+
 </body>
 </html>
