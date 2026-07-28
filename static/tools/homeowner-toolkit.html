@@ -33,7 +33,7 @@
   .tabs {
     display: flex;
     gap: 4px;
-    margin-left: 40px;
+    margin-left: 20px;
     position: relative;
     z-index: 3;
   }
@@ -47,9 +47,7 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
-    /* 170px keeps the four homeowner tabs visually balanced.
-       Longest label ("Budget Estimator") lands at ~182px natural width; the other three sit at 170. */
-    min-width: 170px;
+    min-width: 140px;
     text-align: center;
     box-shadow: 0 -2px 8px rgba(0,0,0,0.15) inset;
     cursor: pointer;
@@ -240,12 +238,15 @@
     overflow: hidden;
     padding: 0 14px;
     position: relative;
-    transition: max-height 450ms ease, padding 300ms ease;
+    /* No transition here: closing (folder loses .active) snaps to 0 instantly.
+       This prevents the just-deactivated folder from briefly showing its graph paper
+       after its stack position snaps up (order: 99 is removed). */
   }
   /* Bumped from mockup's 3200px to 10000px so tall tool content isn't clipped when the folder is active. */
   .m-folder.active .m-body {
     max-height: 10000px;
     padding: 14px 14px 30px;
+    transition: max-height 450ms ease, padding 300ms ease;
   }
 
   /* Paper peeking out from behind the graph paper (mobile analog of the desktop .paper-behind).
@@ -293,10 +294,10 @@
      ========================================================= -->
 <div class="folder-wrap">
   <div class="tabs" role="tablist" aria-label="Homeowner Toolkit">
-    <div class="tab active" data-tool="style"   role="tab" tabindex="0" aria-selected="true">Style Quiz</div>
-    <div class="tab"        data-tool="palette" role="tab" tabindex="0" aria-selected="false">Color Palette</div>
-    <div class="tab"        data-tool="layout"  role="tab" tabindex="0" aria-selected="false">Room Layout</div>
-    <div class="tab"        data-tool="budget"  role="tab" tabindex="0" aria-selected="false">Budget Estimator</div>
+    <div class="tab active" data-tool="style"   role="tab" tabindex="0" aria-selected="true">Style</div>
+    <div class="tab"        data-tool="palette" role="tab" tabindex="0" aria-selected="false">Palette</div>
+    <div class="tab"        data-tool="layout"  role="tab" tabindex="0" aria-selected="false">Layout</div>
+    <div class="tab"        data-tool="budget"  role="tab" tabindex="0" aria-selected="false">Budget</div>
   </div>
 
   <div class="folder">
@@ -336,7 +337,7 @@
      ========================================================= -->
 <div class="mobile-stack" role="tablist" aria-label="Homeowner Toolkit">
   <div class="m-folder active" data-tool="style">
-    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="true">Style Quiz</div></div>
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="true">Style</div></div>
     <div class="m-body">
       <div class="m-paper-behind"></div>
       <div class="m-graph-paper">
@@ -346,7 +347,7 @@
   </div>
 
   <div class="m-folder" data-tool="palette">
-    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Color Palette</div></div>
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Palette</div></div>
     <div class="m-body">
       <div class="m-paper-behind"></div>
       <div class="m-graph-paper">
@@ -355,7 +356,7 @@
   </div>
 
   <div class="m-folder" data-tool="layout">
-    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Room Layout</div></div>
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Layout</div></div>
     <div class="m-body">
       <div class="m-paper-behind"></div>
       <div class="m-graph-paper">
@@ -364,7 +365,7 @@
   </div>
 
   <div class="m-folder" data-tool="budget">
-    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Budget Estimator</div></div>
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Budget</div></div>
     <div class="m-body">
       <div class="m-paper-behind"></div>
       <div class="m-graph-paper">
