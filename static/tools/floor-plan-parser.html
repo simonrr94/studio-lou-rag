@@ -206,6 +206,7 @@
       .tape { width: 64px; height: 20px; }
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script>
     /* =====================================================================
@@ -965,6 +966,122 @@
         draw();
       }, 'image/png');
     }
+    // Loads the Studio Lou logo from the server as image data for the PDF (skipped quietly if it can't load)
+    var LOGO_URL = 'https://studio-lou-rag.onrender.com/static/logo.png';
+    function loadLogo() {
+      return new Promise(function (resolve) {
+        var im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = function () {
+          try {
+            var c = document.createElement('canvas');
+            c.width = im.naturalWidth; c.height = im.naturalHeight;
+            c.getContext('2d').drawImage(im, 0, 0);
+            resolve(c.toDataURL('image/png'));
+          } catch (e) { resolve(null); }
+        };
+        im.onerror = function () { resolve(null); };
+        im.src = LOGO_URL;
+      });
+    }
+
+    function exportPDF() {
+      var btn = $('pdfBtn');
+      btn.disabled = true;
+      loadLogo().then(function (logo) {
+        try { buildPDF(logo); } finally { btn.disabled = false; }
+      });
+    }
+
+    function buildPDF(logo) {
+      if (!window.jspdf) { alert('The PDF maker did not load. Refresh the page and try again.'); return; }
+      var doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' });
+      var margin = 56, pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+      var contentW = pageW - margin * 2, y = margin;
+      function checkPage(need) { if (y + (need || 60) > pageH - margin) { doc.addPage(); y = margin; } }
+      function ascii(t) { return String(t).replace(/[\u2018\u2019\u2032]/g, "'").replace(/[\u201c\u201d\u2033]/g, '"').replace(/[^\x20-\xFF]/g, ''); }
+
+      var total = 0, est = 0;
+      state.rooms.forEach(function (r) { total += area(r); if (r.source === 'estimated') est++; });
+
+      // Header
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(67, 62, 60);
+      doc.text('Floor Plan Summary', margin, y + 6);
+      if (logo) doc.addImage(logo, 'PNG', pageW - margin - 54, margin - 18, 54, 54);
+      y += 28;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(107, 101, 96);
+      var date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      doc.text(state.rooms.length + ' spaces  \u00b7  ' + Math.round(total).toLocaleString() + ' total sq ft  \u00b7  ' + date, margin, y);
+      y += 22;
+
+      // Annotated plan
+      draw(true);
+      var img = $('planCanvas').toDataURL('image/jpeg', 0.92);
+      draw();
+      var maxH = 380, iw = contentW, ih = iw * state.H / state.W;
+      if (ih > maxH) { ih = maxH; iw = ih * state.W / state.H; }
+      var ix = margin + (contentW - iw) / 2;
+      doc.addImage(img, 'JPEG', ix, y, iw, ih);
+      doc.setDrawColor(208, 201, 188); doc.setLineWidth(1); doc.rect(ix, y, iw, ih);
+      y += ih + 26;
+
+      // Room table
+      checkPage(70);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+      doc.text('Rooms', margin, y);
+      y += 12;
+      var cols = [margin + 8, margin + 230, margin + 310, margin + 400, pageW - margin - 8];
+      doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 22, 'F');
+      doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+      doc.text('ROOM', cols[0], y + 14);
+      doc.text('WIDTH', cols[1], y + 14);
+      doc.text('LENGTH', cols[2], y + 14);
+      doc.text('SQ FT', cols[3], y + 14);
+      doc.text('SOURCE', cols[4], y + 14, { align: 'right' });
+      y += 22;
+      state.rooms.forEach(function (r, i) {
+        checkPage(22);
+        doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
+        doc.rect(margin, y, contentW, 20, 'F');
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+        doc.text(ascii(r.name).slice(0, 34), cols[0], y + 13);
+        doc.text(fmtFtIn(r.width) || '-', cols[1], y + 13);
+        doc.text(fmtFtIn(r.length) || '-', cols[2], y + 13);
+        doc.text(area(r) ? Math.round(area(r)).toLocaleString() : '-', cols[3], y + 13);
+        var src = r.source === 'labeled' ? 'From plan' : r.source === 'edited' ? 'Edited' : 'Estimated';
+        if (r.source === 'estimated') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
+        doc.text(src, cols[4], y + 13, { align: 'right' });
+        y += 20;
+      });
+      doc.setDrawColor(67, 62, 60); doc.setLineWidth(1); doc.line(margin, y, margin + contentW, y);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+      doc.text('Total', cols[0], y + 15);
+      doc.text(Math.round(total).toLocaleString(), cols[3], y + 15);
+      y += 34;
+
+      // Practical note when anything was estimated
+      if (est) {
+        checkPage(60);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+        var note = doc.splitTextToSize(est + (est === 1 ? ' room was' : ' rooms were') + ' estimated because the plan did not print its dimensions. Measure ' + (est === 1 ? 'it' : 'those') + ' in person before ordering flooring, rugs, or furniture.', contentW - 28);
+        var nh = note.length * 14 + 34;
+        doc.setFillColor(245, 240, 232); doc.roundedRect(margin, y, contentW, nh, 6, 6, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(88, 43, 54);
+        doc.text('BEFORE YOU BUY', margin + 14, y + 16);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+        doc.text(note, margin + 14, y + 31);
+        y += nh + 18;
+      }
+
+      // Footer on every page
+      var pages = doc.internal.getNumberOfPages();
+      for (var pg = 1; pg <= pages; pg++) {
+        doc.setPage(pg);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(107, 101, 96);
+        doc.text('Made with the Studio Lou Floor Plan Parser  \u00b7  studiolouinteriors.com', pageW / 2, pageH - 30, { align: 'center' });
+      }
+      doc.save('floor-plan-summary.pdf');
+    }
     function exportJSON() {
       var data = {
         unit: 'ft',
@@ -1048,6 +1165,8 @@
       $('addBtn').addEventListener('click', addRoom);
       $('pngBtn').addEventListener('click', exportPNG);
       $('jsonBtn').addEventListener('click', exportJSON);
+      $('pdfBtn').addEventListener('click', exportPDF);
+      if (IN_TOOLKIT) $('jsonBtn').classList.add('hidden'); // data file is for the standalone demo only
       $('resetBtn').addEventListener('click', reset);
       $('retryBtn').addEventListener('click', extract);
       $('newBtn').addEventListener('click', reset);
@@ -1140,7 +1259,8 @@
             <div class="stat"><b id="statEst">0</b><span>Estimated</span></div>
           </div>
           <div class="btn-row">
-            <button class="btn-primary btn-sm" id="pngBtn">Download PNG</button>
+            <button class="btn-primary btn-sm" id="pdfBtn">Download PDF</button>
+            <button class="btn-secondary btn-sm" id="pngBtn">PNG</button>
             <button class="btn-secondary btn-sm" id="jsonBtn">JSON</button>
             <button class="btn-secondary btn-sm" id="resetBtn">New plan</button>
           </div>
