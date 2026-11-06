@@ -5,643 +5,1183 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Floor Plan Parser · Studio Lou</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <script>
+    // Inside the Homeowner Toolkit the wrapper draws the folder, so the page drops its own.
+    var IN_TOOLKIT = /[?&]embed=toolkit\b/.test(location.search);
+    if (IN_TOOLKIT) document.documentElement.className += ' in-toolkit';
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     html, body {
       min-height: 1800px;
-      font-family: 'DM Sans', sans-serif;
       background: #FAF9F6;
+      font-family: 'DM Sans', sans-serif;
       color: #433E3C;
+      -webkit-font-smoothing: antialiased;
     }
+    body { padding: 80px 24px 100px; }
 
-    .wrap {
-      max-width: 820px;
-      margin: 0 auto;
-      padding: 40px 24px 80px;
+    /* ── FOLDER SHELL (matches the Homeowner Toolkit) ── */
+    .folder-wrap { position: relative; max-width: 1000px; margin: 0 auto; }
+    .tabs { display: flex; gap: 4px; margin-left: 20px; position: relative; z-index: 3; }
+    .tab {
+      background: #E8C97A; color: #3b2a0f;
+      padding: 14px 22px 26px; margin-bottom: -6px;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      clip-path: path("M 12.32 5.76 A 8 8 0 0 1 20 0 L 120 0 A 8 8 0 0 1 127.68 5.76 L 184.33 200 L -44.33 200 Z");
+      width: 140px; text-align: center; user-select: none; position: relative; z-index: 4;
     }
-
-    h1 {
-      font-size: 26px;
-      font-weight: 600;
-      color: #433E3C;
-      margin-bottom: 6px;
+    .folder {
+      background: #E8C97A; border-radius: 2px 14px 10px 10px;
+      padding: 44px 40px 56px; box-shadow: 0 12px 32px rgba(0,0,0,0.14); position: relative;
     }
-
-    .subtitle {
-      font-size: 15px;
-      color: #6b6560;
-      margin-bottom: 32px;
+    .paper-behind {
+      position: absolute; top: 28px; right: 24px; bottom: 32px; left: 40px;
+      background: #ffffff; transform: rotate(0.8deg); border-radius: 2px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.08);
     }
+    .graph-paper {
+      position: relative; background: #faf6ea;
+      background-image:
+        linear-gradient(#c9c3b3 0.5px, transparent 0.5px),
+        linear-gradient(90deg, #c9c3b3 0.5px, transparent 0.5px);
+      background-size: 24px 24px; background-position: 20px 20px;
+      padding: 64px 56px 56px; transform: rotate(-1.2deg);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.16), 0 10px 24px rgba(0,0,0,0.22);
+      border-radius: 1px; min-height: 520px;
+    }
+    .paperclip { position: absolute; top: -14px; right: 66px; z-index: 5; filter: drop-shadow(0 4px 5px rgba(0,0,0,0.22)); }
 
-    /* Upload zone */
+    /* ── TOOL HEADER ── */
+    .tool-header { max-width: 680px; padding: 0 0 8px; }
+    .tool-title { font-weight: 500; color: #582B36; font-size: 44px; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 6px; }
+    .tool-num { font-weight: 600; color: #433E3C; font-size: 12px; text-transform: uppercase; letter-spacing: -0.03em; line-height: 1; }
+    .tool-desc {
+      font-family: 'Crimson Text', serif; font-weight: 400; color: #433E3C;
+      font-size: 26px; letter-spacing: -0.06em; line-height: 1.2; padding: 24px 0;
+    }
+    .rule { height: 3px; background: #d0c9bc; border-radius: 99px; margin-bottom: 40px; }
+
+    .eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+      color: #6b6560; margin-bottom: 12px;
+    }
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── USE CASES ── */
+    .uses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 36px; }
+    .use {
+      background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 18px 18px 20px;
+    }
+    .use h3 { font-size: 15px; font-weight: 600; line-height: 1.3; margin-bottom: 6px; color: #433E3C; }
+    .use h3 span { font-weight: 700; margin-right: 6px; }
+    .use p { font-size: 14px; line-height: 1.5; color: #A6BE47; }
+
+    /* ── UPLOAD ── */
     .upload-zone {
-      border: 1.5px dashed #d0c9bc;
-      border-radius: 16px;
-      padding: 40px 24px;
-      text-align: center;
-      cursor: pointer;
-      background: #f5f0e8;
-      transition: border-color .15s, background .15s;
-      margin-bottom: 24px;
+      border: 1.5px dashed #b9b0a1; border-radius: 16px; padding: 44px 24px 40px;
+      text-align: center; cursor: pointer; background: rgba(255,255,255,0.72);
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
     }
-    .upload-zone:hover { border-color: #A6BE47; background: #f0ece4; }
+    .upload-zone:hover, .upload-zone.drag { border-color: #582b36; background: #fdf6f7; }
     .upload-zone input { display: none; }
-    .upload-icon { font-size: 36px; margin-bottom: 12px; }
-    .upload-zone p { font-size: 15px; color: #6b6560; }
-    .upload-zone small { font-size: 13px; color: #9a948e; display: block; margin-top: 4px; }
+    .upload-icon { width: 44px; height: 44px; margin: 0 auto 14px; display: block; }
+    .upload-zone .big { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+    .upload-zone .small { font-size: 13px; color: #6b6560; line-height: 1.5; max-width: 440px; margin: 0 auto 20px; }
 
-    /* Status */
-    .status {
-      font-size: 14px;
-      color: #6b6560;
-      padding: 12px 0;
-      min-height: 40px;
+    /* ── BUTTONS (toolkit styles) ── */
+    .btn-primary, .btn-secondary {
+      display: inline-block; padding: 13px 32px; font-family: 'DM Sans', sans-serif; font-size: 15px;
+      font-weight: 600; border-radius: 50px; cursor: pointer; text-decoration: none; white-space: nowrap;
     }
-    .status.error { color: #9b2335; }
-    .status.loading { color: #582b36; }
+    .btn-primary { background: #A6BE47; color: #ffffff; border: none; transition: opacity 0.15s, transform 0.1s; }
+    .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn-secondary { background: transparent; color: #433E3C; border: 1.5px solid #d0c9bc; transition: border-color 0.15s; }
+    .btn-secondary:hover { border-color: #433E3C; }
+    .btn-sm { padding: 8px 18px; font-size: 13px; }
 
-    /* Spinner */
+    /* ── LOADING / ERROR ── */
+    .loading-wrap { text-align: center; padding: 56px 0 40px; }
     .spinner {
-      display: inline-block;
-      width: 14px; height: 14px;
-      border: 2px solid #d0c9bc;
-      border-top-color: #582b36;
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-      vertical-align: middle;
-      margin-right: 8px;
+      width: 36px; height: 36px; border: 3px solid #d0c9bc; border-top-color: #582b36;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 15px; color: #6b6560; line-height: 1.6; max-width: 420px; margin: 0 auto; }
+    .loading-text strong { display: block; font-size: 17px; color: #433E3C; margin-bottom: 6px; }
+    .error-msg {
+      background: #fdf6f7; border: 1.5px solid #e8c4ca; border-radius: 12px; padding: 18px 20px;
+      font-size: 15px; color: #582b36; margin-bottom: 18px; line-height: 1.5;
+    }
+    .error-msg small { display: block; color: #6b6560; font-size: 13px; margin-top: 2px; }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
-    /* Toolbar */
-    .toolbar {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-      margin-bottom: 20px;
-    }
+    /* ── RESULTS ── */
+    .summary { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 44px; }
+    .stats { display: flex; gap: 32px; flex-wrap: wrap; }
+    .stat b { display: block; font-size: 34px; font-weight: 500; color: #582b36; letter-spacing: -0.04em; line-height: 1; margin-bottom: 6px; }
+    .stat span { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #6b6560; }
 
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 24px;
-      border-radius: 50px;
-      border: 1.5px solid #433E3C;
-      background: transparent;
-      color: #433E3C;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background .12s, color .12s;
-      white-space: nowrap;
+    .print {
+      position: relative; background: #ffffff; padding: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 8px 20px rgba(0,0,0,0.12); border-radius: 2px;
     }
-    .btn:hover { background: #433E3C; color: #fdfaf5; }
-    .btn:active { transform: scale(.98); }
-    .btn:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+    .tape {
+      position: absolute; top: -12px; width: 96px; height: 26px; z-index: 2; pointer-events: none;
+      background: rgba(232,201,122,0.62); box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    }
+    .tape.l { left: -18px; transform: rotate(-38deg); }
+    .tape.r { right: -18px; transform: rotate(38deg); }
+    canvas { display: block; width: 100%; height: auto; touch-action: pan-y pinch-zoom; }
+    canvas.editing { touch-action: none; }
 
-    .btn-primary {
-      background: #A6BE47;
-      border-color: #A6BE47;
-      color: #433E3C;
-    }
-    .btn-primary:hover { background: #93ab38; border-color: #93ab38; color: #433E3C; }
+    .hint { font-size: 13px; color: #6b6560; margin: 16px 2px 34px; line-height: 1.6; }
+    .legend { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; white-space: nowrap; }
+    .swatch { width: 22px; height: 0; border-top: 2px solid #582b36; display: inline-block; }
+    .swatch.dash { border-top-style: dashed; }
 
-    .btn-sm {
-      padding: 7px 16px;
-      font-size: 13px;
-    }
-
-    /* Style controls */
-    .style-panel {
-      background: #f5f0e8;
-      border: 1px solid #d0c9bc;
-      border-radius: 12px;
-      padding: 16px 20px;
-      margin-bottom: 20px;
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .style-label {
-      font-size: 12px;
-      font-weight: 500;
-      color: #6b6560;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      margin-right: 4px;
-    }
-    .style-group { display: flex; align-items: center; gap: 8px; }
-    .style-group label { font-size: 13px; color: #6b6560; }
-    input[type="color"] {
-      width: 28px; height: 28px;
-      border: 1px solid #d0c9bc;
-      border-radius: 6px;
-      cursor: pointer;
-      padding: 1px;
-      background: #fff;
-    }
-    .toggle-group { display: flex; gap: 12px; flex-wrap: wrap; }
-    .toggle-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #6b6560; }
-    .toggle-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: #A6BE47; cursor: pointer; }
-
-    /* Canvas */
-    .canvas-wrap {
-      border: 1px solid #d0c9bc;
-      border-radius: 12px;
-      overflow: hidden;
-      background: #ece8e1;
-      margin-bottom: 24px;
-    }
-    #floorCanvas {
-      display: block;
-      width: 100%;
-      height: auto;
-    }
-
-    /* Rooms */
-    .section-label {
-      font-size: 12px;
-      font-weight: 500;
-      color: #9a948e;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      margin-bottom: 12px;
-    }
-
-    .rooms-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-      margin-bottom: 28px;
-    }
-
+    .rooms-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .rooms-head .eyebrow { margin: 0; }
+    .room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
     .room-card {
-      background: #f5f0e8;
-      border: 1px solid #d0c9bc;
-      border-radius: 12px;
-      padding: 14px 16px;
+      background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 12px 14px 14px;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
     }
+    .room-card:hover { border-color: #582b36; }
+    .room-card.selected { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
+    .card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .name-input {
+      flex: 1; min-width: 0; font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 600;
+      color: #582b36; background: transparent; border: 1px solid transparent; border-radius: 8px;
+      padding: 3px 6px; margin-left: -6px;
+    }
+    .name-input:hover { border-color: #d0c9bc; }
+    .name-input:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .del {
+      width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; border: none; background: transparent;
+      color: #6b6560; font-size: 18px; line-height: 1; cursor: pointer;
+    }
+    .del:hover { background: #fdf6f7; color: #582b36; }
+    .dims { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .dims label { display: block; font-size: 10px; font-weight: 600; color: #6b6560; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+    .dims input {
+      width: 100%; height: 36px; border: 1.5px solid #d0c9bc; border-radius: 10px; background: #FAF9F6;
+      color: #433E3C; font-family: 'DM Sans', sans-serif; font-size: 15px; padding: 0 10px;
+    }
+    .dims input:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .dims input.bad { border-color: #b3475b; background: #fdf6f7; }
+    .card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; font-size: 13px; color: #6b6560; }
+    .badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
+    .badge.labeled { background: #eef2dc; color: #4f5c1d; }
+    .badge.estimated { background: #f6e6e9; color: #582b36; }
+    .badge.edited { background: #efeae2; color: #433E3C; }
 
-    .room-card h4 {
-      font-size: 13px;
-      font-weight: 600;
-      color: #582b36;
-      margin-bottom: 10px;
-    }
+    /* ── INSIDE THE HOMEOWNER TOOLKIT (wrapper supplies folder and graph paper) ── */
+    .in-toolkit, .in-toolkit body { background: transparent; min-height: 0; }
+    .in-toolkit body { padding: 0; }
+    .in-toolkit .tabs, .in-toolkit .paper-behind, .in-toolkit .paperclip { display: none; }
+    .in-toolkit .folder { background: none; padding: 0; box-shadow: none; border-radius: 0; }
+    .in-toolkit .graph-paper { background: none; transform: none; padding: 0; box-shadow: none; min-height: 0; }
+    .in-toolkit .tool-title { padding-right: 0; }
 
-    .dim-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 7px;
-    }
-    .dim-row label {
-      font-size: 12px;
-      color: #6b6560;
-      width: 34px;
-      flex-shrink: 0;
-    }
-    .dim-row input[type="number"] {
-      flex: 1;
-      height: 32px;
-      border: 1px solid #d0c9bc;
-      border-radius: 12px;
-      background: #ffffff;
-      color: #433E3C;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
-      padding: 0 10px;
-    }
-    .dim-row input[type="number"]:focus {
-      outline: none;
-      border-color: #A6BE47;
-    }
-    .dim-row span { font-size: 12px; color: #9a948e; width: 18px; }
+    .hidden { display: none !important; }
 
-    /* Export */
-    .export-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
+    /* ── MOBILE ── */
+    @media (max-width: 760px) {
+      .uses { grid-template-columns: 1fr; }
     }
-
-    /* Hidden area shown after extraction */
-    .hidden { display: none; }
+    @media (max-width: 640px) {
+      body { padding: 48px 12px 60px; }
+      .tabs { margin-left: 14px; }
+      .tab { width: 140px; }
+      .folder { padding: 14px 10px 22px; border-radius: 2px 12px 12px 12px; }
+      .paper-behind { top: 20px; left: 14px; right: 6px; bottom: 16px; }
+      .graph-paper { transform: none; padding: 40px 20px 32px; background-size: 20px 20px; background-position: 10px 10px; }
+      .paperclip { right: 16px; }
+      .tool-title { font-size: 34px; padding-right: 48px; }
+      .tool-desc { font-size: 21px; padding: 18px 0; }
+      .rule { margin-bottom: 28px; }
+      .stats { gap: 20px; }
+      .stat b { font-size: 27px; }
+      .print { padding: 6px; }
+      .tape { width: 64px; height: 20px; }
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+  <script>
+    /* =====================================================================
+       BOX SNAPPING
+       The vision model reads names and dimensions well but places boxes
+       loosely. So the page finds each room itself:
+         1. Text recognition locates where each room's name is printed.
+         2. From that spot, scans outward until it hits thick wall lines.
+         3. Checks each box against the room's dimensions and rebuilds any
+            side that leaked through a doorway or an open plan.
+       ===================================================================== */
+    var SNAP = (function () {
+      var OCR_WORKER = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js';
+      var OCR_CORE = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1';
+      var OCR_LANG = 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int';
+      var ANALYZE_SIZE = 1400; // longest side of the working copy, in px
+
+      /* ---------- Image analysis ---------- */
+      function analyze(img) {
+        var s = ANALYZE_SIZE / Math.max(img.naturalWidth, img.naturalHeight);
+        var w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        var ctx = c.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        var px = ctx.getImageData(0, 0, w, h).data;
+
+        // Dark pixel mask
+        var dark = new Uint8Array(w * h);
+        for (var i = 0, j = 0; i < dark.length; i++, j += 4) {
+          var lum = 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2];
+          dark[i] = lum < 110 ? 1 : 0;
+        }
+        // Integral image for fast box sums
+        var W1 = w + 1, I = new Uint32Array(W1 * (h + 1));
+        for (var y = 0; y < h; y++) {
+          var row = 0;
+          for (var x = 0; x < w; x++) {
+            row += dark[y * w + x];
+            I[(y + 1) * W1 + x + 1] = I[y * W1 + x + 1] + row;
+          }
+        }
+        function full(x, y, k) { // is the k x k box centered here entirely dark?
+          var r = k >> 1, x0 = x - r, y0 = y - r, x1 = x0 + k, y1 = y0 + k;
+          if (x0 < 0 || y0 < 0 || x1 > w || y1 > h) return false;
+          return I[y1 * W1 + x1] - I[y0 * W1 + x1] - I[y1 * W1 + x0] + I[y0 * W1 + x0] === k * k;
+        }
+
+        // Wall thickness: the largest box size that still fits inside a meaningful
+        // amount of dark ink. Text and fixtures are thin, so they drop out first.
+        var minCount = Math.max(60, Math.round(w * h * 0.0012 / 9)); // sampled every 3px
+        var kMax = 0;
+        for (var k = 3; k <= 60; k += 1) {
+          var count = 0;
+          for (var yy = 0; yy < h; yy += 3) for (var xx = 0; xx < w; xx += 3) if (dark[yy * w + xx] && full(xx, yy, k)) count++;
+          if (count >= minCount) kMax = k; else break;
+        }
+        var kUse = Math.max(6, Math.round(kMax * 0.35));
+        var wall = new Uint8Array(w * h);
+        for (var y2 = 0; y2 < h; y2++) for (var x2 = 0; x2 < w; x2++) {
+          if (dark[y2 * w + x2] && full(x2, y2, kUse)) wall[y2 * w + x2] = 1;
+        }
+        return { w: w, h: h, scale: s, wall: wall, k: kUse, kMax: kMax, canvas: c };
+      }
+
+      /* ---------- Text recognition ---------- */
+      function ocr(canvas) {
+        if (typeof Tesseract === 'undefined') return Promise.resolve([]);
+        var worker;
+        return Tesseract.createWorker('eng', 1, { workerPath: OCR_WORKER, corePath: OCR_CORE, langPath: OCR_LANG, gzip: true })
+          .then(function (wk) { worker = wk; return worker.setParameters({ tessedit_pageseg_mode: '11' }); })
+          .then(function () { return worker.recognize(canvas); })
+          .then(function (res) {
+            worker.terminate();
+            return (res.data.words || []).filter(function (wd) { return wd.confidence > 30 && /[a-z]{3,}/i.test(wd.text); })
+              .map(function (wd) {
+                return { text: wd.text.replace(/[^a-z]/gi, '').toLowerCase(), x: (wd.bbox.x0 + wd.bbox.x1) / 2, y: (wd.bbox.y0 + wd.bbox.y1) / 2 };
+              });
+          })
+          .catch(function () { try { worker && worker.terminate(); } catch (e) {} return []; });
+      }
+
+      function similarity(a, b) {
+        if (a === b) return 1;
+        var m = a.length, n = b.length, d = [];
+        for (var i = 0; i <= m; i++) { d[i] = [i]; }
+        for (var j = 1; j <= n; j++) d[0][j] = j;
+        for (i = 1; i <= m; i++) for (j = 1; j <= n; j++) {
+          d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        }
+        return 1 - d[m][n] / Math.max(m, n);
+      }
+
+      var GENERIC = { vaulted: 1, room: 1, the: 1, and: 1, sq: 1, ft: 1 };
+      // Find where this room's name is printed. Ties go to the word closest to the model's guess.
+      function findLabel(room, words, guess) {
+        var tokens = String(room.label || room.name).toLowerCase().split(/[^a-z]+/).filter(function (t) { return t.length >= 3 && !GENERIC[t]; });
+        var best = null, bestScore = -1;
+        tokens.forEach(function (t) {
+          words.forEach(function (wd) {
+            if (wd.used) return;
+            var sim = similarity(t, wd.text);
+            if (sim < 0.7) return;
+            var dist = Math.hypot(wd.x - guess.x, wd.y - guess.y) / Math.hypot(guess.w, guess.h);
+            var score = sim * 2 + t.length / 10 - dist;
+            if (score > bestScore) { bestScore = score; best = wd; }
+          });
+        });
+        return best;
+      }
+
+      /* ---------- Wall scanning ---------- */
+      function isWall(a, x, y) { return a.wall[(y | 0) * a.w + (x | 0)] === 1; }
+
+      // Walk from (x,y) in direction (dx,dy). Returns the inner face of the first wall, or null.
+      function ray(a, x, y, dx, dy) {
+        var r = Math.ceil(a.k / 2);
+        while (true) {
+          x += dx; y += dy;
+          if (x < 0 || y < 0 || x >= a.w || y >= a.h) return null;
+          if (isWall(a, x, y)) return dx ? x - dx * r : y - dy * r;
+        }
+      }
+      // Rays that pass through a window or doorway land somewhere else (or nowhere).
+      // The wall is where a solid group of rays agree, even if it's only a third of them.
+      function agree(arr, tol, seedPos) {
+        var v = arr.filter(function (n) { return n != null; }).sort(function (p, q) { return p - q; });
+        var best = null, bestN = 0, bestD = Infinity;
+        for (var i = 0; i < v.length; i++) {
+          var grp = v.filter(function (n) { return Math.abs(n - v[i]) <= tol; });
+          var d = Math.abs(v[i] - seedPos);
+          if (grp.length > bestN || (grp.length === bestN && d < bestD)) { best = grp; bestN = grp.length; bestD = d; }
+        }
+        if (!best || bestN < Math.max(2, Math.ceil(arr.length * 0.25))) return null;
+        return best[Math.floor(best.length / 2)];
+      }
+      // Several parallel rays per side, so a doorway or window in one spot can't throw the box off.
+      function scanSide(a, rect, side, seed) {
+        var hits = [], n = 13, tol = Math.max(4, a.k);
+        for (var i = 0; i < n; i++) {
+          var f = 0.15 + 0.7 * i / (n - 1);
+          if (side === 'l' || side === 'r') {
+            var yy = rect.t + (rect.b - rect.t) * f;
+            hits.push(ray(a, seed.x, yy, side === 'l' ? -1 : 1, 0));
+          } else {
+            var xx = rect.l + (rect.r - rect.l) * f;
+            hits.push(ray(a, xx, seed.y, 0, side === 't' ? -1 : 1));
+          }
+        }
+        return agree(hits, tol, side === 'l' || side === 'r' ? seed.x : seed.y);
+      }
+      function snapFrom(a, seed) {
+        // Step off any wall pixel the seed landed on
+        if (isWall(a, seed.x, seed.y)) {
+          var found = false;
+          for (var rad = 2; rad < 40 && !found; rad += 2) {
+            for (var ang = 0; ang < 8 && !found; ang++) {
+              var nx = seed.x + Math.cos(ang * Math.PI / 4) * rad, ny = seed.y + Math.sin(ang * Math.PI / 4) * rad;
+              if (nx > 0 && ny > 0 && nx < a.w && ny < a.h && !isWall(a, nx, ny)) { seed = { x: nx, y: ny }; found = true; }
+            }
+          }
+          if (!found) return null;
+        }
+        var rect = {
+          l: ray(a, seed.x, seed.y, -1, 0), r: ray(a, seed.x, seed.y, 1, 0),
+          t: ray(a, seed.x, seed.y, 0, -1), b: ray(a, seed.x, seed.y, 0, 1)
+        };
+        for (var pass = 0; pass < 3; pass++) {
+          var cur = { l: rect.l == null ? seed.x - 1 : rect.l, r: rect.r == null ? seed.x + 1 : rect.r,
+                      t: rect.t == null ? seed.y - 1 : rect.t, b: rect.b == null ? seed.y + 1 : rect.b };
+          rect = { l: scanSide(a, cur, 'l', seed), r: scanSide(a, cur, 'r', seed), t: scanSide(a, cur, 't', seed), b: scanSide(a, cur, 'b', seed) };
+        }
+        return rect;
+      }
+
+      /* ---------- Putting it together ---------- */
+      // rooms: parsed rooms with bbox in percent. Returns the same rooms with improved bboxes.
+      function place(rooms, a, words) {
+        var toPx = function (r) { return { x: (r.bbox.x + r.bbox.w / 2) / 100 * a.w, y: (r.bbox.y + r.bbox.h / 2) / 100 * a.h, w: r.bbox.w / 100 * a.w, h: r.bbox.h / 100 * a.h }; };
+        var work = rooms.map(function (r) {
+          var guess = toPx(r);
+          var lab = words.length ? findLabel(r, words, guess) : null;
+          if (lab) lab.used = true;
+          var seed = lab ? { x: lab.x, y: lab.y } : { x: guess.x, y: guess.y };
+          return { room: r, guess: guess, seed: seed, anchored: !!lab, rect: snapFrom(a, seed) };
+        });
+
+        // Pixels per foot, from rooms whose snapped box agrees with their own dimensions
+        var cands = [];
+        work.forEach(function (it) {
+          var r = it.room, q = it.rect;
+          if (!q || q.l == null || q.r == null || q.t == null || q.b == null || !r.width || !r.length) return;
+          var pw = q.r - q.l, ph = q.b - q.t;
+          [[r.width, r.length], [r.length, r.width]].forEach(function (d) {
+            var sx = pw / d[0], sy = ph / d[1];
+            if (Math.abs(sx / sy - 1) < 0.12) cands.push((sx + sy) / 2);
+          });
+        });
+        cands.sort(function (p, q) { return p - q; });
+        var ppf = cands.length ? cands[Math.floor(cands.length / 2)] : null;
+
+        work.forEach(function (it) {
+          var r = it.room, q = it.rect, g = it.guess;
+          if (!q) return; // could not scan at all: keep the model's box
+          // If the drawing is rotated relative to how the model reported width/length, swap them
+          if (ppf && r.width && r.length && q.l != null && q.r != null && q.t != null && q.b != null) {
+            var pw = q.r - q.l, ph = q.b - q.t;
+            var errA = Math.abs(pw / (r.width * ppf) - 1) + Math.abs(ph / (r.length * ppf) - 1);
+            var errB = Math.abs(pw / (r.length * ppf) - 1) + Math.abs(ph / (r.width * ppf) - 1);
+            if (errB < 0.25 && errB + 0.15 < errA) { var tmp = r.width; r.width = r.length; r.length = tmp; }
+          }
+          var yLo = q.t != null ? q.t : g.y - g.h / 2, yHi = q.b != null ? q.b : g.y + g.h / 2;
+          var x = fixAxis(q.l, q.r, it.seed.x, r.width, ppf, g.x - g.w / 2, g.x + g.w / 2, a.w,
+            function (pos) { return wallNear(a, pos, yLo, yHi, true); });
+          var y = fixAxis(q.t, q.b, it.seed.y, r.length, ppf, g.y - g.h / 2, g.y + g.h / 2, a.h,
+            function (pos) { return wallNear(a, pos, x[0], x[1], false); });
+          r.bbox = { x: x[0] / a.w * 100, y: y[0] / a.h * 100, w: (x[1] - x[0]) / a.w * 100, h: (y[1] - y[0]) / a.h * 100 };
+          r.snapped = true;
+        });
+        return { rooms: rooms, ppf: ppf, wallPx: a.k };
+      }
+
+      // Share of a box edge that sits on a wall: samples along the edge, looking a few px either side.
+      function wallNear(a, pos, from, to, vertical) {
+        var n = 15, hit = 0, tol = Math.max(4, a.k);
+        if (pos < 0 || (vertical ? pos >= a.w : pos >= a.h)) return 0;
+        for (var i = 0; i < n; i++) {
+          var u = from + (to - from) * (0.1 + 0.8 * i / (n - 1));
+          for (var d = -tol; d <= tol + a.k; d++) {
+            var p1 = pos + d, p2 = pos - d;
+            if ((vertical ? (isWall(a, p1, u) || isWall(a, p2, u)) : (isWall(a, u, p1) || isWall(a, u, p2)))) { hit++; break; }
+          }
+        }
+        return hit / n;
+      }
+
+      // One axis of a box: keep both scanned walls if they match the room's dimension.
+      // Otherwise measure the dimension out from one wall, choosing the side whose
+      // far edge actually lands on a wall (open plans and doorways leak on the other).
+      function fixAxis(lo, hi, seed, ft, ppf, gLo, gHi, max, probe) {
+        var want = ft && ppf ? ft * ppf : null;
+        if (lo != null && hi != null) {
+          if (!want || Math.abs((hi - lo) / want - 1) < 0.2) return [lo, hi];
+        }
+        if (want) {
+          var opts = [];
+          if (lo != null && lo + want <= max + 2) opts.push({ span: [lo, Math.min(max, lo + want)], score: probe(lo + want), dist: seed - lo });
+          if (hi != null && hi - want >= -2) opts.push({ span: [Math.max(0, hi - want), hi], score: probe(hi - want), dist: hi - seed });
+          if (opts.length) {
+            opts.sort(function (p, q) { return (q.score - p.score) || (p.dist - q.dist); });
+            return opts[0].span;
+          }
+          if (lo != null) return [lo, Math.min(max, lo + want)];
+          if (hi != null) return [Math.max(0, hi - want), hi];
+          return [Math.max(0, seed - want / 2), Math.min(max, seed + want / 2)];
+        }
+        // No scale to check against: use whatever walls were found, the model's guess for the rest
+        return [lo != null ? lo : Math.max(0, gLo), hi != null ? hi : Math.min(max, gHi)];
+      }
+
+      return { analyze: analyze, ocr: ocr, place: place };
+    })();
+  </script>
+  <script>
+    var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
+    var MAX_SEND = 1600;      // longest side of the image sent to the model
+    var MAX_CANVAS = 2400;    // longest side of the on-screen / exported canvas
+    var TIMEOUT_MS = 100000;  // Render free tier can take ~60s to wake up
+
+    var PROMPT = [
+      'You are reading a residential floor plan image. Identify every distinct interior space, including labeled rooms AND unlabeled spaces such as closets, hallways, pantries, laundry, nooks, foyers, and powder rooms.',
+      '',
+      'Return ONLY a JSON object. No prose, no markdown, no code fences. Use exactly this shape:',
+      '{"unit":"ft","rooms":[{"name":"Living Room","label":"Living Room","width_ft":14.5,"length_ft":12,"source":"labeled","bbox":{"x":10,"y":20,"w":30,"h":25}}]}',
+      '',
+      'Rules:',
+      '- width_ft is the HORIZONTAL dimension of the space as it appears in the image. length_ft is the VERTICAL dimension. Use decimal feet (12\'6" = 12.5). If the plan is metric, convert to feet.',
+      '- source is "labeled" only when dimensions for that space are printed on the plan. Otherwise estimate them from the scale implied by labeled rooms and set source to "estimated".',
+      '- bbox traces the interior walls of the space as percentages of the FULL image (0 to 100). x,y is the top left corner; w,h are width and height. Be precise: the box should sit just inside the walls.',
+      '- For L-shaped spaces, box the largest rectangular portion.',
+      '- label is the room name exactly as it is printed on the plan (for example "Vaulted Sleeping" or "Kitchen"). Use "" if the space has no printed name.',
+      '- Name unlabeled spaces by function (Closet, Hallway, Pantry, Laundry). Number duplicates (Bedroom 2, Closet 2).',
+      '- Skip exterior areas unless they are a labeled patio, deck, porch, or balcony. Skip stairs and garage only if they have no label.'
+    ].join('\n');
+
+    var RETRY_SUFFIX = '\n\nIMPORTANT: Your previous reply could not be parsed. Reply with the raw JSON object only, starting with { and ending with }.';
+
+    var state = {
+      img: null, W: 0, H: 0,
+      rooms: [], selected: -1,
+      sendB64: '', sendType: 'image/jpeg',
+      drag: null, nextId: 1
+    };
+
+    /* ---------- Measurement helpers ---------- */
+    function fmtFtIn(ft) {
+      if (ft == null || isNaN(ft)) return '';
+      var total = Math.round(ft * 12);
+      var f = Math.floor(total / 12), i = total % 12;
+      return i ? f + "'" + i + '"' : f + "'";
+    }
+    function parseFtIn(str) {
+      if (str == null) return null;
+      var s = String(str).trim().toLowerCase()
+        .replace(/[’′]/g, "'").replace(/[”″]/g, '"')
+        .replace(/feet|foot|ft/g, "'").replace(/inches|inch|in/g, '"').replace(/-/g, ' ');
+      if (!s) return null;
+      var m = s.match(/^(\d+(?:\.\d+)?)\s*'?\s*(?:(\d+(?:\.\d+)?)\s*"?)?$/);
+      if (m) {
+        var ft = parseFloat(m[1]), inch = m[2] ? parseFloat(m[2]) : 0;
+        if (inch >= 12) return null;
+        return ft + inch / 12;
+      }
+      m = s.match(/^(\d+(?:\.\d+)?)\s*"$/);  // inches only, e.g. 150"
+      if (m) return parseFloat(m[1]) / 12;
+      return null;
+    }
+    function area(r) { return (r.width && r.length) ? r.width * r.length : 0; }
+    function fmtArea(a) { return Math.round(a).toLocaleString() + ' sq ft'; }
+
+    /* ---------- Model response handling ---------- */
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function num(v) { var n = parseFloat(v); return isNaN(n) ? null : n; }
+
+    function normalizeRoom(raw, unit) {
+      if (!raw || !raw.bbox) return null;
+      var b = raw.bbox;
+      var x = num(b.x), y = num(b.y), w = num(b.w != null ? b.w : b.width), h = num(b.h != null ? b.h : b.height);
+      if (x == null || y == null || !w || !h) return null;
+      if (x <= 1 && y <= 1 && w <= 1 && h <= 1) { x *= 100; y *= 100; w *= 100; h *= 100; } // fractions
+      x = clamp(x, 0, 99); y = clamp(y, 0, 99);
+      w = clamp(w, 1, 100 - x); h = clamp(h, 1, 100 - y);
+
+      function dim(v) { return (typeof v === 'string' && /['"’”]|\d\s+\d/.test(v)) ? parseFtIn(v) : num(v); }
+      var width = dim(raw.width_ft != null ? raw.width_ft : raw.width);
+      var length = dim(raw.length_ft != null ? raw.length_ft : raw.length);
+      if (unit && /^m/i.test(unit)) { if (width) width *= 3.28084; if (length) length *= 3.28084; }
+
+      return {
+        id: state.nextId++,
+        name: String(raw.name || 'Room').slice(0, 40),
+        label: raw.label ? String(raw.label).slice(0, 60) : '',
+        width: width, length: length,
+        source: raw.source === 'labeled' ? 'labeled' : 'estimated',
+        bbox: { x: x, y: y, w: w, h: h }
+      };
+    }
+
+    function parseResponse(text) {
+      var t = String(text).replace(/```(?:json)?/gi, '');
+      var s = t.indexOf('{'), e = t.lastIndexOf('}');
+      if (s < 0 || e <= s) throw new Error('No JSON in response');
+      var obj = JSON.parse(t.slice(s, e + 1));
+      var list = Array.isArray(obj) ? obj : obj.rooms;
+      if (!list || !list.length) throw new Error('No rooms in response');
+      var rooms = list.map(function (r) { return normalizeRoom(r, obj.unit); }).filter(Boolean);
+      if (!rooms.length) throw new Error('No usable rooms');
+      return rooms;
+    }
+
+    function callVision(prompt) {
+      var ctrl = new AbortController();
+      var timer = setTimeout(function () { ctrl.abort(); }, TIMEOUT_MS);
+      return fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: state.sendB64, media_type: state.sendType, prompt: prompt }),
+        signal: ctrl.signal
+      }).then(function (r) {
+        clearTimeout(timer);
+        if (!r.ok) throw new Error('server:' + r.status);
+        return r.json();
+      }).then(function (d) {
+        var t = d && d.content && d.content[0] && d.content[0].text;
+        if (!t) throw new Error('Empty response');
+        return t;
+      }, function (err) {
+        clearTimeout(timer);
+        throw err;
+      });
+    }
+
+    function extract() {
+      showStatus('loading', 'Reading your floor plan...', 'Measuring every room, closet, and hallway. Usually 15 to 40 seconds, though the first run of the day can take up to a minute.');
+      var vision = callVision(PROMPT)
+        .then(parseResponse)
+        .catch(function (err) {
+          if (err.name === 'AbortError' || /^server:|Failed to fetch/.test(err.message)) throw err;
+          showStatus('loading', 'Tidying up the results', 'The first answer came back messy, asking once more.');
+          return callVision(PROMPT + RETRY_SUFFIX).then(parseResponse);
+        });
+      var analysis = (state.analysis || Promise.resolve(null)).catch(function () { return null; });
+      return Promise.all([vision, analysis])
+        .then(function (res) {
+          var rooms = res[0], an = res[1];
+          if (an && an.a) {
+            try {
+              var words = an.words.map(function (wd) { return { text: wd.text, x: wd.x, y: wd.y }; });
+              state.snapInfo = SNAP.place(rooms, an.a, words);
+            } catch (e) { if (window.console) console.warn('Snapping skipped:', e); }
+          }
+          return rooms;
+        })
+        .then(function (rooms) {
+          state.rooms = rooms;
+          state.selected = -1;
+          showScreen('result');
+          renderAll();
+          trackUsage('floor-plan-parser');
+        })
+        .catch(function (err) {
+          var msg = 'Something went wrong reading this plan.';
+          if (err.name === 'AbortError') msg = 'The server took too long to respond.';
+          else if (/^server:/.test(err.message)) msg = 'The server returned an error (' + err.message.split(':')[1] + ').';
+          else if (/Failed to fetch/.test(err.message)) msg = 'Could not reach the server.';
+          else msg = 'The model did not return usable room data.';
+          showStatus('error', msg, 'Try again, or use a clearer image of the plan.', true);
+        });
+    }
+
+    /* ---------- Image loading ---------- */
+    function handleFile(file) {
+      if (!file) return;
+      if (/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name)) {
+        showStatus('error', 'PDF support is coming soon.', 'For now, save the page as a PNG or JPG and upload that.');
+        return;
+      }
+      if (!/^image\//.test(file.type)) {
+        showStatus('error', 'That file type is not supported.', 'Upload a PNG, JPG, or WEBP image of the plan.');
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () { prepareImage(img); };
+        img.onerror = function () {
+          showStatus('error', 'This image could not be opened.', 'iPhone HEIC photos need to be exported as JPG first.');
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function prepareImage(img) {
+      // Display canvas
+      var s = Math.min(1, MAX_CANVAS / Math.max(img.naturalWidth, img.naturalHeight));
+      state.W = Math.round(img.naturalWidth * s);
+      state.H = Math.round(img.naturalHeight * s);
+      state.img = img;
+      var c = $('planCanvas');
+      c.width = state.W; c.height = state.H;
+
+      // Downscaled copy for the model
+      var s2 = Math.min(1, MAX_SEND / Math.max(img.naturalWidth, img.naturalHeight));
+      var tmp = document.createElement('canvas');
+      tmp.width = Math.round(img.naturalWidth * s2);
+      tmp.height = Math.round(img.naturalHeight * s2);
+      var tctx = tmp.getContext('2d');
+      tctx.fillStyle = '#ffffff';
+      tctx.fillRect(0, 0, tmp.width, tmp.height);
+      tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+      state.sendType = 'image/jpeg';
+      state.sendB64 = tmp.toDataURL('image/jpeg', 0.9).split(',')[1];
+
+      state.rooms = []; state.selected = -1;
+      // Find walls and printed room names while the model reads the plan
+      state.analysis = new Promise(function (resolve) {
+        setTimeout(function () {
+          try {
+            var a = SNAP.analyze(img);
+            SNAP.ocr(a.canvas).then(function (words) { resolve({ a: a, words: words }); });
+          } catch (e) { resolve(null); }
+        }, 30);
+      });
+      extract();
+    }
+
+    /* ---------- Drawing ---------- */
+    function px(r) {
+      return { x: r.bbox.x / 100 * state.W, y: r.bbox.y / 100 * state.H, w: r.bbox.w / 100 * state.W, h: r.bbox.h / 100 * state.H };
+    }
+    function scale() { return Math.min(state.W, state.H) / 900; }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+    }
+
+    function draw(forExport) {
+      var c = $('planCanvas'), ctx = c.getContext('2d'), s = scale();
+      ctx.clearRect(0, 0, state.W, state.H);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, state.W, state.H);
+      ctx.drawImage(state.img, 0, 0, state.W, state.H);
+
+      // Boxes first, labels on top so they never get covered
+      state.rooms.forEach(function (r, i) {
+        var b = px(r), sel = !forExport && i === state.selected;
+        ctx.save();
+        ctx.fillStyle = sel ? 'rgba(166,190,71,0.20)' : 'rgba(88,43,54,0.07)';
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.lineWidth = (sel ? 3.5 : 2.2) * s;
+        ctx.strokeStyle = sel ? '#7f9433' : '#582b36';
+        ctx.setLineDash(r.source === 'estimated' ? [9 * s, 6 * s] : []);
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        ctx.restore();
+      });
+
+      state.rooms.forEach(function (r, i) {
+        var b = px(r), sel = !forExport && i === state.selected;
+        var dims = (r.width && r.length) ? fmtFtIn(r.width) + ' x ' + fmtFtIn(r.length) : '';
+        var ratio = displayRatio();
+        var nameSize = Math.max(15 * s, 13 * ratio), dimSize = Math.max(13 * s, 11.5 * ratio);
+        ctx.save();
+        ctx.font = '600 ' + nameSize + 'px "DM Sans", sans-serif';
+        var nw = ctx.measureText(r.name).width;
+        ctx.font = '500 ' + dimSize + 'px "DM Sans", sans-serif';
+        var dw = dims ? ctx.measureText(dims).width : 0;
+        var padX = 8 * s + 2, padY = 6 * s + 2, gap = dims ? 3 * s + 1 : 0;
+        var cw = Math.max(nw, dw) + padX * 2;
+        var ch = nameSize + (dims ? dimSize + gap : 0) + padY * 2;
+        // Tuck the label into the room's top left corner so it does not cover the plan's own text.
+        // Rooms too small to hold it get a centered label instead.
+        var inset = 5 * ratio, cx, cy;
+        if (cw + inset * 2 <= b.w && ch + inset * 2 <= b.h) { cx = b.x + inset; cy = b.y + inset; }
+        else { cx = b.x + b.w / 2 - cw / 2; cy = b.y + b.h / 2 - ch / 2; }
+        cx = clamp(cx, 2, state.W - cw - 2); cy = clamp(cy, 2, state.H - ch - 2);
+
+        ctx.shadowColor = 'rgba(67,62,60,0.18)'; ctx.shadowBlur = 6 * s; ctx.shadowOffsetY = 1.5 * s;
+        ctx.fillStyle = sel ? '#582b36' : 'rgba(255,255,255,0.94)';
+        roundRect(ctx, cx, cy, cw, ch, Math.min(8 * s + 2, ch / 2));
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillStyle = sel ? '#FAF9F6' : '#582b36';
+        ctx.font = '600 ' + nameSize + 'px "DM Sans", sans-serif';
+        ctx.fillText(r.name, cx + cw / 2, cy + padY);
+        if (dims) {
+          ctx.fillStyle = sel ? '#e9e1d4' : '#433E3C';
+          ctx.font = '500 ' + dimSize + 'px "DM Sans", sans-serif';
+          ctx.fillText(dims, cx + cw / 2, cy + padY + nameSize + gap);
+        }
+        ctx.restore();
+      });
+
+      // Corner handles on the selected room
+      if (!forExport && state.selected > -1 && state.rooms[state.selected]) {
+        var b = px(state.rooms[state.selected]), hs = handleSize();
+        ctx.save();
+        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 2.5 * s;
+        corners(b).forEach(function (p) {
+          ctx.beginPath(); ctx.arc(p.x, p.y, hs * 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        });
+        ctx.restore();
+      }
+    }
+
+    function corners(b) {
+      return [
+        { k: 'nw', x: b.x, y: b.y }, { k: 'ne', x: b.x + b.w, y: b.y },
+        { k: 'sw', x: b.x, y: b.y + b.h }, { k: 'se', x: b.x + b.w, y: b.y + b.h }
+      ];
+    }
+    // Handle size in canvas pixels, tuned so it is ~22 CSS px on screen
+    function handleSize() { return 22 * displayRatio(); }
+    // Canvas pixels per on-screen pixel, so labels and handles stay readable at any size
+    function displayRatio() {
+      var w = $('planCanvas').clientWidth;
+      return w ? state.W / w : 1;
+    }
+
+    /* ---------- Canvas interaction ---------- */
+    // offsetX/Y are measured in the canvas's own (untilted) space, so clicks stay
+    // accurate even though the graph paper is rotated slightly.
+    function toCanvas(e) {
+      var c = $('planCanvas');
+      return { x: e.offsetX * state.W / c.clientWidth, y: e.offsetY * state.H / c.clientHeight };
+    }
+    function hitHandle(p) {
+      if (state.selected < 0) return null;
+      var b = px(state.rooms[state.selected]), hs = handleSize();
+      var hit = null;
+      corners(b).forEach(function (c) {
+        if (Math.abs(p.x - c.x) <= hs * 0.7 && Math.abs(p.y - c.y) <= hs * 0.7) hit = c.k;
+      });
+      return hit;
+    }
+    function hitRoom(p) {
+      var best = -1, bestArea = Infinity;
+      state.rooms.forEach(function (r, i) {
+        var b = px(r);
+        if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) {
+          var a = b.w * b.h; // prefer the smallest box so closets inside rooms stay clickable
+          if (a < bestArea) { bestArea = a; best = i; }
+        }
+      });
+      return best;
+    }
+
+    function onDown(e) {
+      if (!state.img) return;
+      var p = toCanvas(e), h = hitHandle(p);
+      if (h) {
+        startDrag(e, 'resize', h, p);
+        return;
+      }
+      var i = hitRoom(p);
+      select(i, true);
+      if (i > -1) startDrag(e, 'move', null, p);
+    }
+    function startDrag(e, mode, corner, p) {
+      var r = state.rooms[state.selected];
+      state.drag = { mode: mode, corner: corner, start: p, orig: { x: r.bbox.x, y: r.bbox.y, w: r.bbox.w, h: r.bbox.h } };
+      try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    }
+    function onMove(e) {
+      if (!state.img) return;
+      var p = toCanvas(e), c = $('planCanvas');
+      if (!state.drag) {
+        var h = hitHandle(p);
+        c.style.cursor = h ? (h === 'nw' || h === 'se' ? 'nwse-resize' : 'nesw-resize') : (hitRoom(p) > -1 ? 'move' : 'default');
+        return;
+      }
+      var d = state.drag, r = state.rooms[state.selected], o = d.orig;
+      var dx = (p.x - d.start.x) / state.W * 100, dy = (p.y - d.start.y) / state.H * 100;
+      var MIN = 1.5;
+      if (d.mode === 'move') {
+        r.bbox.x = clamp(o.x + dx, 0, 100 - o.w);
+        r.bbox.y = clamp(o.y + dy, 0, 100 - o.h);
+      } else {
+        var x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+        if (d.corner.indexOf('w') > -1) x1 = clamp(o.x + dx, 0, x2 - MIN);
+        if (d.corner.indexOf('e') > -1) x2 = clamp(x2 + dx, x1 + MIN, 100);
+        if (d.corner.indexOf('n') > -1) y1 = clamp(o.y + dy, 0, y2 - MIN);
+        if (d.corner.indexOf('s') > -1) y2 = clamp(y2 + dy, y1 + MIN, 100);
+        r.bbox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+      }
+      draw();
+    }
+    function onUp(e) {
+      if (state.drag) {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        state.drag = null;
+      }
+    }
+
+    function select(i, scrollCard) {
+      state.selected = i;
+      $('planCanvas').classList.toggle('editing', i > -1);
+      var cards = document.querySelectorAll('.room-card');
+      for (var k = 0; k < cards.length; k++) cards[k].classList.toggle('selected', +cards[k].getAttribute('data-i') === i);
+      if (scrollCard && i > -1 && cards[i] && cards[i].scrollIntoView) {
+        var rect = cards[i].getBoundingClientRect();
+        if (rect.top > window.innerHeight || rect.bottom < 0) cards[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+      draw();
+    }
+
+    /* ---------- Room cards ---------- */
+    function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+    function badgeFor(r) {
+      if (r.source === 'labeled') return '<span class="badge labeled">From plan</span>';
+      if (r.source === 'edited') return '<span class="badge edited">Edited</span>';
+      return '<span class="badge estimated">Estimated</span>';
+    }
+
+    function renderCards() {
+      var html = state.rooms.map(function (r, i) {
+        return '<div class="room-card' + (i === state.selected ? ' selected' : '') + '" data-i="' + i + '">' +
+          '<div class="card-top">' +
+            '<input class="name-input" data-f="name" value="' + esc(r.name) + '" aria-label="Room name">' +
+            '<button class="del" data-act="del" title="Remove room" aria-label="Remove room">&times;</button>' +
+          '</div>' +
+          '<div class="dims">' +
+            '<div><label>Width</label><input data-f="width" value="' + esc(fmtFtIn(r.width)) + '" placeholder="12\'6&quot;"></div>' +
+            '<div><label>Length</label><input data-f="length" value="' + esc(fmtFtIn(r.length)) + '" placeholder="10\'"></div>' +
+          '</div>' +
+          '<div class="card-foot"><span class="area">' + (area(r) ? fmtArea(area(r)) : 'Add dimensions') + '</span>' + badgeFor(r) + '</div>' +
+        '</div>';
+      }).join('');
+      $('roomGrid').innerHTML = html;
+    }
+
+    function renderStats() {
+      var total = 0, est = 0;
+      state.rooms.forEach(function (r) { total += area(r); if (r.source === 'estimated') est++; });
+      $('statRooms').textContent = state.rooms.length;
+      $('statArea').textContent = Math.round(total).toLocaleString();
+      $('statEst').textContent = est;
+    }
+
+    function renderAll() { renderCards(); renderStats(); draw(); }
+
+    function cardIndex(el) {
+      var card = el.closest('.room-card');
+      return card ? +card.getAttribute('data-i') : -1;
+    }
+
+    function onGridInput(e) {
+      var el = e.target, i = cardIndex(el), r = state.rooms[i];
+      if (!r) return;
+      var f = el.getAttribute('data-f');
+      if (f === 'name') {
+        r.name = el.value.slice(0, 40) || 'Room';
+        draw();
+      } else if (f === 'width' || f === 'length') {
+        var v = parseFtIn(el.value);
+        el.classList.toggle('bad', el.value.trim() !== '' && v == null);
+        if (v != null && v > 0) {
+          r[f] = v;
+          if (r.source === 'estimated') r.source = 'edited';
+          var card = el.closest('.room-card');
+          card.querySelector('.area').textContent = fmtArea(area(r));
+          card.querySelector('.badge').outerHTML = badgeFor(r);
+          renderStats(); draw();
+        }
+      }
+    }
+    function onGridChange(e) {
+      // Normalize what was typed (e.g. "12 6" becomes 12'6") once the field is left
+      var el = e.target, i = cardIndex(el), r = state.rooms[i], f = el.getAttribute('data-f');
+      if (r && (f === 'width' || f === 'length') && !el.classList.contains('bad')) el.value = fmtFtIn(r[f]);
+    }
+    function onGridClick(e) {
+      var i = cardIndex(e.target);
+      if (i < 0) return;
+      if (e.target.getAttribute('data-act') === 'del') {
+        state.rooms.splice(i, 1);
+        state.selected = -1;
+        renderAll();
+        return;
+      }
+      if (state.selected !== i) select(i, false);
+    }
+
+    function addRoom() {
+      var n = state.rooms.length + 1;
+      state.rooms.push({ id: state.nextId++, name: 'Room ' + n, width: null, length: null, source: 'edited', bbox: { x: 40, y: 40, w: 20, h: 20 } });
+      state.selected = state.rooms.length - 1;
+      renderAll();
+      select(state.selected, false);
+      var inputs = document.querySelectorAll('.room-card .name-input');
+      var last = inputs[inputs.length - 1];
+      if (last) { last.focus(); last.select(); }
+    }
+
+    /* ---------- Export ---------- */
+    function exportPNG() {
+      draw(true);
+      $('planCanvas').toBlob(function (blob) {
+        download(blob, 'floor-plan-annotated.png');
+        draw();
+      }, 'image/png');
+    }
+    function exportJSON() {
+      var data = {
+        unit: 'ft',
+        total_sqft: Math.round(state.rooms.reduce(function (t, r) { return t + area(r); }, 0)),
+        rooms: state.rooms.map(function (r) {
+          return {
+            name: r.name, width: fmtFtIn(r.width), length: fmtFtIn(r.length),
+            width_ft: r.width ? +r.width.toFixed(3) : null, length_ft: r.length ? +r.length.toFixed(3) : null,
+            area_sqft: Math.round(area(r)), source: r.source,
+            bbox_pct: { x: +r.bbox.x.toFixed(2), y: +r.bbox.y.toFixed(2), w: +r.bbox.w.toFixed(2), h: +r.bbox.h.toFixed(2) }
+          };
+        })
+      };
+      download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'floor-plan-data.json');
+    }
+    function download(blob, name) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    }
+
+    /* ---------- Status ---------- */
+    function showScreen(id) {
+      var s = document.querySelectorAll('.screen');
+      for (var i = 0; i < s.length; i++) s[i].classList.toggle('active', s[i].id === 'screen-' + id);
+    }
+    function showStatus(kind, msg, sub, retry) {
+      if (kind === 'loading') {
+        $('loadMain').textContent = msg;
+        $('loadSub').textContent = sub || '';
+        showScreen('loading');
+      } else {
+        $('errMain').textContent = msg;
+        $('errSub').textContent = sub || '';
+        $('retryBtn').classList.toggle('hidden', !retry);
+        showScreen('error');
+      }
+    }
+    function hideStatus() {}
+
+    function reset() {
+      state.img = null; state.rooms = []; state.selected = -1; state.sendB64 = '';
+      $('fileInput').value = '';
+      showScreen('upload');
+    }
+
+    function $(id) { return document.getElementById(id); }
+
+    // Logs a completed run to the toolkit usage sheet, same as the other tools
+    function trackUsage(toolName) {
+      try {
+        fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
+          method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      if (IN_TOOLKIT) $('toolNum').textContent = 'Tool 05';
+      var dz = $('dropZone'), fi = $('fileInput'), c = $('planCanvas'), grid = $('roomGrid');
+      dz.addEventListener('click', function () { fi.click(); });
+      fi.addEventListener('change', function () { handleFile(fi.files[0]); });
+      dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('drag'); });
+      dz.addEventListener('dragleave', function () { dz.classList.remove('drag'); });
+      dz.addEventListener('drop', function (e) {
+        e.preventDefault(); dz.classList.remove('drag');
+        handleFile(e.dataTransfer.files[0]);
+      });
+
+      c.addEventListener('pointerdown', onDown);
+      c.addEventListener('pointermove', onMove);
+      c.addEventListener('pointerup', onUp);
+      c.addEventListener('pointercancel', onUp);
+
+      grid.addEventListener('input', onGridInput);
+      grid.addEventListener('change', onGridChange);
+      grid.addEventListener('click', onGridClick);
+
+      $('addBtn').addEventListener('click', addRoom);
+      $('pngBtn').addEventListener('click', exportPNG);
+      $('jsonBtn').addEventListener('click', exportJSON);
+      $('resetBtn').addEventListener('click', reset);
+      $('retryBtn').addEventListener('click', extract);
+      $('newBtn').addEventListener('click', reset);
+
+      document.addEventListener('keydown', function (e) {
+        if (state.selected < 0 || /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+        if (e.key === 'Escape') select(-1);
+        if (e.key === 'Delete' || e.key === 'Backspace') { state.rooms.splice(state.selected, 1); state.selected = -1; renderAll(); e.preventDefault(); }
+      });
+
+      // Redraw once DM Sans is ready so canvas labels use it
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (state.img && state.rooms.length) draw(); });
+      window.addEventListener('resize', function () { if (state.img) draw(); });
+    });
+  </script>
 </head>
 <body>
-<div class="wrap">
+<div class="folder-wrap">
+  <div class="tabs"><div class="tab">Floor Plan</div></div>
 
-  <h1>Floor Plan Parser</h1>
-  <p class="subtitle">Upload a floor plan to extract room dimensions and generate an annotated architectural drawing.</p>
+  <div class="folder">
+    <div class="paper-behind"></div>
 
-  <div class="upload-zone" id="dropZone">
-    <input type="file" id="fileInput" accept="image/*,.pdf">
-    <div class="upload-icon">🏠</div>
-    <p>Drop a floor plan image here, or click to upload</p>
-    <small>PNG, JPG, or PDF supported</small>
-  </div>
+    <div class="graph-paper">
+      <svg class="paperclip" width="40" height="110" viewBox="0 0 40 110" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M 5 40 L 5 96 Q 5 106, 15 106 L 25 106 Q 35 106, 35 96 L 35 14 Q 35 4, 25 4 L 15 4 Q 5 4, 5 14" stroke="#8a8a8a" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <path d="M 8 48 L 8 88" stroke="#c8c8c8" stroke-width="0.9" stroke-linecap="round" fill="none" opacity="0.7"/>
+      </svg>
 
-  <div class="status" id="statusArea"></div>
-
-  <div id="mainArea" class="hidden">
-
-    <div class="style-panel">
-      <span class="style-label">Annotation style</span>
-      <div class="style-group">
-        <label for="lineColor">Line</label>
-        <input type="color" id="lineColor" value="#1a5fa8">
+      <div class="tool-header">
+        <h1 class="tool-title">Floor Plan Parser</h1>
+        <div class="tool-num" id="toolNum">Prototype</div>
+        <p class="tool-desc">Every design project starts with the same question: how big is this room, really? Upload a floor plan and get every space measured and labeled, then fix anything the plan left unclear right on the drawing.</p>
       </div>
-      <div class="style-group">
-        <label for="textColor">Text</label>
-        <input type="color" id="textColor" value="#1a5fa8">
-      </div>
-      <div class="style-group">
-        <span class="style-label" style="margin-right:8px">Walls</span>
-        <div class="toggle-group">
-          <div class="toggle-item"><input type="checkbox" id="showTop" checked><label for="showTop">Top</label></div>
-          <div class="toggle-item"><input type="checkbox" id="showRight" checked><label for="showRight">Right</label></div>
-          <div class="toggle-item"><input type="checkbox" id="showBottom"><label for="showBottom">Bottom</label></div>
-          <div class="toggle-item"><input type="checkbox" id="showLeft"><label for="showLeft">Left</label></div>
+      <div class="rule"></div>
+
+      <!-- ── SCREEN: UPLOAD ── -->
+      <div class="screen active" id="screen-upload">
+        <p class="eyebrow">Use it to</p>
+        <div class="uses">
+          <div class="use">
+            <h3><span>A.</span>Check the fit before you buy</h3>
+            <p>Know whether the sofa, rug, or dining table works for the room before anything ships.</p>
+          </div>
+          <div class="use">
+            <h3><span>B.</span>Start a project from a listing</h3>
+            <p>Turn a real estate floor plan into measured rooms you can plan, quote, and design around.</p>
+          </div>
+          <div class="use">
+            <h3><span>C.</span>Price flooring and paint</h3>
+            <p>Get square footage room by room and for the whole home, editable down to the inch.</p>
+          </div>
+        </div>
+
+        <div class="upload-zone" id="dropZone">
+          <input type="file" id="fileInput" accept="image/*">
+          <svg class="upload-icon" viewBox="0 0 44 44" fill="none" stroke="#582b36" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+            <rect x="5" y="8" width="34" height="28" rx="2"/>
+            <path d="M5 22h13v14M18 22V8M18 15h21M28 15v8"/>
+          </svg>
+          <p class="big">Drop your floor plan here</p>
+          <p class="small">Architectural drawings and listing plans read best. Phone photos work too if the plan is flat and well lit. PNG, JPG, or WEBP.</p>
+          <span class="btn-primary">Choose a file</span>
         </div>
       </div>
-      <button class="btn btn-sm" id="btnReparse">↺ Re-parse</button>
+
+      <!-- ── SCREEN: LOADING ── -->
+      <div class="screen" id="screen-loading">
+        <div class="loading-wrap">
+          <div class="spinner"></div>
+          <p class="loading-text"><strong id="loadMain">Reading your floor plan...</strong><span id="loadSub"></span></p>
+        </div>
+      </div>
+
+      <!-- ── SCREEN: ERROR ── -->
+      <div class="screen" id="screen-error">
+        <div class="error-msg"><span id="errMain"></span><small id="errSub"></small></div>
+        <div class="btn-row">
+          <button class="btn-primary" id="retryBtn">Try again</button>
+          <button class="btn-secondary" id="newBtn">Upload a different plan</button>
+        </div>
+      </div>
+
+      <!-- ── SCREEN: RESULTS ── -->
+      <div class="screen" id="screen-result">
+        <div class="summary">
+          <div class="stats">
+            <div class="stat"><b id="statRooms">0</b><span>Spaces</span></div>
+            <div class="stat"><b id="statArea">0</b><span>Total sq ft</span></div>
+            <div class="stat"><b id="statEst">0</b><span>Estimated</span></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn-primary btn-sm" id="pngBtn">Download PNG</button>
+            <button class="btn-secondary btn-sm" id="jsonBtn">JSON</button>
+            <button class="btn-secondary btn-sm" id="resetBtn">New plan</button>
+          </div>
+        </div>
+
+        <div class="print">
+          <div class="tape l"></div><div class="tape r"></div>
+          <canvas id="planCanvas"></canvas>
+        </div>
+        <p class="hint">
+          <span class="legend"><span class="swatch"></span>Measured from the plan</span>
+          <span class="legend"><span class="swatch dash"></span>Estimated</span><br>
+          Click a room to select it, drag to move it, drag a corner to resize. Delete removes it.
+        </p>
+
+        <div class="rooms-head">
+          <p class="eyebrow">Rooms</p>
+          <button class="btn-secondary btn-sm" id="addBtn">+ Add a room</button>
+        </div>
+        <div class="room-grid" id="roomGrid"></div>
+      </div>
     </div>
-
-    <div class="canvas-wrap">
-      <canvas id="floorCanvas"></canvas>
-    </div>
-
-    <div class="section-label">Rooms — edit any dimension to update the overlay</div>
-    <div class="rooms-grid" id="roomsGrid"></div>
-
-    <div class="section-label">Export</div>
-    <div class="export-row">
-      <button class="btn btn-primary" id="btnPng">Download PNG</button>
-      <button class="btn" id="btnPdf">Download PDF</button>
-      <button class="btn" id="btnJson">Download JSON</button>
-    </div>
-
   </div>
 </div>
 
 <script>
-function trackUsage(toolName) {
-  fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
-  }).catch(() => {});
-}
-  // pdf.js worker
-  if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  }
-
-  const VISION_URL = 'https://studio-lou-rag.onrender.com/api/vision';
-
-  const EXTRACT_PROMPT = `You are analyzing a floor plan image. Extract every labeled room or space.
-
-For each room return:
-- name: room label as shown
-- width: numeric width in feet (estimate from scale bar or relative proportions)
-- length: numeric length in feet
-- bbox: approximate bounding box as percentage of image dimensions — {x, y, w, h} where x/y are the top-left corner (0–100 each), and w/h are width and height as percentages (0–100 each). Be as accurate as possible by examining where each room's walls fall in the image.
-
-Respond with ONLY valid JSON, no markdown fences, no explanation:
-{
-  "unit": "ft",
-  "rooms": [
-    {"name": "...", "width": 0, "length": 0, "bbox": {"x": 0, "y": 0, "w": 0, "h": 0}}
-  ]
-}`;
-
-  let imageEl = null;
-  let imageB64 = null;
-  let imageMime = 'image/jpeg';
-  let rooms = [];
-
-  function $(id) { return document.getElementById(id); }
-
-  function setStatus(msg, type) {
-    const el = $('statusArea');
-    el.className = 'status' + (type ? ' ' + type : '');
-    if (!msg) { el.innerHTML = ''; return; }
-    if (type === 'loading') {
-      el.innerHTML = '<span class="spinner"></span>' + msg;
-    } else {
-      el.textContent = msg;
+  /* Report height so the page can sit inside an iframe (Framer or the toolkit wrapper). */
+  (function () {
+    var last = 0;
+    function report() {
+      var h = Math.max(document.body ? document.body.scrollHeight : 0, document.documentElement ? document.documentElement.scrollHeight : 0);
+      if (h !== last) { last = h; try { window.parent.postMessage({ height: h }, '*'); } catch (e) {} }
     }
-  }
-
-  // --- Upload / drag-drop ---
-  $('dropZone').addEventListener('click', () => $('fileInput').click());
-  $('dropZone').addEventListener('dragover', e => {
-    e.preventDefault();
-    $('dropZone').style.borderColor = '#A6BE47';
-  });
-  $('dropZone').addEventListener('dragleave', () => {
-    $('dropZone').style.borderColor = '';
-  });
-  $('dropZone').addEventListener('drop', e => {
-    e.preventDefault();
-    $('dropZone').style.borderColor = '';
-    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-  });
-  $('fileInput').addEventListener('change', e => {
-    if (e.target.files[0]) handleFile(e.target.files[0]);
-  });
-
-  async function handleFile(file) {
-    $('mainArea').classList.add('hidden');
-    setStatus('Reading file...', 'loading');
-
-    if (file.type === 'application/pdf') {
-      await handlePdf(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = ev => {
-        imageMime = file.type || 'image/jpeg';
-        imageB64 = ev.target.result.split(',')[1];
-        const img = new Image();
-        img.onload = () => { imageEl = img; parseFloorPlan(); };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-  }
-
-  async function handlePdf(file) {
-    if (!window.pdfjsLib) {
-      setStatus('PDF.js failed to load — please upload a PNG or JPG instead.', 'error');
-      return;
-    }
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const page = await pdfDoc.getPage(1);
-      const viewport = page.getViewport({ scale: 2 });
-      const offscreen = document.createElement('canvas');
-      offscreen.width = viewport.width;
-      offscreen.height = viewport.height;
-      const ctx = offscreen.getContext('2d');
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      imageMime = 'image/jpeg';
-      imageB64 = offscreen.toDataURL('image/jpeg', 0.92).split(',')[1];
-      const img = new Image();
-      img.onload = () => { imageEl = img; parseFloorPlan(); };
-      img.src = 'data:image/jpeg;base64,' + imageB64;
-    } catch (e) {
-      setStatus('PDF render error: ' + e.message, 'error');
-    }
-  }
-
-  async function parseFloorPlan() {
-    setStatus('Extracting rooms and coordinates — this may take 10–20 seconds...', 'loading');
-    try {
-      const res = await fetch(VISION_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: imageB64,
-          media_type: imageMime,
-          prompt: EXTRACT_PROMPT
-        })
-      });
-      if (!res.ok) throw new Error('Server returned ' + res.status);
-      const data = await res.json();
-      const text = data.content[0].text;
-      const cleaned = text.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-
-      rooms = (parsed.rooms || []).map((r, i) => ({
-        ...r,
-        id: i,
-        width: parseFloat(r.width) || 10,
-        length: parseFloat(r.length) || 10,
-        bbox: r.bbox || { x: 5 + i * 8, y: 5, w: 18, h: 18 }
-      }));
-
-      setStatus('');
-      $('mainArea').classList.remove('hidden');
-      renderCards();
-      drawCanvas();
-      trackUsage('floor-plan-parser');
-    } catch (e) {
-      setStatus('Extraction failed: ' + e.message + '. Check the Render server is awake and try again.', 'error');
-    }
-  }
-
-  // --- Room cards ---
-  function renderCards() {
-    const grid = $('roomsGrid');
-    grid.innerHTML = '';
-    rooms.forEach(room => {
-      const card = document.createElement('div');
-      card.className = 'room-card';
-      card.innerHTML = `
-        <h4>${room.name}</h4>
-        <div class="dim-row">
-          <label>Width</label>
-          <input type="number" step="0.5" min="0" value="${room.width.toFixed(1)}"
-            data-id="${room.id}" data-field="width">
-          <span>ft</span>
-        </div>
-        <div class="dim-row">
-          <label>Length</label>
-          <input type="number" step="0.5" min="0" value="${room.length.toFixed(1)}"
-            data-id="${room.id}" data-field="length">
-          <span>ft</span>
-        </div>`;
-      grid.appendChild(card);
-    });
-    grid.querySelectorAll('input[type="number"]').forEach(inp => {
-      inp.addEventListener('input', e => {
-        const id = parseInt(e.target.dataset.id);
-        const field = e.target.dataset.field;
-        const room = rooms.find(r => r.id === id);
-        if (room) {
-          room[field] = parseFloat(e.target.value) || 0;
-          drawCanvas();
-        }
-      });
-    });
-  }
-
-  // --- Canvas drawing ---
-  function drawCanvas() {
-    if (!imageEl) return;
-    const canvas = $('floorCanvas');
-    canvas.width = imageEl.naturalWidth;
-    canvas.height = imageEl.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imageEl, 0, 0);
-
-    const W = canvas.width;
-    const H = canvas.height;
-    const lineColor = $('lineColor').value;
-    const textColor = $('textColor').value;
-    const showTop = $('showTop').checked;
-    const showRight = $('showRight').checked;
-    const showBottom = $('showBottom').checked;
-    const showLeft = $('showLeft').checked;
-
-    const scale = Math.min(W, H) / 900;
-    const offset = 28 * scale;
-    const tickLen = 8 * scale;
-    const lw = 1.5 * scale;
-    const fontSize = Math.max(11, Math.round(13 * scale));
-
-    ctx.strokeStyle = lineColor;
-    ctx.fillStyle = textColor;
-    ctx.lineWidth = lw;
-
-    rooms.forEach(room => {
-      const b = room.bbox;
-      const rx = (b.x / 100) * W;
-      const ry = (b.y / 100) * H;
-      const rw = (b.w / 100) * W;
-      const rh = (b.h / 100) * H;
-
-      if (showTop)    drawHorizDim(ctx, rx, ry - offset,       rw, formatDim(room.width),  lineColor, textColor, tickLen, lw, fontSize);
-      if (showBottom) drawHorizDim(ctx, rx, ry + rh + offset,  rw, formatDim(room.width),  lineColor, textColor, tickLen, lw, fontSize);
-      if (showLeft)   drawVertDim(ctx,  rx - offset,      ry,  rh, formatDim(room.length), lineColor, textColor, tickLen, lw, fontSize);
-      if (showRight)  drawVertDim(ctx,  rx + rw + offset, ry,  rh, formatDim(room.length), lineColor, textColor, tickLen, lw, fontSize);
-    });
-  }
-
-  function formatDim(val) {
-    return parseFloat(val).toFixed(1) + ' ft';
-  }
-
-  function drawHorizDim(ctx, x, y, w, label, lineC, textC, tickLen, lw, fontSize) {
-    ctx.save();
-    ctx.strokeStyle = lineC;
-    ctx.fillStyle = textC;
-    ctx.lineWidth = lw;
-    ctx.font = '500 ' + fontSize + 'px "DM Sans", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + w, y);
-    ctx.stroke();
-
-    [x, x + w].forEach(tx => {
-      ctx.beginPath();
-      ctx.moveTo(tx, y - tickLen);
-      ctx.lineTo(tx, y + tickLen);
-      ctx.stroke();
-    });
-
-    const mid = x + w / 2;
-    const pad = 5;
-    const tw = ctx.measureText(label).width + pad * 2;
-    ctx.fillStyle = 'rgba(253,250,245,0.88)';
-    ctx.fillRect(mid - tw / 2, y - fontSize / 2 - 3, tw, fontSize + 6);
-    ctx.fillStyle = textC;
-    ctx.fillText(label, mid, y);
-    ctx.restore();
-  }
-
-  function drawVertDim(ctx, x, y, h, label, lineC, textC, tickLen, lw, fontSize) {
-    ctx.save();
-    ctx.strokeStyle = lineC;
-    ctx.fillStyle = textC;
-    ctx.lineWidth = lw;
-    ctx.font = '500 ' + fontSize + 'px "DM Sans", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x, y + h);
-    ctx.stroke();
-
-    [y, y + h].forEach(ty => {
-      ctx.beginPath();
-      ctx.moveTo(x - tickLen, ty);
-      ctx.lineTo(x + tickLen, ty);
-      ctx.stroke();
-    });
-
-    const mid = y + h / 2;
-    ctx.translate(x, mid);
-    ctx.rotate(-Math.PI / 2);
-    const pad = 5;
-    const tw = ctx.measureText(label).width + pad * 2;
-    ctx.fillStyle = 'rgba(253,250,245,0.88)';
-    ctx.fillRect(-tw / 2, -fontSize / 2 - 3, tw, fontSize + 6);
-    ctx.fillStyle = textC;
-    ctx.fillText(label, 0, 0);
-    ctx.restore();
-  }
-
-  // --- Style controls ---
-  ['lineColor', 'textColor', 'showTop', 'showRight', 'showBottom', 'showLeft'].forEach(id => {
-    $(id).addEventListener('change', drawCanvas);
-  });
-
-  $('btnReparse').addEventListener('click', () => {
-    if (imageB64) parseFloorPlan();
-  });
-
-  // --- Export ---
-  $('btnPng').addEventListener('click', () => {
-    const canvas = $('floorCanvas');
-    canvas.toBlob(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'floor-plan-annotated.png';
-      a.click();
-    }, 'image/png');
-  });
-
-  $('btnPdf').addEventListener('click', () => {
-    const canvas = $('floorCanvas');
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-    const { jsPDF } = window.jspdf;
-    const cw = canvas.width;
-    const ch = canvas.height;
-    const landscape = cw > ch;
-    const doc = new jsPDF({
-      orientation: landscape ? 'landscape' : 'portrait',
-      unit: 'px',
-      format: [cw, ch]
-    });
-    doc.addImage(imgData, 'JPEG', 0, 0, cw, ch);
-    doc.save('floor-plan-annotated.pdf');
-  });
-
-  $('btnJson').addEventListener('click', () => {
-    const exportData = {
-      generated: new Date().toISOString(),
-      unit: 'ft',
-      rooms: rooms.map(r => ({
-        name: r.name,
-        width: r.width,
-        length: r.length,
-        area_sqft: parseFloat((r.width * r.length).toFixed(1)),
-        bbox_percent: r.bbox
-      }))
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'floor-plan-data.json';
-    a.click();
-  });
+    window.addEventListener('load', report);
+    window.addEventListener('resize', report);
+    if (typeof ResizeObserver !== 'undefined' && document.body) new ResizeObserver(report).observe(document.body);
+    report();
+  })();
 </script>
 </body>
 </html>
