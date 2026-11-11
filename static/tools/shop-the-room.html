@@ -245,27 +245,11 @@
 
     .empty-note { font-size: 14px; color: #6b6560; padding: 16px; }
 
-    /* Raw model reply, standalone page only, for tuning the prompt */
-    .raw { margin-top: 36px; font-size: 13px; color: #6b6560; }
-    .raw summary { cursor: pointer; font-weight: 600; }
-    .raw label { display: flex; align-items: center; gap: 8px; margin-top: 10px; cursor: pointer; }
-    .raw .sent-size { margin-top: 6px; }
-    /* Testing overlay: the box the model gave for each piece */
-    .dbg-box { position: absolute; z-index: 2; border: 2px dashed #A6BE47; background: rgba(166,190,71,0.10); pointer-events: none; }
-    .dbg-box span {
-      position: absolute; top: -2px; left: -2px; background: #A6BE47; color: #ffffff;
-      font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 5px;
-    }
-    .in-toolkit .dbg-box { display: none; }
-    .raw pre {
-      margin-top: 10px; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 10px; padding: 12px;
-      font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto;
-    }
 
     /* ── INSIDE THE HOMEOWNER TOOLKIT (wrapper supplies folder and graph paper) ── */
     .in-toolkit, .in-toolkit body { background: transparent; min-height: 0; }
     .in-toolkit body { padding: 0; }
-    .in-toolkit .tabs, .in-toolkit .paper-behind, .in-toolkit .paperclip, .in-toolkit .raw { display: none; }
+    .in-toolkit .tabs, .in-toolkit .paper-behind, .in-toolkit .paperclip { display: none; }
     .in-toolkit .folder { background: none; padding: 0; box-shadow: none; border-radius: 0; }
     .in-toolkit .graph-paper { background: none; transform: none; padding: 0; box-shadow: none; min-height: 0; }
     .in-toolkit .tool-title { padding-right: 0; }
@@ -304,6 +288,7 @@
       .pin-pop.editing { width: auto; }
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
     // Opened from your own computer (localhost), the page uses your local Flask server so app.py changes can be tested before pushing
     var API_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '/api/vision' : 'https://studio-lou-rag.onrender.com/api/vision';
@@ -388,7 +373,7 @@
     var LEVELS = [{ id: 'save', label: 'Save' }, { id: 'mid', label: 'Mid' }, { id: 'splurge', label: 'Splurge' }];
     var STORES_PER_LEVEL = 2;
 
-    var state = { imgURL: '', sendB64: '', sendType: 'image/jpeg', sendW: 0, sendH: 0, style: '', items: [], raw: '',
+    var state = { imgURL: '', sendB64: '', sendType: 'image/jpeg', sendW: 0, sendH: 0, style: '', items: [],
                   nextId: 1, active: null, editing: null, tagging: false, level: 'mid', popId: null };
 
     /* ---------- Model response handling ---------- */
@@ -456,7 +441,6 @@
     }
 
     function parseResponse(text) {
-      state.raw = String(text);
       var t = String(text).replace(/```(?:json)?/gi, '');
       var s = t.indexOf('{'), e = t.lastIndexOf('}');
       if (s < 0 || e <= s) throw new Error('No JSON in response');
@@ -522,6 +506,7 @@
           state.active = null; state.editing = null; state.tagging = false; state.popId = null;
           showScreen('result');
           render();
+          trackUsage('shop-the-room');
         })
         .catch(function (err) {
           var msg = 'Something went wrong reading this photo.';
@@ -583,7 +568,7 @@
       state.sendB64 = tmp.toDataURL('image/jpeg', 0.9).split(',')[1];
       state.sendW = tmp.width; state.sendH = tmp.height;
       state.imgURL = dataURL;
-      state.items = []; state.style = ''; state.raw = '';
+      state.items = []; state.style = '';
       extract();
     }
 
@@ -656,9 +641,6 @@
       renderPins();
       renderTagMode();
       renderPop();
-      $('rawText').textContent = state.raw;
-      $('sentSize').textContent = state.sendW ? 'Photo sent to the model at ' + state.sendW + ' x ' + state.sendH + ' pixels.' : '';
-      renderBoxes();
     }
 
     function renderList() {
@@ -714,22 +696,6 @@
         b.style.top = spots[i].y + '%';
         attachPinDrag(b, it);
         wrap.appendChild(b);
-      });
-    }
-
-    // Testing overlay: draws each piece's model box so a bad box and a bad pin can be told apart
-    function renderBoxes() {
-      var wrap = $('photoWrap'), old = wrap.querySelectorAll('.dbg-box');
-      for (var i = 0; i < old.length; i++) wrap.removeChild(old[i]);
-      if (IN_TOOLKIT || !$('showBoxes').checked) return;
-      state.items.forEach(function (it, n) {
-        if (!it.box) return;
-        var d = document.createElement('div');
-        d.className = 'dbg-box';
-        d.style.left = it.box[0] + '%'; d.style.top = it.box[1] + '%';
-        d.style.width = (it.box[2] - it.box[0]) + '%'; d.style.height = (it.box[3] - it.box[1]) + '%';
-        d.innerHTML = '<span>' + (n + 1) + '</span>';
-        wrap.appendChild(d);
       });
     }
 
@@ -999,13 +965,210 @@
     }
 
     function reset() {
-      state.imgURL = ''; state.sendB64 = ''; state.items = []; state.style = ''; state.raw = '';
+      state.imgURL = ''; state.sendB64 = ''; state.items = []; state.style = '';
       state.active = null; state.editing = null; state.tagging = false; state.popId = null;
       $('fileInput').value = '';
       showScreen('upload');
     }
 
     function $(id) { return document.getElementById(id); }
+
+    // Logs a completed run to the toolkit usage sheet, same as the other tools
+    function trackUsage(toolName) {
+      try {
+        fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
+          method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    /* ---------- PDF shopping list ---------- */
+    // Loads the Studio Lou logo from the server as image data for the PDF (skipped quietly if it can't load)
+    var LOGO_URL = 'https://studio-lou-rag.onrender.com/static/logo.png';
+    function loadLogo() {
+      return new Promise(function (resolve) {
+        var im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = function () {
+          try {
+            var c = document.createElement('canvas');
+            c.width = im.naturalWidth; c.height = im.naturalHeight;
+            c.getContext('2d').drawImage(im, 0, 0);
+            resolve(c.toDataURL('image/png'));
+          } catch (e) { resolve(null); }
+        };
+        im.onerror = function () { resolve(null); };
+        im.src = LOGO_URL;
+      });
+    }
+
+    // The room photo with numbered pins drawn on it, at the size the model saw
+    function pinnedPhoto(pinPt, imgW) {
+      return new Promise(function (resolve) {
+        var im = new Image();
+        im.onload = function () {
+          var c = document.createElement('canvas');
+          c.width = state.sendW; c.height = state.sendH;
+          var ctx = c.getContext('2d');
+          ctx.drawImage(im, 0, 0, c.width, c.height);
+          var r = pinPt / 2 * c.width / imgW;   // pin radius in photo pixels for a pinPt-wide pin on the page
+          var spots = pinSpots();
+          state.items.forEach(function (it, i) {
+            var x = spots[i].x / 100 * c.width, y = spots[i].y / 100 * c.height;
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = r * 0.4; ctx.shadowOffsetY = r * 0.12;
+            ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = '#582b36'; ctx.fill();
+            ctx.restore();
+            ctx.lineWidth = r * 0.14; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+            ctx.fillStyle = '#FAF9F6';
+            ctx.font = '700 ' + Math.round(r * 0.95) + 'px Helvetica, Arial, sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String(i + 1), x, y + r * 0.04);
+          });
+          resolve(c.toDataURL('image/jpeg', 0.9));
+        };
+        im.onerror = function () { resolve(null); };
+        im.src = 'data:image/jpeg;base64,' + state.sendB64;
+      });
+    }
+
+    function exportPDF() {
+      if (!window.jspdf) { alert('The PDF maker did not load. Refresh the page and try again.'); return; }
+      if (state.editing != null) finishEdit(findItem(state.editing));
+      var btn = $('pdfBtn');
+      btn.disabled = true;
+      var L = pdfLayout();
+      Promise.all([loadLogo(), pinnedPhoto(L.pin, L.iw)]).then(function (res) {
+        try { buildPDF(res[0], res[1], L); } finally { btn.disabled = false; }
+      });
+    }
+
+    // Photo size on the page: full width for wide photos, capped height for tall phone photos
+    function pdfLayout() {
+      var pageW = 612, margin = 56, contentW = pageW - margin * 2;
+      var maxH = state.sendH > state.sendW ? 395 : 360;
+      var iw = contentW, ih = iw * state.sendH / state.sendW;
+      if (ih > maxH) { ih = maxH; iw = ih * state.sendW / state.sendH; }
+      return { iw: iw, ih: ih, pin: 17 };
+    }
+
+    function buildPDF(logo, photo, L) {
+      var doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' });
+      var margin = 56, pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+      var contentW = pageW - margin * 2, y = margin;
+      function ascii(t) { return String(t).replace(/[‘’′]/g, "'").replace(/[“”″]/g, '"').replace(/[–—]/g, '-').replace(/[^\x20-\xFF]/g, ''); }
+
+      // Header
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(67, 62, 60);
+      doc.text('Shop the Room', margin, y + 6);
+      if (logo) doc.addImage(logo, 'PNG', pageW - margin - 54, margin - 18, 54, 54);
+      y += 28;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(107, 101, 96);
+      var date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      var n = state.items.length;
+      doc.text(n + (n === 1 ? ' piece' : ' pieces') + '  ·  ' + date, margin, y);
+      y += 26;
+
+      // Style line
+      if (state.style) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(107, 101, 96);
+        doc.text('YOUR ROOM READS AS', margin, y);
+        y += 17;
+        doc.setFont('times', 'normal'); doc.setFontSize(19); doc.setTextColor(88, 43, 54);
+        var styleLines = doc.splitTextToSize(ascii(state.style), contentW - 70);
+        doc.text(styleLines, margin, y);
+        y += styleLines.length * 20 + 10;
+      }
+
+      // Pinned photo
+      if (photo) {
+        var ix = margin + (contentW - L.iw) / 2;
+        doc.addImage(photo, 'JPEG', ix, y, L.iw, L.ih);
+        doc.setDrawColor(208, 201, 188); doc.setLineWidth(1); doc.rect(ix, y, L.iw, L.ih);
+        y += L.ih + 30;
+      }
+
+      // Shopping list: one block per piece, Save, Mid, and Splurge rows with clickable store names
+      var labelX = margin + 30, linksX = margin + 98;
+      function blockHeight(it) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+        var d = it.details ? doc.splitTextToSize(ascii(it.details), contentW - 30).length : 0;
+        return 15 + d * 12 + 6 + 9 + LEVELS.length * 17 + 4 + 22;
+      }
+      function newPage() { doc.addPage(); y = margin; }
+      function heading() {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+        doc.text('Pieces to shop', margin, y);
+        y += 20;
+      }
+      if (y + 40 + blockHeight(state.items[0] || {}) > pageH - margin - 20) newPage();
+      heading();
+
+      state.items.forEach(function (it, i) {
+        if (y + blockHeight(it) > pageH - margin - 20) newPage();
+        // Number and name
+        doc.setFillColor(88, 43, 54); doc.circle(margin + 9, y - 4, 9, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(250, 249, 246);
+        doc.text(String(i + 1), margin + 9, y - 0.8, { align: 'center' });
+        doc.setFontSize(12.5); doc.setTextColor(88, 43, 54);
+        doc.text(ascii(it.name || 'New piece'), labelX, y);
+        y += 15;
+        if (it.details) {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(107, 101, 96);
+          var dl = doc.splitTextToSize(ascii(it.details), contentW - 30);
+          doc.text(dl, labelX, y);
+          y += dl.length * 12;
+        }
+        y += 6;
+        // Store rows on a light card
+        var cardH = LEVELS.length * 17 + 6;
+        doc.setFillColor(245, 240, 232); doc.roundedRect(labelX - 8, y - 4, contentW - 22, cardH, 5, 5, 'F');
+        y += 9;
+        var terms = searchTerms(it);
+        LEVELS.forEach(function (lv) {
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(107, 101, 96);
+          doc.text(lv.label.toUpperCase(), labelX, y);
+          var x = linksX;
+          doc.setFontSize(10);
+          if (!terms) {
+            doc.setFont('helvetica', 'normal'); doc.setTextColor(185, 176, 161);
+            doc.text('No search words', x, y);
+          } else {
+            pickStores(it, lv.id).forEach(function (s, k) {
+              if (k) {
+                doc.setFont('helvetica', 'normal'); doc.setTextColor(185, 176, 161);
+                doc.text('·', x + 6, y); x += 18;
+              }
+              doc.setFont('helvetica', 'bold'); doc.setTextColor(88, 43, 54);
+              var label = ascii(s.name), w = doc.getTextWidth(label);
+              doc.textWithLink(label, x, y, { url: storeURL(s, terms) });
+              doc.setDrawColor(88, 43, 54); doc.setLineWidth(0.5); doc.line(x, y + 1.6, x + w, y + 1.6);
+              x += w;
+            });
+          }
+          y += 17;
+        });
+        y += 4;
+        // Search words, so the piece can be searched anywhere
+        if (terms) {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(107, 101, 96);
+          doc.text('Search words: ' + ascii(terms), labelX, y);
+        }
+        y += 22;
+      });
+
+      // Footer on every page
+      var pages = doc.internal.getNumberOfPages();
+      for (var pg = 1; pg <= pages; pg++) {
+        doc.setPage(pg);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(107, 101, 96);
+        doc.text('Store names open that store\'s search for similar pieces. Results, prices, and stock change over time.', pageW / 2, pageH - 42, { align: 'center' });
+        doc.text('Made with the Studio Lou Shop the Room tool  ·  studiolouinteriors.com', pageW / 2, pageH - 30, { align: 'center' });
+      }
+      doc.save('shop-the-room.pdf');
+    }
 
     /* Report height so the page can sit inside an iframe (Framer or the toolkit wrapper). */
     function startHeightReport() {
@@ -1032,6 +1195,7 @@
         handleFile(e.dataTransfer.files[0]);
       });
       $('resetBtn').addEventListener('click', reset);
+      $('pdfBtn').addEventListener('click', exportPDF);
       $('retryBtn').addEventListener('click', extract);
       $('newBtn').addEventListener('click', reset);
       $('photoWrap').addEventListener('click', onPhotoClick);
@@ -1050,7 +1214,6 @@
         renderPins();
         var it = state.popId != null && findItem(state.popId); if (it) placePop(it);
       });
-      $('showBoxes').addEventListener('change', renderBoxes);
       var grid = $('itemList');
       $('budget').addEventListener('click', function (e) {
         var btn = e.target.closest('button[data-level]');
@@ -1139,6 +1302,7 @@
             <p class="style-text" id="styleText"></p>
           </div>
           <div class="btn-row">
+            <button class="btn-primary btn-sm" id="pdfBtn">Download PDF</button>
             <button class="btn-secondary btn-sm" id="resetBtn">New photo</button>
           </div>
         </div>
@@ -1165,12 +1329,6 @@
         </div>
         <div class="shop-list" id="itemList"></div>
 
-        <details class="raw">
-          <summary>Raw model reply (for testing)</summary>
-          <label><input type="checkbox" id="showBoxes"> Show the model's boxes on the photo</label>
-          <p class="sent-size" id="sentSize"></p>
-          <pre id="rawText"></pre>
-        </details>
       </div>
     </div>
   </div>

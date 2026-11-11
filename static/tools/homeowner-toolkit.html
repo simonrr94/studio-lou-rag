@@ -21,7 +21,7 @@
   }
 
   /* =========================================================
-     DESKTOP: single folder shell with 4 tabs across the top
+     DESKTOP: single folder shell with 6 tabs across the top
      ========================================================= */
   .folder-wrap {
     position: relative;
@@ -61,6 +61,21 @@
     transition: background 150ms ease;
   }
   .tab:hover { background: #d4ac52; }
+  /* Six tabs at 140px need about 940px of window. Narrower windows get narrower tabs;
+     each clip-path is the same shape redrawn for the new width. */
+  @media (max-width: 960px) {
+    .tab {
+      width: 118px; padding-left: 12px; padding-right: 12px;
+      clip-path: path("M 12.32 5.76 A 8 8 0 0 1 20 0 L 98 0 A 8 8 0 0 1 105.68 5.76 L 162.33 200 L -44.33 200 Z");
+    }
+  }
+  @media (max-width: 780px) {
+    .tab {
+      width: 90px; padding-left: 6px; padding-right: 6px; font-size: 11px; letter-spacing: 0.06em;
+      clip-path: path("M 12.32 5.76 A 8 8 0 0 1 20 0 L 70 0 A 8 8 0 0 1 77.68 5.76 L 134.33 200 L -44.33 200 Z");
+    }
+    .tabs { margin-left: 12px; }
+  }
   .tab.active {
     background: #E8C97A;
     color: #3b2a0f;
@@ -187,16 +202,19 @@
   .m-folder:nth-child(1)::before { background: #D3AC58; }
   .m-folder:nth-child(2),
   .m-folder:nth-child(2) .m-tab,
-  .m-folder:nth-child(2)::before { background: #D9B462; }
+  .m-folder:nth-child(2)::before { background: #D7B25F; }
   .m-folder:nth-child(3),
   .m-folder:nth-child(3) .m-tab,
-  .m-folder:nth-child(3)::before { background: #DEBA69; }
+  .m-folder:nth-child(3)::before { background: #DBB866; }
   .m-folder:nth-child(4),
   .m-folder:nth-child(4) .m-tab,
-  .m-folder:nth-child(4)::before { background: #E2C071; }
+  .m-folder:nth-child(4)::before { background: #E0BD6C; }
   .m-folder:nth-child(5),
   .m-folder:nth-child(5) .m-tab,
-  .m-folder:nth-child(5)::before { background: #E8C97A; }
+  .m-folder:nth-child(5)::before { background: #E4C373; }
+  .m-folder:nth-child(6),
+  .m-folder:nth-child(6) .m-tab,
+  .m-folder:nth-child(6)::before { background: #E8C97A; }
 
   /* Active folder: drops to the bottom of the stack, gets rounded bottom + shadow,
      and always shows the lightest brand manila regardless of its DOM position. */
@@ -227,6 +245,7 @@
   .m-folder:nth-child(3) .m-tab-row { justify-content: flex-end;   padding-right: 20px; }
   .m-folder:nth-child(4) .m-tab-row { justify-content: flex-start; padding-left: 34%; }
   .m-folder:nth-child(5) .m-tab-row { justify-content: flex-start; padding-left: 6%; }
+  .m-folder:nth-child(6) .m-tab-row { justify-content: flex-end;   padding-right: 10%; }
 
   .m-tab {
     padding: 12px 22px 22px;
@@ -311,6 +330,7 @@
     <div class="tab"        data-tool="layout"  role="tab" tabindex="0" aria-selected="false">Layout</div>
     <div class="tab"        data-tool="budget"  role="tab" tabindex="0" aria-selected="false">Budget</div>
     <div class="tab"        data-tool="plans"   role="tab" tabindex="0" aria-selected="false">Plans</div>
+    <div class="tab"        data-tool="shop"    role="tab" tabindex="0" aria-selected="false">Shop</div>
   </div>
 
   <div class="folder">
@@ -394,6 +414,15 @@
       </div>
     </div>
   </div>
+
+  <div class="m-folder" data-tool="shop">
+    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Shop</div></div>
+    <div class="m-body">
+      <div class="m-paper-behind"></div>
+      <div class="m-graph-paper">
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- =========================================================
@@ -420,7 +449,8 @@
     palette: { url: 'https://studio-lou-rag.onrender.com/tools/color-palette-generator'     },
     layout:  { url: 'https://studio-lou-rag.onrender.com/tools/room-layout-helper'          },
     budget:  { url: 'https://studio-lou-rag.onrender.com/tools/renovation-budget-estimator' },
-    plans:   { url: 'https://studio-lou-rag.onrender.com/tools/floor-plan-parser?embed=toolkit' }
+    plans:   { url: 'https://studio-lou-rag.onrender.com/tools/floor-plan-parser?embed=toolkit' },
+    shop:    { url: 'https://studio-lou-rag.onrender.com/tools/shop-the-room?embed=toolkit' }
   };
 
   const iframe = document.querySelector('.tool-iframe');
