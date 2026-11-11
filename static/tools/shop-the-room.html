@@ -124,7 +124,7 @@
     }
 
     .print {
-      position: relative; background: #ffffff; padding: 12px; margin-bottom: 40px;
+      position: relative; background: #ffffff; padding: 12px; margin-bottom: 14px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 8px 20px rgba(0,0,0,0.12); border-radius: 2px;
     }
     .tape {
@@ -133,31 +133,128 @@
     }
     .tape.l { left: -18px; transform: rotate(-38deg); }
     .tape.r { right: -18px; transform: rotate(38deg); }
-    .print img { display: block; width: 100%; height: auto; }
+    .print img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
 
-    .items-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .items-head .eyebrow { margin: 0; }
-    .item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-    .item-card { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 14px 16px 16px; }
-    .item-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+    /* ── PINS ── */
+    .photo-wrap { position: relative; }
+    .photo-wrap.tagging { cursor: crosshair; }
+    .photo-wrap.tagging::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      box-shadow: inset 0 0 0 3px #A6BE47;
+    }
+    .pin {
+      position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; z-index: 3;
+      border-radius: 50%; background: #582b36; color: #FAF9F6; border: 2px solid #ffffff;
+      font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 700; line-height: 1;
+      display: flex; align-items: center; justify-content: center; padding: 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35); cursor: grab; touch-action: none; user-select: none;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .pin:hover { transform: scale(1.12); }
+    .pin.active { transform: scale(1.22); box-shadow: 0 0 0 4px #A6BE47, 0 2px 8px rgba(0,0,0,0.4); z-index: 4; }
+    .pin.dragging { cursor: grabbing; transition: none; z-index: 5; }
+
+    /* ── PIN POPOVER (desktop: beside the pin; phone: panel under the photo) ── */
+    .pin-pop {
+      position: absolute; z-index: 6; width: max-content; min-width: 260px; max-width: 352px; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px;
+      padding: 14px 16px 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08);
+      cursor: default;
+    }
+    .pop-top { display: flex; align-items: flex-start; gap: 8px; }
+    .pop-top .item-num { flex-shrink: 0; margin-top: 1px; }
+    .pop-name { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; color: #582b36; line-height: 1.3; }
+    .pop-close {
+      flex-shrink: 0; width: 26px; height: 26px; margin: -4px -6px 0 0; border: none; background: none; cursor: pointer;
+      border-radius: 50%; font-size: 20px; line-height: 1; color: #6b6560;
+    }
+    .pop-close:hover { background: #f5f0e8; color: #433E3C; }
+    .pop-details { font-size: 13px; color: #6b6560; line-height: 1.45; margin: 4px 0 10px 30px; }
+    .pop-shop { background: #f5f0e8; border-radius: 10px; padding: 4px 10px; }
+    .pop-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+    .pop-row + .pop-row { border-top: 1px solid #e6dfd2; }
+    .pop-row .cell-label { display: block; flex: 0 0 50px; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; }
+    .pop-row .cell-links { flex-direction: row; }
+
+    .photo-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 40px; }
+    .photo-hint { font-size: 13px; color: #6b6560; line-height: 1.45; }
+    .photo-hint.tag-on { color: #582b36; font-weight: 600; }
+
+    /* ── SHOPPING LIST ── */
+    .list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .list-head .eyebrow { margin: 0; }
+    .list-head .eyebrow span { color: #b9b0a1; margin-left: 6px; }
+    .budget { display: inline-flex; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 3px; }
+    .budget button {
+      border: none; background: none; cursor: pointer; padding: 6px 15px; border-radius: 50px;
+      font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: #6b6560; transition: background 0.15s, color 0.15s;
+    }
+    .budget button:hover { color: #433E3C; }
+    .budget button.on { background: #582b36; color: #FAF9F6; }
+
+    .shop-list { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; overflow: hidden; }
+    .list-cols, .item-row { display: grid; gap: 14px; padding: 0 16px; }
+    .list-cols, .item-row { grid-template-columns: 24px minmax(0, 1.4fr) minmax(0, 1.2fr) 30px; }
+    .list-cols {
+      background: #f5f0e8; padding-top: 9px; padding-bottom: 9px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560;
+    }
+    .item-row {
+      padding-top: 14px; padding-bottom: 14px; border-top: 1px solid #e6dfd2; align-items: start;
+      cursor: pointer; transition: background 0.15s, box-shadow 0.15s;
+    }
+    .list-cols + .item-row { border-top: none; }
+    .item-row:hover { background: #fcfaf6; }
+    .item-row.active { background: #fbf5f2; }
+    .item-row.active .item-num { box-shadow: 0 0 0 3px #A6BE47; }
     .item-num {
-      flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: #582b36; color: #FAF9F6;
+      width: 22px; height: 22px; border-radius: 50%; background: #582b36; color: #FAF9F6;
       font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
-      transform: translateY(-2px);
     }
-    .item-name { font-size: 16px; font-weight: 600; color: #582b36; line-height: 1.3; }
-    .item-cat {
-      display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-      color: #6b6560; margin: 0 0 8px 30px;
+    .row-piece { min-width: 0; }
+    .item-name { display: block; font-size: 15px; font-weight: 600; color: #582b36; line-height: 1.3; margin-bottom: 2px; }
+    .item-details { display: block; font-size: 12.5px; color: #6b6560; line-height: 1.4; }
+    .cell-label { display: none; }
+    .cell-links { display: flex; flex-wrap: wrap; gap: 5px; }
+    .cell-empty { font-size: 12px; color: #b9b0a1; }
+    .store {
+      display: inline-block; padding: 4px 11px; border-radius: 50px; background: #ffffff; border: 1px solid #d0c9bc;
+      font-size: 12px; font-weight: 500; color: #433E3C; text-decoration: none; white-space: nowrap;
+      transition: border-color 0.15s, color 0.15s;
     }
-    .item-details { font-size: 13px; color: #6b6560; line-height: 1.45; margin-bottom: 12px; }
-    .search-box { background: #f5f0e8; border-radius: 10px; padding: 8px 12px; }
-    .search-box label { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; margin-bottom: 2px; }
-    .search-box span { font-size: 14px; color: #433E3C; }
+    .store:hover { border-color: #582b36; color: #582b36; }
+    .item-row > .text-btn { justify-self: end; margin-top: 2px; }
+
+    .text-btn {
+      background: none; border: none; padding: 2px 0; cursor: pointer; flex-shrink: 0;
+      font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; color: #582b36;
+      text-decoration: underline; text-underline-offset: 3px;
+    }
+    .text-btn.muted { color: #6b6560; }
+
+    .edit-form { grid-column: 2 / -1; max-width: 520px; padding-top: 12px; border-top: 1px solid #e6dfd2; cursor: default; }
+    .field { display: block; margin-bottom: 10px; }
+    .field span { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; margin-bottom: 4px; }
+    .field input {
+      width: 100%; padding: 9px 12px; border: 1.5px solid #d0c9bc; border-radius: 10px; background: #FAF9F6;
+      font-family: 'DM Sans', sans-serif; font-size: 16px; color: #433E3C;
+    }
+    .field input:focus { outline: none; border-color: #582b36; }
+    .edit-actions { display: flex; align-items: center; justify-content: space-between; }
+
+    .empty-note { font-size: 14px; color: #6b6560; padding: 16px; }
 
     /* Raw model reply, standalone page only, for tuning the prompt */
     .raw { margin-top: 36px; font-size: 13px; color: #6b6560; }
     .raw summary { cursor: pointer; font-weight: 600; }
+    .raw label { display: flex; align-items: center; gap: 8px; margin-top: 10px; cursor: pointer; }
+    .raw .sent-size { margin-top: 6px; }
+    /* Testing overlay: the box the model gave for each piece */
+    .dbg-box { position: absolute; z-index: 2; border: 2px dashed #A6BE47; background: rgba(166,190,71,0.10); pointer-events: none; }
+    .dbg-box span {
+      position: absolute; top: -2px; left: -2px; background: #A6BE47; color: #ffffff;
+      font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 5px;
+    }
+    .in-toolkit .dbg-box { display: none; }
     .raw pre {
       margin-top: 10px; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 10px; padding: 12px;
       font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto;
@@ -191,11 +288,27 @@
       .style-text { font-size: 25px; }
       .print { padding: 6px; }
       .tape { width: 64px; height: 20px; }
+      .pin { width: 26px; height: 26px; margin: -13px 0 0 -13px; font-size: 11px; }
+      .photo-tools { margin-bottom: 28px; }
+      .photo-tools .btn-secondary { width: 100%; text-align: center; }
+      .list-head .budget { width: 100%; }
+      .budget button { flex: 1; padding: 7px 4px; }
+      .list-cols { display: none; }
+      .item-row { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px 10px; padding: 12px; }
+      .item-row > .text-btn { grid-row: 1; grid-column: 3; }
+      .pin-pop { position: relative; left: auto !important; top: auto !important; width: auto; margin-top: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+      .lv-cell { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; }
+      .store { padding: 4px 9px; font-size: 11.5px; }
+      .edit-form { max-width: none; }
     }
   </style>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
-    var MAX_SEND = 1600;      // longest side of the image sent to the model
+    // The photo is resized to exactly what the vision model will see, so its pixel positions map straight back.
+    // claude-sonnet-4-6 is on Claude's standard image tier (1568 px edge, 1568 visual tokens).
+    // If the vision route moves to Claude 4.7 or later, change these to 2576 and 4784.
+    var MODEL_MAX_EDGE = 1568;
+    var MODEL_MAX_TOKENS = 1568;
     var TIMEOUT_MS = 100000;  // Render free tier can take ~60s to wake up
     var MAX_ITEMS = 12;
 
@@ -203,30 +316,76 @@
       'dining table', 'dining chair', 'bed', 'dresser', 'nightstand', 'bedding', 'shelving', 'storage', 'rug', 'curtains', 'floor lamp',
       'table lamp', 'pendant', 'chandelier', 'sconce', 'mirror', 'art', 'pillow', 'throw', 'vase', 'decor object', 'other'];
 
-    var PROMPT = [
-      'You are an interior designer looking at a photo of a room. Identify the main furniture, lighting, rugs, and decor someone might want to shop for. Skip walls, wall paneling, windows (but include curtains, drapes, and shades), doors, kitchen and bath cabinetry, plants, flowers, books, electronics (TVs, monitors, computers, speakers), pet beds and pet gear, people, and pets. Built-in or wall-mounted desks and shelves count when a shopper could buy a similar freestanding or wall-mounted version. Return at most 12 items, most important first.',
+    function buildPrompt(w, h) { return [
+      'You are an interior designer looking at a photo of a room. Identify the main furniture, lighting, rugs, and decor someone might want to shop for. Skip walls, wall paneling, windows (but include curtains, drapes, and shades), doors, doorways, archways and wall openings, fireplaces and mantels (but include fireplace screens and tool sets), stairs and railings, beams, columns, radiators, flooring, kitchen and bath cabinetry, plants, flowers, books, electronics (TVs, monitors, computers, speakers), pet beds and pet gear, people, and pets. Built-in or wall-mounted desks and shelves count when a shopper could buy a similar freestanding or wall-mounted version. Only call something a mirror when you can see a reflection inside a frame; if you can see through it into another space, it is an opening, so skip it. If you are not sure whether something is a piece of furniture or decor or part of the room\'s architecture, leave it out. Return at most 12 items, most important first.',
       '',
       'Return ONLY a JSON object, no prose, no code fences. This example shows the format only. Do not reuse its wording; describe what is actually in this photo:',
       '{"style":"...",',
       ' "items":[{"name":"...","category":"...",',
       '   "details":"...",',
       '   "search":"...",',
-      '   "point":{"x":0,"y":0}}]}',
+      '   "box":[0,0,0,0]}]}',
       '',
       'Rules:',
       '- List each distinct item once. If two or more matching pieces appear (a pair of sofas, matching sconces, a set of dining chairs), give them one entry. Only list items you can clearly see in the photo.',
       '- name: 2 to 4 words in sentence case, like "Swivel lounge chair" or "Ceramic table lamp"',
-      '- category must be one of: ' + CATEGORIES.join(', ') + '. Use "decor object" for sculptures, bowls, trays, and other small accessories. Use "other" only when nothing else fits. The name, category, and search must all describe the same kind of item.',
+      '- category must be one of: ' + CATEGORIES.join(', ') + '. Use "chair" for stools of any kind (bar, counter, vanity, and accent stools); use "ottoman" only for upholstered footrests. Use "decor object" for sculptures, bowls, trays, and other small accessories. Use "other" only when nothing else fits. The name, category, and search must all describe the same kind of item.',
       '- details: color, material, shape, and style in under 15 words. Look closely at materials and finishes before naming them (wood, brushed steel, chrome, brass, marble, linen, boucle). If an item has two colors, name both. If you cannot tell the material, describe the color and finish instead of guessing, and keep the name and search just as cautious. Never guess sizes like queen, king, or 8x10.',
       '- search: 3 to 6 words a shopper would type into a store\'s search box. Lead with the most distinctive color or material and end with the item type. No filler words like decorative, accent, piece, set, or style, and no hyphens.',
       '- style: 3 to 7 words naming the room\'s design style and mood, not the room type (say "Warm eclectic modern," not "Home office living room")',
-      '- point: the center of the item, as percentages of the full image (0 to 100)',
+      '- box: the bounding box of the visible part of the item as [x1, y1, x2, y2] (top-left and bottom-right corners) in pixel coordinates. This image is ' + w + ' pixels wide and ' + h + ' pixels tall; (0, 0) is the top-left corner, x increases to the right and y increases downward. Box only the item, not the furniture it sits on or next to (a pillow box covers the pillow, not the sofa). For matching pieces in one entry (a pair of pillows, a set of chairs), box the most visible single piece.',
       '- Never name brands, products, stores, or prices'
-    ].join('\n');
+    ].join('\n'); }
 
     var RETRY_SUFFIX = '\n\nIMPORTANT: Your previous reply could not be parsed. Reply with the raw JSON object only, starting with { and ending with }.';
 
-    var state = { imgURL: '', sendB64: '', sendType: 'image/jpeg', style: '', items: [], raw: '' };
+    /* ---------- Store list (from the Shop the Room Store List sheet) ----------
+       levels: which budget rows the store appears in
+       cats:   null = broad store, carries most categories; otherwise only these categories
+       prefer: categories where a broad store goes first in its level
+       match:  extra words the item must contain (Herman Miller only shows for desk chairs) */
+    var FURNITURE = ['sofa', 'chair', 'bench', 'ottoman', 'coffee table', 'side table', 'console table', 'desk',
+      'dining table', 'dining chair', 'bed', 'dresser', 'nightstand', 'shelving', 'storage'];
+    var LIGHTING = ['floor lamp', 'table lamp', 'pendant', 'chandelier', 'sconce'];
+
+    var STORES = [
+      // Broad, Save
+      { name: 'Target', levels: ['save'], url: 'https://www.target.com/s?searchTerm={q}' },
+      { name: 'IKEA', levels: ['save'], url: 'https://www.ikea.com/us/en/search/?q={q}' },
+      { name: 'Wayfair', levels: ['save'], url: 'https://www.wayfair.com/keyword.php?keyword={q}' },
+      { name: 'World Market', levels: ['save'], url: 'https://www.worldmarket.com/search?q={q}' },
+      // Broad, Mid
+      { name: 'West Elm', levels: ['mid'], url: 'https://www.westelm.com/search/results.html?words={q}' },
+      { name: 'Crate & Barrel', levels: ['mid'], url: 'https://www.crateandbarrel.com/search?query={q}' },
+      { name: 'Pottery Barn', levels: ['mid'], url: 'https://www.potterybarn.com/search/results.html?words={q}' },
+      { name: 'CB2', levels: ['mid'], url: 'https://www.cb2.com/search?query={q}' },
+      { name: 'Article', levels: ['mid'], url: 'https://www.article.com/search?q={q}', broadCats: FURNITURE },
+      // Broad, Splurge
+      { name: 'RH', levels: ['splurge'], url: 'https://rh.com/search/results.jsp?Ntt={q}' },
+      { name: 'Arhaus', levels: ['splurge'], url: 'https://www.arhaus.com/search?q={q}' },
+      { name: 'McGee & Co', levels: ['splurge'], url: 'https://mcgeeandco.com/search?q={q}' },
+      { name: 'Lulu & Georgia', levels: ['splurge'], url: 'https://www.luluandgeorgia.com/search?q={q}', prefer: ['rug'] },
+      { name: 'Perigold', levels: ['splurge'], url: 'https://www.perigold.com/keyword.php?keyword={q}' },
+      // Specialists
+      { name: 'Rejuvenation', levels: ['mid'], url: 'https://www.rejuvenation.com/search/results.html?words={q}', cats: LIGHTING },
+      { name: 'Visual Comfort & Co.', levels: ['splurge'], url: 'https://www.visualcomfort.com/us/search?text={q}', cats: LIGHTING },
+      { name: 'RugsUSA', levels: ['save'], url: 'https://www.rugsusa.com/search?q={q}', cats: ['rug'] },
+      { name: 'Loloi', levels: ['mid'], url: 'https://www.loloirugs.com/search?q={q}', cats: ['rug'] },
+      { name: 'Quince', levels: ['save'], url: 'https://www.quince.com/search?query={q}', cats: ['bedding'] },
+      { name: 'Brooklinen', levels: ['mid'], url: 'https://www.brooklinen.com/search?q={q}', cats: ['bedding'] },
+      { name: 'Boll & Branch', levels: ['splurge'], url: 'https://www.bollandbranch.com/search?q={q}', cats: ['bedding'] },
+      { name: 'Pepper Home', levels: ['splurge'], url: 'https://pepper-home.com/search?q={q}', cats: ['curtains'] },
+      { name: 'GreatBigCanvas', levels: ['save'], url: 'https://www.greatbigcanvas.com/search/?q={q}', cats: ['art'] },
+      { name: 'Artfully Walls', levels: ['mid'], url: 'https://www.artfullywalls.com/art-prints?query={q}', cats: ['art'] },
+      { name: '1stDibs', levels: ['splurge'], url: 'https://www.1stdibs.com/search/?q={q}', cats: ['art'] },
+      { name: 'The Citizenry', levels: ['mid', 'splurge'], url: 'https://www.the-citizenry.com/search?q={q}', cats: ['pillow', 'throw', 'vase', 'decor object'] },
+      { name: 'Herman Miller', levels: ['splurge'], url: 'https://store.hermanmiller.com/search?q={q}', cats: ['chair'], match: /\b(desk|office|task)\b/i }
+    ];
+    var LEVELS = [{ id: 'save', label: 'Save' }, { id: 'mid', label: 'Mid' }, { id: 'splurge', label: 'Splurge' }];
+    var STORES_PER_LEVEL = 2;
+
+    var state = { imgURL: '', sendB64: '', sendType: 'image/jpeg', sendW: 0, sendH: 0, style: '', items: [], raw: '',
+                  nextId: 1, active: null, editing: null, tagging: false, level: 'mid', popId: null };
 
     /* ---------- Model response handling ---------- */
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -243,16 +402,53 @@
       if (!raw || !raw.name) return null;
       var cat = clean(raw.category, 30).toLowerCase();
       if (CATEGORIES.indexOf(cat) < 0) cat = 'other';
-      // Point is kept now so pins can use it next; fractions get scaled up to percentages
-      var p = raw.point || {}, x = num(p.x), y = num(p.y);
-      if (x != null && y != null && x <= 1 && y <= 1) { x *= 100; y *= 100; }
+      // The model returns a pixel box in the image it was sent; the pin goes in the middle of it.
+      // Positions are stored as percentages so they line up with the photo at any screen size.
+      var x = null, y = null, box = null, b = raw.box;
+      if (b && !Array.isArray(b)) b = [b.x1 != null ? b.x1 : b.left, b.y1 != null ? b.y1 : b.top, b.x2 != null ? b.x2 : b.right, b.y2 != null ? b.y2 : b.bottom];
+      if (Array.isArray(b) && b.length === 4) {
+        b = b.map(num);
+        if (b.every(function (v) { return v != null; })) {
+          if (Math.max.apply(null, b) <= 1) b = b.map(function (v) { return v * 100; });  // fractions, just in case
+          else if (state.sendW && state.sendH) b = [b[0] / state.sendW * 100, b[1] / state.sendH * 100, b[2] / state.sendW * 100, b[3] / state.sendH * 100];
+          var l = clamp(Math.min(b[0], b[2]), 0, 100), r = clamp(Math.max(b[0], b[2]), 0, 100);
+          var t = clamp(Math.min(b[1], b[3]), 0, 100), bt = clamp(Math.max(b[1], b[3]), 0, 100);
+          box = [l, t, r, bt];
+          x = (l + r) / 2; y = (t + bt) / 2;
+        }
+      }
+      if (x == null) {
+        var p = raw.point || {}; x = num(p.x); y = num(p.y);
+        if (x != null && y != null && x <= 1 && y <= 1) { x *= 100; y *= 100; }
+      }
       return {
         name: clean(raw.name, 40),
         category: cat,
         details: capFirst(clean(raw.details, 140)),
         search: stripFiller(clean(raw.search || raw.name, 60)),
-        point: (x != null && y != null) ? { x: clamp(x, 0, 100), y: clamp(y, 0, 100) } : null
+        point: (x != null && y != null) ? { x: clamp(x, 0, 100), y: clamp(y, 0, 100) } : null,
+        box: box  // kept for later: the crop for visual product matching
       };
+    }
+
+    // Parts of the room, not things to shop. Fireplace screens, tools, and grates stay.
+    function isArchitecture(text) {
+      var t = text.toLowerCase();
+      if (/\b(mantel|mantle|mantelpiece|mantlepiece|doorway|archway|staircase|stairs|stairway|railing|banister|radiator|ceiling beams?|exposed beams?|wood beams?|flooring|wall paneling|wainscoting)\b/.test(t)) return true;
+      if (/\bfireplace\b/.test(t) && !/\b(screen|tools?|tool set|grate|log holder|andirons?|basket)\b/.test(t)) return true;
+      return false;
+    }
+
+    // If a long reply gets cut off mid-list, keep every piece that came through complete
+    function salvage(t) {
+      var at = t.length;
+      while ((at = t.lastIndexOf('}', at - 1)) > 0) {
+        try {
+          var obj = JSON.parse(t.slice(0, at + 1) + ']}');
+          if (obj && obj.items && obj.items.length) return obj;
+        } catch (e) {}
+      }
+      return null;
     }
 
     function parseResponse(text) {
@@ -260,13 +456,16 @@
       var t = String(text).replace(/```(?:json)?/gi, '');
       var s = t.indexOf('{'), e = t.lastIndexOf('}');
       if (s < 0 || e <= s) throw new Error('No JSON in response');
-      var obj = JSON.parse(t.slice(s, e + 1));
+      var obj;
+      try { obj = JSON.parse(t.slice(s, e + 1)); }
+      catch (err) { obj = salvage(t.slice(s)); if (!obj) throw err; }
       var list = Array.isArray(obj) ? obj : obj.items;
       if (!list || !list.length) throw new Error('No items in response');
       // The model sometimes lists matching pieces twice (a pair of sofas), so keep the first of any repeat
       var seen = {};
       var items = list.map(normalizeItem).filter(function (it) {
         if (!it) return false;
+        if (isArchitecture(it.name + ' ' + it.search)) return false;
         var key = it.search.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
         if (seen[key]) return false;
         seen[key] = true;
@@ -300,16 +499,23 @@
 
     function extract() {
       showStatus('loading', 'Reading your room...', 'Picking out the furniture, lighting, and decor worth shopping for. Usually 15 to 40 seconds, though the first run of the day can take up to a minute.');
-      callVision(PROMPT)
+      var prompt = buildPrompt(state.sendW, state.sendH);
+      callVision(prompt)
         .then(parseResponse)
         .catch(function (err) {
           if (err.name === 'AbortError' || /^server:|Failed to fetch/.test(err.message)) throw err;
           showStatus('loading', 'Tidying up the results', 'The first answer came back messy, asking once more.');
-          return callVision(PROMPT + RETRY_SUFFIX).then(parseResponse);
+          return callVision(prompt + RETRY_SUFFIX).then(parseResponse);
         })
         .then(function (res) {
           state.style = res.style;
-          state.items = res.items;
+          state.items = res.items.map(function (it, i) {
+            it.id = state.nextId++;
+            // An item without a position gets a spot along the top edge so it can be dragged into place
+            if (!it.point) it.point = { x: clamp(8 + i * 7, 4, 96), y: 6 };
+            return it;
+          });
+          state.active = null; state.editing = null; state.tagging = false; state.popId = null;
           showScreen('result');
           render();
         })
@@ -342,40 +548,391 @@
       reader.readAsDataURL(file);
     }
 
+    // The size Claude actually processes an image at (from Claude's vision coordinates docs):
+    // no side over the edge limit, and ceil(w / 28) * ceil(h / 28) visual tokens within the budget.
+    function modelSize(width, height) {
+      function fits(w, h) {
+        return Math.ceil(w / 28) * 28 <= MODEL_MAX_EDGE && Math.ceil(h / 28) * 28 <= MODEL_MAX_EDGE &&
+          Math.ceil(w / 28) * Math.ceil(h / 28) <= MODEL_MAX_TOKENS;
+      }
+      if (fits(width, height)) return [width, height];
+      if (height > width) { var r = modelSize(height, width); return [r[1], r[0]]; }
+      var aspect = width / height, lo = 1, hi = width;
+      while (lo + 1 < hi) {
+        var mid = Math.floor((lo + hi) / 2);
+        if (fits(mid, Math.max(Math.round(mid / aspect), 1))) lo = mid; else hi = mid;
+      }
+      return [lo, Math.max(Math.round(lo / aspect), 1)];
+    }
+
     function prepareImage(img, dataURL) {
-      // Downscaled copy for the model
-      var s = Math.min(1, MAX_SEND / Math.max(img.naturalWidth, img.naturalHeight));
+      // Resized to exactly what the model will process, so it is never resized again on the way in
+      var size = modelSize(img.naturalWidth, img.naturalHeight);
       var tmp = document.createElement('canvas');
-      tmp.width = Math.round(img.naturalWidth * s);
-      tmp.height = Math.round(img.naturalHeight * s);
+      tmp.width = size[0];
+      tmp.height = size[1];
       var tctx = tmp.getContext('2d');
       tctx.fillStyle = '#ffffff';
       tctx.fillRect(0, 0, tmp.width, tmp.height);
       tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
       state.sendType = 'image/jpeg';
       state.sendB64 = tmp.toDataURL('image/jpeg', 0.9).split(',')[1];
+      state.sendW = tmp.width; state.sendH = tmp.height;
       state.imgURL = dataURL;
       state.items = []; state.style = ''; state.raw = '';
       extract();
     }
 
+    /* ---------- Store links ---------- */
+    function searchTerms(it) { return (it.search || it.name || '').trim(); }
+
+    function storeURL(store, terms) {
+      return store.url.replace('{q}', encodeURIComponent(terms).replace(/%20/g, '+'));
+    }
+
+    // Two stores per level: specialists for the category first, then broad stores.
+    // Broad stores rotate by item so every card does not show the same two names.
+    function pickStores(it, level) {
+      var cat = it.category, text = it.name + ' ' + searchTerms(it);
+      var specialists = [], preferred = [], broad = [];
+      STORES.forEach(function (s) {
+        if (s.levels.indexOf(level) < 0) return;
+        if (s.cats) {
+          if (cat === 'other') return;                        // "other" uses broad stores only
+          if (s.cats.indexOf(cat) < 0) return;
+          if (s.match && !s.match.test(text)) return;
+          specialists.push(s);
+        } else {
+          if (s.broadCats && s.broadCats.indexOf(cat) < 0) return;
+          if (s.prefer && s.prefer.indexOf(cat) >= 0) preferred.push(s);
+          else broad.push(s);
+        }
+      });
+      var start = broad.length ? (it.id - 1) % broad.length : 0;
+      var rotated = broad.slice(start).concat(broad.slice(0, start));
+      return specialists.concat(preferred, rotated).slice(0, STORES_PER_LEVEL);
+    }
+
+    function linksHTML(it, level) {
+      var terms = searchTerms(it);
+      if (!terms) return '<span class="cell-empty">Add search words</span>';
+      return pickStores(it, level).map(function (s) {
+        return '<a class="store" href="' + esc(storeURL(s, terms)) + '" target="_blank" rel="noopener">' + esc(s.name) + '</a>';
+      }).join('');
+    }
+
+    function shownLevels() {
+      return LEVELS.filter(function (lv) { return lv.id === state.level; });
+    }
+
     /* ---------- Results ---------- */
     function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function findItem(id) { for (var i = 0; i < state.items.length; i++) if (state.items[i].id === id) return state.items[i]; return null; }
+    function indexOfItem(id) { for (var i = 0; i < state.items.length; i++) if (state.items[i].id === id) return i; return -1; }
+
+    function rowHTML(it, i) {
+      var html = '<div class="item-row' + (state.active === it.id ? ' active' : '') + '" data-id="' + it.id + '">' +
+        '<span class="item-num">' + (i + 1) + '</span>' +
+        '<div class="row-piece"><span class="item-name">' + esc(it.name || 'New piece') + '</span>' +
+          (it.details ? '<span class="item-details">' + esc(it.details) + '</span>' : '') + '</div>' +
+        shownLevels().map(function (lv) {
+          return '<div class="lv-cell" data-level="' + lv.id + '"><span class="cell-label">' + lv.label + '</span>' +
+            '<span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
+        }).join('') +
+        (state.editing === it.id ? '' : '<button type="button" class="text-btn" data-act="edit">Edit</button>');
+      if (state.editing === it.id) {
+        html += '<div class="edit-form">' +
+          '<label class="field"><span>Name</span><input type="text" data-field="name" maxlength="40" placeholder="What is it?" value="' + esc(it.name) + '"></label>' +
+          '<label class="field"><span>Search words</span><input type="text" data-field="search" maxlength="60" placeholder="Like: brass arc floor lamp" value="' + esc(it.search) + '"></label>' +
+          '<div class="edit-actions">' +
+            '<button type="button" class="text-btn muted" data-act="remove">Remove this piece</button>' +
+            '<button type="button" class="btn-primary btn-sm" data-act="done">Done</button>' +
+          '</div></div>';
+      }
+      return html + '</div>';
+    }
 
     function render() {
       $('styleLine').classList.toggle('hidden', !state.style);
       $('styleText').textContent = state.style;
-      $('roomPhoto').src = state.imgURL;
+      if ($('roomPhoto').getAttribute('src') !== state.imgURL) $('roomPhoto').src = state.imgURL;
       $('itemCount').textContent = state.items.length + (state.items.length === 1 ? ' piece' : ' pieces');
-      $('itemGrid').innerHTML = state.items.map(function (it, i) {
-        return '<div class="item-card">' +
-          '<div class="item-top"><span class="item-num">' + (i + 1) + '</span><span class="item-name">' + esc(it.name) + '</span></div>' +
-          '<span class="item-cat">' + esc(it.category) + '</span>' +
-          (it.details ? '<p class="item-details">' + esc(it.details) + '</p>' : '') +
-          '<div class="search-box"><label>Search for</label><span>' + esc(it.search) + '</span></div>' +
-        '</div>';
-      }).join('');
+      var btns = document.querySelectorAll('.budget button');
+      for (var b = 0; b < btns.length; b++) btns[b].classList.toggle('on', btns[b].getAttribute('data-level') === state.level);
+      var list = $('itemList');
+      list.className = 'shop-list';
+      var cols = '<div class="list-cols"><span></span><span>Piece</span>' +
+        shownLevels().map(function (lv) { return '<span>' + lv.label + ' stores</span>'; }).join('') +
+        '<span></span></div>';
+      list.innerHTML = state.items.length ? cols + state.items.map(rowHTML).join('') :
+        '<p class="empty-note">No pieces left. Tap "Tag something we missed" to add one.</p>';
+      renderPins();
+      renderTagMode();
+      renderPop();
       $('rawText').textContent = state.raw;
+      $('sentSize').textContent = state.sendW ? 'Photo sent to the model at ' + state.sendW + ' x ' + state.sendH + ' pixels.' : '';
+      renderBoxes();
+    }
+
+    // Where each pin is drawn. Pins closer than a pin's width get pushed apart so none hide another;
+    // the stored positions don't change, only where the pins are drawn.
+    function pinSpots() {
+      var spots = state.items.map(function (it) { return { x: it.point.x, y: it.point.y }; });
+      var W = $('photoWrap').offsetWidth, H = state.sendW ? W * state.sendH / state.sendW : 0;
+      if (!W || !H || spots.length < 2) return spots;
+      var minD = isPhone() ? 30 : 34;
+      var px = spots.map(function (p) { return { x: p.x / 100 * W, y: p.y / 100 * H }; });
+      for (var pass = 0; pass < 8; pass++) {
+        var moved = false;
+        for (var i = 0; i < px.length; i++) for (var j = i + 1; j < px.length; j++) {
+          var dx = px[j].x - px[i].x, dy = px[j].y - px[i].y, d = Math.sqrt(dx * dx + dy * dy);
+          if (d >= minD) continue;
+          if (d < 0.01) { dx = 0.8; dy = 0.6; d = 1; }
+          var push = (minD - d) / 2, ux = dx / d, uy = dy / d;
+          px[i].x -= ux * push; px[i].y -= uy * push;
+          px[j].x += ux * push; px[j].y += uy * push;
+          moved = true;
+        }
+        px.forEach(function (p) { p.x = clamp(p.x, 0, W); p.y = clamp(p.y, 0, H); });
+        if (!moved) break;
+      }
+      return px.map(function (p) { return { x: p.x / W * 100, y: p.y / H * 100 }; });
+    }
+
+    function renderPins() {
+      var wrap = $('photoWrap');
+      var old = wrap.querySelectorAll('.pin');
+      for (var i = 0; i < old.length; i++) wrap.removeChild(old[i]);
+      var spots = pinSpots();
+      state.items.forEach(function (it, i) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pin' + (state.active === it.id ? ' active' : '');
+        b.textContent = i + 1;
+        b.setAttribute('data-id', it.id);
+        b.setAttribute('aria-label', (i + 1) + '. ' + (it.name || 'New piece'));
+        b.title = it.name || 'New piece';
+        b.style.left = spots[i].x + '%';
+        b.style.top = spots[i].y + '%';
+        attachPinDrag(b, it);
+        wrap.appendChild(b);
+      });
+    }
+
+    // Testing overlay: draws each piece's model box so a bad box and a bad pin can be told apart
+    function renderBoxes() {
+      var wrap = $('photoWrap'), old = wrap.querySelectorAll('.dbg-box');
+      for (var i = 0; i < old.length; i++) wrap.removeChild(old[i]);
+      if (IN_TOOLKIT || !$('showBoxes').checked) return;
+      state.items.forEach(function (it, n) {
+        if (!it.box) return;
+        var d = document.createElement('div');
+        d.className = 'dbg-box';
+        d.style.left = it.box[0] + '%'; d.style.top = it.box[1] + '%';
+        d.style.width = (it.box[2] - it.box[0]) + '%'; d.style.height = (it.box[3] - it.box[1]) + '%';
+        d.innerHTML = '<span>' + (n + 1) + '</span>';
+        wrap.appendChild(d);
+      });
+    }
+
+    function renderTagMode() {
+      $('photoWrap').classList.toggle('tagging', state.tagging);
+      $('tagBtn').textContent = state.tagging ? 'Cancel' : 'Tag something we missed';
+      var hint = $('photoHint');
+      hint.classList.toggle('tag-on', state.tagging);
+      hint.textContent = state.tagging ? 'Tap the photo where the piece is.' :
+        'Tap a pin to find its card. Drag a pin if it landed in the wrong spot.';
+    }
+
+    /* ---------- Highlighting ---------- */
+    function setActive(id, from) {
+      state.active = id;
+      var cards = document.querySelectorAll('.item-row');
+      for (var i = 0; i < cards.length; i++) cards[i].classList.toggle('active', +cards[i].getAttribute('data-id') === id);
+      var pins = document.querySelectorAll('.pin');
+      for (var j = 0; j < pins.length; j++) pins[j].classList.toggle('active', +pins[j].getAttribute('data-id') === id);
+      // A pin tap opens its popover; anything else closes it
+      state.popId = (from === 'pin' && id != null) ? id : null;
+      renderPop();
+      if (id == null || from !== 'row') return;
+      var pin = document.querySelector('.pin[data-id="' + id + '"]');
+      if (pin && pin.scrollIntoView) pin.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    /* ---------- Pin popover ---------- */
+    function isPhone() { return window.matchMedia && window.matchMedia('(max-width: 640px)').matches; }
+
+    function renderPop() {
+      var pop = $('pinPop'), it = state.popId != null ? findItem(state.popId) : null;
+      if (!it) { state.popId = null; pop.classList.add('hidden'); pop.innerHTML = ''; return; }
+      var i = indexOfItem(it.id);
+      pop.innerHTML =
+        '<div class="pop-top"><span class="item-num">' + (i + 1) + '</span>' +
+          '<span class="pop-name">' + esc(it.name || 'New piece') + '</span>' +
+          '<button type="button" class="pop-close" aria-label="Close">&times;</button></div>' +
+        (it.details ? '<p class="pop-details">' + esc(it.details) + '</p>' : '<div style="height:10px"></div>') +
+        '<div class="pop-shop">' + shownLevels().map(function (lv) {
+          return '<div class="pop-row"><span class="cell-label">' + lv.label + '</span><span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
+        }).join('') + '</div>';
+      pop.classList.remove('hidden');
+      placePop(it);
+    }
+
+    // Beside the pin on desktop, flipping to the other side near the right edge; under the photo on phones
+    function placePop(it) {
+      var pop = $('pinPop');
+      if (isPhone()) { pop.style.left = ''; pop.style.top = ''; return; }
+      var wrap = $('photoWrap'), frame = pop.parentNode;
+      var ox = wrap.offsetLeft, oy = wrap.offsetTop, w = wrap.offsetWidth, h = wrap.offsetHeight;
+      var px = ox + it.point.x / 100 * w, py = oy + it.point.y / 100 * h;
+      var pw = pop.offsetWidth, ph = pop.offsetHeight, gap = 24;
+      var left = (px + gap + pw <= frame.offsetWidth) ? px + gap : px - gap - pw;
+      if (left < 0) left = Math.max(0, Math.min(frame.offsetWidth - pw, px - pw / 2));
+      var top = Math.max(oy, Math.min(oy + h - ph, py - ph / 2));
+      if (ph > h) top = oy;
+      pop.style.left = Math.round(left) + 'px';
+      pop.style.top = Math.round(top) + 'px';
+    }
+
+    function closePop() { if (state.popId != null) { state.popId = null; renderPop(); } }
+
+    /* ---------- Photo coordinates (accounts for the tilted graph paper) ---------- */
+    function photoPercent(clientX, clientY) {
+      var wrap = $('photoWrap'), r = wrap.getBoundingClientRect();
+      var w = wrap.offsetWidth, h = wrap.offsetHeight;
+      var m = getComputedStyle(document.querySelector('.graph-paper')).transform, a = 0;
+      if (m && m !== 'none') { var v = m.match(/-?[\d.e]+/g).map(parseFloat); a = Math.atan2(v[1], v[0]); }
+      var dx = clientX - (r.left + r.width / 2), dy = clientY - (r.top + r.height / 2);
+      var lx = dx * Math.cos(-a) - dy * Math.sin(-a), ly = dx * Math.sin(-a) + dy * Math.cos(-a);
+      return { x: clamp((lx + w / 2) / w * 100, 0, 100), y: clamp((ly + h / 2) / h * 100, 0, 100) };
+    }
+
+    /* ---------- Dragging pins ---------- */
+    function attachPinDrag(pin, it) {
+      var startX, startY, moved = false, down = false;
+      pin.addEventListener('pointerdown', function (e) {
+        if (state.tagging) return;
+        e.preventDefault();
+        down = true; moved = false; startX = e.clientX; startY = e.clientY;
+        try { pin.setPointerCapture(e.pointerId); } catch (err) {}
+      });
+      pin.addEventListener('pointermove', function (e) {
+        if (!down) return;
+        if (!moved && Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) < 5) return;
+        if (!moved) closePop();
+        moved = true;
+        pin.classList.add('dragging');
+        var p = photoPercent(e.clientX, e.clientY);
+        it.point = { x: p.x, y: p.y };
+        pin.style.left = p.x + '%';
+        pin.style.top = p.y + '%';
+      });
+      function end() {
+        if (!down) return;
+        down = false;
+        pin.classList.remove('dragging');
+        if (!moved) setActive(state.active === it.id ? null : it.id, 'pin');
+        else setActive(it.id, 'drag');
+      }
+      pin.addEventListener('pointerup', end);
+      pin.addEventListener('pointercancel', end);
+      pin.addEventListener('click', function (e) { e.stopPropagation(); });
+    }
+
+    /* ---------- Tagging a missed piece ---------- */
+    function guessCategory(name) {
+      var n = ' ' + name.toLowerCase() + ' ';
+      if (/\bstools?\b/.test(n)) return 'chair';
+      // Longest names first so "dining chair" wins over "chair"
+      var cats = CATEGORIES.slice().sort(function (a, b) { return b.length - a.length; });
+      for (var i = 0; i < cats.length; i++) {
+        if (cats[i] === 'other') continue;
+        var word = cats[i].replace(/s$/, '');
+        if (new RegExp('\\b' + word + 's?\\b').test(n)) return cats[i];
+      }
+      if (/\b(lamp|light)\b/.test(n)) return 'table lamp';
+      if (/\b(drapes?|shades?|blinds?)\b/.test(n)) return 'curtains';
+      if (/\b(duvet|sheets?|quilt|comforter)\b/.test(n)) return 'bedding';
+      if (/\b(print|painting|photo|artwork)\b/.test(n)) return 'art';
+      return 'other';
+    }
+
+    function onPhotoClick(e) {
+      if (!state.tagging) { setActive(null); return; }
+      if (state.items.length >= 20) return;
+      var p = photoPercent(e.clientX, e.clientY);
+      var it = { id: state.nextId++, name: '', category: 'other', details: '', search: '', point: p, tagged: true };
+      state.items.push(it);
+      state.tagging = false;
+      state.editing = it.id;
+      state.active = it.id;
+      render();
+      var input = document.querySelector('.item-row[data-id="' + it.id + '"] input[data-field="name"]');
+      if (input) { input.scrollIntoView({ behavior: 'smooth', block: 'center' }); input.focus({ preventScroll: true }); }
+    }
+
+    /* ---------- Editing ---------- */
+    function onGridClick(e) {
+      var card = e.target.closest('.item-row');
+      if (!card) return;
+      var id = +card.getAttribute('data-id'), it = findItem(id);
+      var act = e.target.closest('[data-act]');
+      if (act) {
+        var a = act.getAttribute('data-act');
+        if (a === 'edit') { state.editing = id; state.active = id; render(); focusField(id, 'name'); }
+        else if (a === 'done') { finishEdit(it); }
+        else if (a === 'remove') {
+          state.items.splice(indexOfItem(id), 1);
+          if (state.active === id) state.active = null;
+          if (state.popId === id) state.popId = null;
+          state.editing = null;
+          render();
+        }
+        return;
+      }
+      if (e.target.closest('a, input, label, .edit-form')) return;
+      setActive(state.active === id ? null : id, 'row');
+    }
+
+    function focusField(id, field) {
+      var input = document.querySelector('.item-row[data-id="' + id + '"] input[data-field="' + field + '"]');
+      if (input) { input.focus(); var v = input.value; input.value = ''; input.value = v; }
+    }
+
+    function finishEdit(it) {
+      if (it) {
+        it.name = capFirst(clean(it.name, 40)) || 'New piece';
+        it.search = clean(it.search, 60);
+        if (!it.search) it.search = it.name === 'New piece' ? '' : it.name.toLowerCase();
+      }
+      state.editing = null;
+      render();
+    }
+
+    // Typing updates the card's links, name, and pin label without rebuilding the form
+    function onGridInput(e) {
+      var input = e.target.closest('input[data-field]');
+      if (!input) return;
+      var card = input.closest('.item-row'), id = +card.getAttribute('data-id'), it = findItem(id);
+      if (!it) return;
+      var field = input.getAttribute('data-field');
+      it[field] = input.value;
+      if (field === 'name') {
+        card.querySelector('.item-name').textContent = input.value.trim() || 'New piece';
+        var pin = document.querySelector('.pin[data-id="' + id + '"]');
+        if (pin) pin.title = input.value.trim() || 'New piece';
+        if (it.tagged) it.category = guessCategory(input.value);
+      }
+      if (state.popId === id) renderPop();
+      var cells = card.querySelectorAll('.lv-cell');
+      for (var c = 0; c < cells.length; c++)
+        cells[c].querySelector('.cell-links').innerHTML = linksHTML(it, cells[c].getAttribute('data-level'));
+    }
+
+    function onGridKey(e) {
+      if (e.key !== 'Enter' || !e.target.closest('input[data-field]')) return;
+      e.preventDefault();
+      finishEdit(findItem(+e.target.closest('.item-row').getAttribute('data-id')));
     }
 
     /* ---------- Status ---------- */
@@ -398,6 +955,7 @@
 
     function reset() {
       state.imgURL = ''; state.sendB64 = ''; state.items = []; state.style = ''; state.raw = '';
+      state.active = null; state.editing = null; state.tagging = false; state.popId = null;
       $('fileInput').value = '';
       showScreen('upload');
     }
@@ -431,6 +989,33 @@
       $('resetBtn').addEventListener('click', reset);
       $('retryBtn').addEventListener('click', extract);
       $('newBtn').addEventListener('click', reset);
+      $('photoWrap').addEventListener('click', onPhotoClick);
+      $('tagBtn').addEventListener('click', function () {
+        if (state.editing) finishEdit(findItem(state.editing));
+        state.tagging = !state.tagging;
+        if (state.tagging) closePop();
+        renderTagMode();
+      });
+      $('pinPop').addEventListener('click', function (e) {
+        if (e.target.closest('.pop-close')) setActive(null);
+      });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && state.popId != null) setActive(null); });
+      window.addEventListener('resize', function () {
+        if (!state.items.length) return;
+        renderPins();
+        var it = state.popId != null && findItem(state.popId); if (it) placePop(it);
+      });
+      $('showBoxes').addEventListener('change', renderBoxes);
+      var grid = $('itemList');
+      $('budget').addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-level]');
+        if (!btn) return;
+        state.level = btn.getAttribute('data-level');
+        render();
+      });
+      grid.addEventListener('click', onGridClick);
+      grid.addEventListener('input', onGridInput);
+      grid.addEventListener('keydown', onGridKey);
       startHeightReport();
     });
   </script>
@@ -451,7 +1036,7 @@
       <div class="tool-header">
         <h1 class="tool-title">Shop the Room</h1>
         <div class="tool-num" id="toolNum">Prototype</div>
-        <p class="tool-desc">Found a room you can't stop thinking about? Upload the photo and see every piece described the way a designer would, with the exact words to search for so you can find something like it.</p>
+        <p class="tool-desc">Found a room you can't stop thinking about? Upload the photo and see every piece described the way a designer would, with places to shop for something like it at every budget.</p>
       </div>
       <div class="rule"></div>
 
@@ -468,8 +1053,8 @@
             <p>Get the color, material, and shape of each piece in plain designer language.</p>
           </div>
           <div class="use">
-            <h3><span>C.</span>Search smarter</h3>
-            <p>Skip the guesswork with search words that actually pull up the right style.</p>
+            <h3><span>C.</span>Shop at your budget</h3>
+            <p>Jump straight to save, mid, and splurge stores already searching for the right style.</p>
           </div>
         </div>
 
@@ -517,17 +1102,30 @@
 
         <div class="print">
           <div class="tape l"></div><div class="tape r"></div>
-          <img id="roomPhoto" alt="Your room photo">
+          <div class="photo-wrap" id="photoWrap">
+            <img id="roomPhoto" alt="Your room photo" draggable="false">
+          </div>
+          <div class="pin-pop hidden" id="pinPop" role="dialog" aria-label="Piece details"></div>
+        </div>
+        <div class="photo-tools">
+          <p class="photo-hint" id="photoHint"></p>
+          <button type="button" class="btn-secondary btn-sm" id="tagBtn">Tag something we missed</button>
         </div>
 
-        <div class="items-head">
-          <p class="eyebrow">Pieces to shop</p>
-          <p class="eyebrow" id="itemCount"></p>
+        <div class="list-head">
+          <p class="eyebrow">Pieces to shop<span id="itemCount"></span></p>
+          <div class="budget" id="budget" role="group" aria-label="Budget">
+            <button type="button" data-level="save">Save</button>
+            <button type="button" data-level="mid" class="on">Mid</button>
+            <button type="button" data-level="splurge">Splurge</button>
+          </div>
         </div>
-        <div class="item-grid" id="itemGrid"></div>
+        <div class="shop-list" id="itemList"></div>
 
         <details class="raw">
           <summary>Raw model reply (for testing)</summary>
+          <label><input type="checkbox" id="showBoxes"> Show the model's boxes on the photo</label>
+          <p class="sent-size" id="sentSize"></p>
           <pre id="rawText"></pre>
         </details>
       </div>
