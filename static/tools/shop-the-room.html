@@ -303,12 +303,14 @@
     }
   </style>
   <script>
-    var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
+    // Opened from your own computer (localhost), the page uses your local Flask server so app.py changes can be tested before pushing
+    var API_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '/api/vision' : 'https://studio-lou-rag.onrender.com/api/vision';
     // The photo is resized to exactly what the vision model will see, so its pixel positions map straight back.
-    // claude-sonnet-4-6 is on Claude's standard image tier (1568 px edge, 1568 visual tokens).
-    // If the vision route moves to Claude 4.7 or later, change these to 2576 and 4784.
-    var MODEL_MAX_EDGE = 1568;
-    var MODEL_MAX_TOKENS = 1568;
+    // These must match the model in app.py's /api/vision route.
+    // claude-sonnet-5-5 is on Claude's high-resolution image tier (2576 px edge, 4784 visual tokens).
+    // For an older standard-tier model (Claude 4.6 and earlier), use 1568 and 1568.
+    var MODEL_MAX_EDGE = 2576;
+    var MODEL_MAX_TOKENS = 4784;
     var TIMEOUT_MS = 100000;  // Render free tier can take ~60s to wake up
     var MAX_ITEMS = 12;
 
