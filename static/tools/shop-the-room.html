@@ -174,6 +174,8 @@
     .pop-row + .pop-row { border-top: 1px solid #e6dfd2; }
     .pop-row .cell-label { display: block; flex: 0 0 50px; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; }
     .pop-row .cell-links { flex-direction: row; }
+    .pin-pop.editing { width: 340px; }
+    .pop-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
 
     .photo-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 40px; }
     .photo-hint { font-size: 13px; color: #6b6560; line-height: 1.45; }
@@ -231,7 +233,7 @@
     }
     .text-btn.muted { color: #6b6560; }
 
-    .edit-form { grid-column: 2 / -1; max-width: 520px; padding-top: 12px; border-top: 1px solid #e6dfd2; cursor: default; }
+    .edit-form { margin: 10px 0 12px; }
     .field { display: block; margin-bottom: 10px; }
     .field span { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; margin-bottom: 4px; }
     .field input {
@@ -299,7 +301,7 @@
       .pin-pop { position: relative; left: auto !important; top: auto !important; width: auto; margin-top: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
       .lv-cell { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; }
       .store { padding: 4px 9px; font-size: 11.5px; }
-      .edit-form { max-width: none; }
+      .pin-pop.editing { width: auto; }
     }
   </style>
   <script>
@@ -335,7 +337,7 @@
       '- details: color, material, shape, and style in under 15 words. Look closely at materials and finishes before naming them (wood, brushed steel, chrome, brass, marble, linen, boucle). If an item has two colors, name both. If you cannot tell the material, describe the color and finish instead of guessing, and keep the name and search just as cautious. Never guess sizes like queen, king, or 8x10.',
       '- search: 3 to 6 words a shopper would type into a store\'s search box. Lead with the most distinctive color or material and end with the item type. No filler words like decorative, accent, piece, set, or style, and no hyphens.',
       '- style: 3 to 7 words naming the room\'s design style and mood, not the room type (say "Warm eclectic modern," not "Home office living room")',
-      '- box: the bounding box of the visible part of the item as [x1, y1, x2, y2] (top-left and bottom-right corners) in pixel coordinates. This image is ' + w + ' pixels wide and ' + h + ' pixels tall; (0, 0) is the top-left corner, x increases to the right and y increases downward. Box only the item, not the furniture it sits on or next to (a pillow box covers the pillow, not the sofa). For matching pieces in one entry (a pair of pillows, a set of chairs), box the most visible single piece.',
+      '- box: the bounding box of the visible part of the item as [x1, y1, x2, y2] (top-left and bottom-right corners) in pixel coordinates. This image is ' + w + ' pixels wide and ' + h + ' pixels tall; (0, 0) is the top-left corner, x increases to the right and y increases downward. Box only the item, not the furniture it sits on or next to (a pillow box covers the pillow, not the sofa). For matching pieces in one entry (a pair of pillows, a set of chairs), box the most visible single piece. For curtains or drapes, box one panel only, never both panels with the window between them.',
       '- Never name brands, products, stores, or prices'
     ].join('\n'); }
 
@@ -633,7 +635,7 @@
     function indexOfItem(id) { for (var i = 0; i < state.items.length; i++) if (state.items[i].id === id) return i; return -1; }
 
     function rowHTML(it, i) {
-      var html = '<div class="item-row' + (state.active === it.id ? ' active' : '') + '" data-id="' + it.id + '">' +
+      return '<div class="item-row' + (state.active === it.id ? ' active' : '') + '" data-id="' + it.id + '">' +
         '<span class="item-num">' + (i + 1) + '</span>' +
         '<div class="row-piece"><span class="item-name">' + esc(it.name || 'New piece') + '</span>' +
           (it.details ? '<span class="item-details">' + esc(it.details) + '</span>' : '') + '</div>' +
@@ -641,26 +643,26 @@
           return '<div class="lv-cell" data-level="' + lv.id + '"><span class="cell-label">' + lv.label + '</span>' +
             '<span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
         }).join('') +
-        (state.editing === it.id ? '' : '<button type="button" class="text-btn" data-act="edit">Edit</button>');
-      if (state.editing === it.id) {
-        html += '<div class="edit-form">' +
-          '<label class="field"><span>Name</span><input type="text" data-field="name" maxlength="40" placeholder="What is it?" value="' + esc(it.name) + '"></label>' +
-          '<label class="field"><span>Search words</span><input type="text" data-field="search" maxlength="60" placeholder="Like: brass arc floor lamp" value="' + esc(it.search) + '"></label>' +
-          '<div class="edit-actions">' +
-            '<button type="button" class="text-btn muted" data-act="remove">Remove this piece</button>' +
-            '<button type="button" class="btn-primary btn-sm" data-act="done">Done</button>' +
-          '</div></div>';
-      }
-      return html + '</div>';
+        '<button type="button" class="text-btn" data-act="edit">Edit</button></div>';
     }
 
     function render() {
       $('styleLine').classList.toggle('hidden', !state.style);
       $('styleText').textContent = state.style;
       if ($('roomPhoto').getAttribute('src') !== state.imgURL) $('roomPhoto').src = state.imgURL;
-      $('itemCount').textContent = state.items.length + (state.items.length === 1 ? ' piece' : ' pieces');
       var btns = document.querySelectorAll('.budget button');
       for (var b = 0; b < btns.length; b++) btns[b].classList.toggle('on', btns[b].getAttribute('data-level') === state.level);
+      renderList();
+      renderPins();
+      renderTagMode();
+      renderPop();
+      $('rawText').textContent = state.raw;
+      $('sentSize').textContent = state.sendW ? 'Photo sent to the model at ' + state.sendW + ' x ' + state.sendH + ' pixels.' : '';
+      renderBoxes();
+    }
+
+    function renderList() {
+      $('itemCount').textContent = state.items.length + (state.items.length === 1 ? ' piece' : ' pieces');
       var list = $('itemList');
       list.className = 'shop-list';
       var cols = '<div class="list-cols"><span></span><span>Piece</span>' +
@@ -668,12 +670,6 @@
         '<span></span></div>';
       list.innerHTML = state.items.length ? cols + state.items.map(rowHTML).join('') :
         '<p class="empty-note">No pieces left. Tap "Tag something we missed" to add one.</p>';
-      renderPins();
-      renderTagMode();
-      renderPop();
-      $('rawText').textContent = state.raw;
-      $('sentSize').textContent = state.sendW ? 'Photo sent to the model at ' + state.sendW + ' x ' + state.sendH + ' pixels.' : '';
-      renderBoxes();
     }
 
     // Where each pin is drawn. Pins closer than a pin's width get pushed apart so none hide another;
@@ -748,6 +744,15 @@
 
     /* ---------- Highlighting ---------- */
     function setActive(id, from) {
+      // Leaving a piece that was being edited keeps its changes
+      if (state.editing != null) {
+        commitEdit(findItem(state.editing));
+        state.editing = null;
+        state.active = id;
+        state.popId = (from === 'pin' && id != null) ? id : null;
+        render();
+        return;
+      }
       state.active = id;
       var cards = document.querySelectorAll('.item-row');
       for (var i = 0; i < cards.length; i++) cards[i].classList.toggle('active', +cards[i].getAttribute('data-id') === id);
@@ -767,17 +772,32 @@
     function renderPop() {
       var pop = $('pinPop'), it = state.popId != null ? findItem(state.popId) : null;
       if (!it) { state.popId = null; pop.classList.add('hidden'); pop.innerHTML = ''; return; }
-      var i = indexOfItem(it.id);
+      var i = indexOfItem(it.id), editing = state.editing === it.id;
       pop.innerHTML =
         '<div class="pop-top"><span class="item-num">' + (i + 1) + '</span>' +
           '<span class="pop-name">' + esc(it.name || 'New piece') + '</span>' +
           '<button type="button" class="pop-close" aria-label="Close">&times;</button></div>' +
-        (it.details ? '<p class="pop-details">' + esc(it.details) + '</p>' : '<div style="height:10px"></div>') +
-        '<div class="pop-shop">' + shownLevels().map(function (lv) {
-          return '<div class="pop-row"><span class="cell-label">' + lv.label + '</span><span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
-        }).join('') + '</div>';
+        (editing ?
+          '<div class="edit-form">' +
+            '<label class="field"><span>Name</span><input type="text" data-field="name" maxlength="40" placeholder="What is it?" value="' + esc(it.name) + '"></label>' +
+            '<label class="field"><span>Search words</span><input type="text" data-field="search" maxlength="60" placeholder="Like: brass arc floor lamp" value="' + esc(it.search) + '"></label>' +
+          '</div>'
+        : (it.details ? '<p class="pop-details">' + esc(it.details) + '</p>' : '<div style="height:10px"></div>')) +
+        '<div class="pop-shop">' + popLinksHTML(it) + '</div>' +
+        (editing ?
+          '<div class="edit-actions" style="margin-top:12px">' +
+            '<button type="button" class="text-btn muted" data-act="remove">Remove this piece</button>' +
+            '<button type="button" class="btn-primary btn-sm" data-act="done">Done</button></div>'
+        : '<div class="pop-foot"><button type="button" class="text-btn" data-act="edit">Edit</button></div>');
+      pop.classList.toggle('editing', editing);
       pop.classList.remove('hidden');
       placePop(it);
+    }
+
+    function popLinksHTML(it) {
+      return shownLevels().map(function (lv) {
+        return '<div class="pop-row"><span class="cell-label">' + lv.label + '</span><span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
+      }).join('');
     }
 
     // Beside the pin on desktop, flipping to the other side near the right edge; under the photo on phones
@@ -796,7 +816,25 @@
       pop.style.top = Math.round(top) + 'px';
     }
 
-    function closePop() { if (state.popId != null) { state.popId = null; renderPop(); } }
+    function closePop() {
+      if (state.popId == null) return;
+      var wasEditing = state.editing != null;
+      if (wasEditing) { commitEdit(findItem(state.editing)); state.editing = null; }
+      state.popId = null;
+      renderPop();
+      if (wasEditing) renderList();  // pins stay put so a drag in progress isn't interrupted
+    }
+
+    // Opens the popover at a piece's pin, ready to edit (from a list row's Edit link, or a new tag)
+    function openEdit(id) {
+      if (state.editing != null && state.editing !== id) commitEdit(findItem(state.editing));
+      state.active = id; state.popId = id; state.editing = id;
+      render();
+      var pop = $('pinPop');
+      if (pop.scrollIntoView) pop.scrollIntoView({ behavior: 'smooth', block: isPhone() ? 'center' : 'nearest' });
+      var input = pop.querySelector('input[data-field="name"]');
+      if (input) { input.focus({ preventScroll: true }); var v = input.value; input.value = ''; input.value = v; }
+    }
 
     /* ---------- Photo coordinates (accounts for the tilted graph paper) ---------- */
     function photoPercent(clientX, clientY) {
@@ -866,75 +904,80 @@
       var it = { id: state.nextId++, name: '', category: 'other', details: '', search: '', point: p, tagged: true };
       state.items.push(it);
       state.tagging = false;
-      state.editing = it.id;
-      state.active = it.id;
-      render();
-      var input = document.querySelector('.item-row[data-id="' + it.id + '"] input[data-field="name"]');
-      if (input) { input.scrollIntoView({ behavior: 'smooth', block: 'center' }); input.focus({ preventScroll: true }); }
+      openEdit(it.id);
     }
 
-    /* ---------- Editing ---------- */
+    /* ---------- Editing (in the pin popover) ---------- */
     function onGridClick(e) {
-      var card = e.target.closest('.item-row');
-      if (!card) return;
-      var id = +card.getAttribute('data-id'), it = findItem(id);
-      var act = e.target.closest('[data-act]');
-      if (act) {
-        var a = act.getAttribute('data-act');
-        if (a === 'edit') { state.editing = id; state.active = id; render(); focusField(id, 'name'); }
-        else if (a === 'done') { finishEdit(it); }
-        else if (a === 'remove') {
-          state.items.splice(indexOfItem(id), 1);
-          if (state.active === id) state.active = null;
-          if (state.popId === id) state.popId = null;
-          state.editing = null;
-          render();
-        }
-        return;
-      }
-      if (e.target.closest('a, input, label, .edit-form')) return;
+      var row = e.target.closest('.item-row');
+      if (!row) return;
+      var id = +row.getAttribute('data-id');
+      if (e.target.closest('[data-act="edit"]')) { openEdit(id); return; }
+      if (e.target.closest('a')) return;
       setActive(state.active === id ? null : id, 'row');
     }
 
-    function focusField(id, field) {
-      var input = document.querySelector('.item-row[data-id="' + id + '"] input[data-field="' + field + '"]');
-      if (input) { input.focus(); var v = input.value; input.value = ''; input.value = v; }
+    function onPopClick(e) {
+      var it = state.popId != null ? findItem(state.popId) : null;
+      if (!it) return;
+      if (e.target.closest('.pop-close')) { setActive(null); return; }
+      var act = e.target.closest('[data-act]');
+      if (!act) return;
+      var a = act.getAttribute('data-act');
+      if (a === 'edit') openEdit(it.id);
+      else if (a === 'done') finishEdit(it);
+      else if (a === 'remove') removeItem(it.id);
     }
 
-    function finishEdit(it) {
-      if (it) {
-        it.name = capFirst(clean(it.name, 40)) || 'New piece';
-        it.search = clean(it.search, 60);
-        if (!it.search) it.search = it.name === 'New piece' ? '' : it.name.toLowerCase();
-      }
-      state.editing = null;
+    function removeItem(id) {
+      state.items.splice(indexOfItem(id), 1);
+      if (state.active === id) state.active = null;
+      state.popId = null; state.editing = null;
       render();
     }
 
-    // Typing updates the card's links, name, and pin label without rebuilding the form
-    function onGridInput(e) {
-      var input = e.target.closest('input[data-field]');
-      if (!input) return;
-      var card = input.closest('.item-row'), id = +card.getAttribute('data-id'), it = findItem(id);
+    // Tidies the typed name and search words; an empty search falls back to the name
+    function commitEdit(it) {
       if (!it) return;
-      var field = input.getAttribute('data-field');
-      it[field] = input.value;
-      if (field === 'name') {
-        card.querySelector('.item-name').textContent = input.value.trim() || 'New piece';
-        var pin = document.querySelector('.pin[data-id="' + id + '"]');
-        if (pin) pin.title = input.value.trim() || 'New piece';
-        if (it.tagged) it.category = guessCategory(input.value);
-      }
-      if (state.popId === id) renderPop();
-      var cells = card.querySelectorAll('.lv-cell');
-      for (var c = 0; c < cells.length; c++)
-        cells[c].querySelector('.cell-links').innerHTML = linksHTML(it, cells[c].getAttribute('data-level'));
+      it.name = capFirst(clean(it.name, 40)) || 'New piece';
+      it.search = clean(it.search, 60);
+      if (!it.search) it.search = it.name === 'New piece' ? '' : it.name.toLowerCase();
     }
 
-    function onGridKey(e) {
+    function finishEdit(it) {
+      commitEdit(it);
+      state.editing = null;
+      render();  // popover stays open, back to its normal view
+    }
+
+    // Typing updates the popover's links, the list row, and the pin label without rebuilding the form
+    function onPopInput(e) {
+      var input = e.target.closest('input[data-field]');
+      var it = state.popId != null ? findItem(state.popId) : null;
+      if (!input || !it) return;
+      var field = input.getAttribute('data-field'), id = it.id;
+      it[field] = input.value;
+      var shownName = input.value.trim() || 'New piece';
+      if (field === 'name') {
+        $('pinPop').querySelector('.pop-name').textContent = shownName;
+        var pin = document.querySelector('.pin[data-id="' + id + '"]');
+        if (pin) pin.title = shownName;
+        if (it.tagged) it.category = guessCategory(input.value);
+      }
+      $('pinPop').querySelector('.pop-shop').innerHTML = popLinksHTML(it);
+      var row = document.querySelector('.item-row[data-id="' + id + '"]');
+      if (row) {
+        if (field === 'name') row.querySelector('.item-name').textContent = shownName;
+        var cells = row.querySelectorAll('.lv-cell');
+        for (var c = 0; c < cells.length; c++)
+          cells[c].querySelector('.cell-links').innerHTML = linksHTML(it, cells[c].getAttribute('data-level'));
+      }
+    }
+
+    function onPopKey(e) {
       if (e.key !== 'Enter' || !e.target.closest('input[data-field]')) return;
       e.preventDefault();
-      finishEdit(findItem(+e.target.closest('.item-row').getAttribute('data-id')));
+      finishEdit(findItem(state.popId));
     }
 
     /* ---------- Status ---------- */
@@ -998,9 +1041,9 @@
         if (state.tagging) closePop();
         renderTagMode();
       });
-      $('pinPop').addEventListener('click', function (e) {
-        if (e.target.closest('.pop-close')) setActive(null);
-      });
+      $('pinPop').addEventListener('click', onPopClick);
+      $('pinPop').addEventListener('input', onPopInput);
+      $('pinPop').addEventListener('keydown', onPopKey);
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && state.popId != null) setActive(null); });
       window.addEventListener('resize', function () {
         if (!state.items.length) return;
@@ -1016,8 +1059,6 @@
         render();
       });
       grid.addEventListener('click', onGridClick);
-      grid.addEventListener('input', onGridInput);
-      grid.addEventListener('keydown', onGridKey);
       startHeightReport();
     });
   </script>
