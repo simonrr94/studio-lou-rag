@@ -776,7 +776,6 @@ def vision():
         response = claude.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2000,
-            temperature=0,
             messages=[{
                 "role": "user",
                 "content": [
