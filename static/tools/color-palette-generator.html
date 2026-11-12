@@ -42,7 +42,7 @@
     .error-msg { display: none; background: #fff0f2; border: 1px solid #f0c0c8; border-radius: 12px; padding: 16px 20px; font-size: 14px; color: #582b36; margin-top: 16px; }
     /* Results */
     .results { display: none; }
-    .palette-intro { background: #f5f0e8; border-radius: 16px; padding: 24px 28px; margin-bottom: 28px; font-size: 15px; line-height: 1.7; color: #433E3C; border-left: 3px solid #582b36; }
+    .palette-intro { font-family: 'Crimson Text', serif; font-size: 21px; line-height: 1.5; letter-spacing: -0.01em; color: #433E3C; margin-bottom: 32px; max-width: 640px; }
     .swatch-stack { display: grid; gap: 16px; }
     .swatch-card { display: grid; grid-template-columns: 100px 1fr; border-radius: 16px; overflow: hidden; border: 1px solid #d0c9bc; background: #fff; }
     .swatch-color { min-height: 140px; }
@@ -70,7 +70,7 @@
     .board {
       display: grid;
       grid-template-columns: 58fr 42fr;
-      height: 460px;
+      aspect-ratio: 5 / 6;
       border-radius: 16px;
       overflow: hidden;
       box-shadow: 0 1px 2px rgba(67,62,60,0.12), 0 8px 24px rgba(67,62,60,0.10);
@@ -130,10 +130,12 @@
       position: absolute; inset: 8px;
       display: flex; flex-direction: column; justify-content: center;
       padding: 10px 16px;
-      border-radius: 10px;
-      background: rgba(250, 246, 238, 0.78);
-      -webkit-backdrop-filter: blur(6px);
-      backdrop-filter: blur(6px);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+      -webkit-backdrop-filter: blur(18px) saturate(170%);
+      backdrop-filter: blur(18px) saturate(170%);
       opacity: 0;
       transform: translateY(4px);
       transition: opacity 0.2s ease, transform 0.2s ease;
@@ -141,7 +143,11 @@
     }
     .chip.primary .chip-pop { inset: auto 14px 14px 14px; padding: 16px 20px; }
     .chip-pop-role { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #582b36; margin-bottom: 4px; }
-    .chip-pop-text { font-size: 14px; line-height: 1.4; color: #433E3C; }
+    .chip-pop-text { font-size: 14px; line-height: 1.4; color: #2f2a28; }
+    /* Dark chips get smoked glass with light text so it stays readable */
+    .chip.dark .chip-pop { background: rgba(0, 0, 0, 0.22); border-color: rgba(255, 255, 255, 0.18); }
+    .chip.dark .chip-pop-role { color: rgba(255, 255, 255, 0.75); }
+    .chip.dark .chip-pop-text { color: #fff; }
     @media (hover: hover) { .chip:hover .chip-pop { opacity: 1; transform: none; } }
     .chip.open .chip-pop, .chip:focus-visible .chip-pop { opacity: 1; transform: none; }
     .chip:focus-visible { box-shadow: inset 0 0 0 3px rgba(88,43,54,0.55); }
@@ -149,7 +155,7 @@
     .list-label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 12px; }
 
     @media (max-width: 560px) {
-      .board { height: 420px; grid-template-columns: 54fr 46fr; }
+      .board { grid-template-columns: 54fr 46fr; }
       .chip { min-height: 96px; }
       .chip-label { left: 14px; right: 12px; bottom: 12px; }
       .chip-name { font-size: 20px; }
@@ -460,7 +466,7 @@ function orderedColors(colors) {
 
 function chipHTML(c, cls) {
   const t = inkFor(c.hex);
-  return '<div class="chip ' + cls + '" tabindex="0" role="button" aria-expanded="false" aria-label="' + esc(c.role + ': ' + c.name + '. ' + shortFor(c)) + '"' +
+  return '<div class="chip ' + cls + (t.light ? '' : ' dark') + '" tabindex="0" role="button" aria-expanded="false" aria-label="' + esc(c.role + ': ' + c.name + '. ' + shortFor(c)) + '"' +
     ' style="--c:' + hexForSwatch(c.hex) + ';--ink:' + t.ink + ';--hi:' + t.hi + ';--lo:' + t.lo + '">' +
       '<div class="chip-label"><div class="chip-name">' + esc(c.name) + '</div><div class="chip-hex">' + esc(hexForSwatch(c.hex).toUpperCase()) + '</div></div>' +
       '<div class="chip-pop" aria-hidden="true"><div class="chip-pop-role">' + esc(c.role) + '</div><div class="chip-pop-text">' + esc(shortFor(c)) + '</div></div>' +
