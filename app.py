@@ -791,6 +791,188 @@ def vision():
     
     return jsonify({"error": str(e)}), 400   # <-- end of /api/vision
 
+
+# ---------------------------------------------------------------------
+# Shop the Room: close product matches through Google Lens (via SerpApi)
+#
+# The page sends a cropped photo of one piece. The server saves it for a
+# few minutes at a public address, asks SerpApi's Google Lens "visual
+# matches" search for similar products, keeps only listings that come from
+# real stores with a price, and sends those back. Products always come from
+# real listings, never from the model.
+#
+# Render settings (Environment):
+#   SERPAPI_API_KEY      your SerpApi key (required)
+#   PUBLIC_BASE_URL      optional, defaults to https://studio-lou-rag.onrender.com
+#   MATCHES_MONTHLY_CAP  optional, searches allowed per month across all visitors (default 240,
+#                        just under SerpApi's free 250; raise it if you move to a paid plan)
+#   MATCHES_DAILY_CAP    optional, searches allowed per day across all visitors (default 40)
+#   MATCHES_HOURLY_PER_VISITOR  optional, searches per visitor per hour (default 15)
+# ---------------------------------------------------------------------
+import base64, hashlib, json, re, tempfile, threading, time, urllib.parse, urllib.request
+
+MATCH_DIR = os.path.join(tempfile.gettempdir(), "shop-the-room")
+os.makedirs(MATCH_DIR, exist_ok=True)
+CROP_TTL = 15 * 60          # crops are deleted after 15 minutes
+CACHE_TTL = 24 * 60 * 60    # the same crop is answered from cache for a day, without a new search
+_match_lock = threading.Lock()
+
+# Sites that show pictures of rooms or resale listings rather than products to buy new
+SKIP_DOMAINS = (
+    "pinterest.", "instagram.", "facebook.", "tiktok.", "youtube.", "reddit.", "houzz.com/photos",
+    "ebay.", "poshmark.", "mercari.", "offerup.", "craigslist.", "chairish.",
+    "aliexpress.", "alibaba.", "temu.", "dhgate.", "shein.", "wish.com",
+)
+
+
+def _clean_old_files():
+    now = time.time()
+    for name in os.listdir(MATCH_DIR):
+        path = os.path.join(MATCH_DIR, name)
+        try:
+            age = now - os.path.getmtime(path)
+            if (name.endswith(".jpg") and age > CROP_TTL) or (name.startswith("cache-") and age > CACHE_TTL):
+                os.remove(path)
+        except OSError:
+            pass
+
+
+def _allow_search(visitor):
+    """Monthly and daily caps across everyone plus an hourly cap per visitor, so the plan can't be used up."""
+    monthly_cap = int(os.getenv("MATCHES_MONTHLY_CAP", "240"))
+    daily_cap = int(os.getenv("MATCHES_DAILY_CAP", "40"))
+    hourly_cap = int(os.getenv("MATCHES_HOURLY_PER_VISITOR", "15"))
+    path = os.path.join(MATCH_DIR, "usage.json")
+    month, day, hour = time.strftime("%Y-%m"), time.strftime("%Y-%m-%d"), time.strftime("%Y-%m-%d-%H")
+    with _match_lock:
+        try:
+            with open(path) as f:
+                usage = json.load(f)
+        except (OSError, ValueError):
+            usage = {}
+        if usage.get("month") != month:
+            usage = {"month": month, "month_count": 0}
+        if usage.get("day") != day:
+            usage.update({"day": day, "count": 0, "visitors": {}})
+        vkey = hashlib.sha256(visitor.encode()).hexdigest()[:16] + ":" + hour
+        if usage["month_count"] >= monthly_cap:
+            return False, "monthly"
+        if usage["count"] >= daily_cap:
+            return False, "daily"
+        if usage["visitors"].get(vkey, 0) >= hourly_cap:
+            return False, "visitor"
+        usage["count"] += 1
+        usage["month_count"] += 1
+        usage["visitors"] = {k: v for k, v in usage["visitors"].items() if k.endswith(hour)}
+        usage["visitors"][vkey] = usage["visitors"].get(vkey, 0) + 1
+        with open(path, "w") as f:
+            json.dump(usage, f)
+    return True, ""
+
+
+def _store_name(item):
+    source = (item.get("source") or "").strip()
+    if source:
+        return source
+    host = urllib.parse.urlparse(item.get("link", "")).netloc
+    return re.sub(r"^www\.", "", host)
+
+
+def _keep(item):
+    link = item.get("link") or ""
+    if not link.startswith("http"):
+        return False
+    if any(d in link.lower() for d in SKIP_DOMAINS):
+        return False
+    price = item.get("price") or {}
+    value = price.get("extracted_value")
+    if not isinstance(value, (int, float)) or value <= 0:
+        return False
+    currency = (price.get("currency") or "$").strip()
+    return currency in ("$", "USD", "US$")
+
+
+@app.route("/api/crop/<token>.jpg")
+def shop_crop(token):
+    if not re.fullmatch(r"[a-f0-9]{32}", token):
+        return "", 404
+    path = os.path.join(MATCH_DIR, token + ".jpg")
+    if not os.path.exists(path) or time.time() - os.path.getmtime(path) > CROP_TTL:
+        return "", 404
+    return send_from_directory(MATCH_DIR, token + ".jpg", mimetype="image/jpeg", max_age=0)
+
+
+@app.route("/api/matches", methods=["POST"])
+def shop_matches():
+    key = os.getenv("SERPAPI_API_KEY")
+    if not key:
+        return jsonify({"error": "not_configured"}), 503
+    data = request.get_json(silent=True) or {}
+    try:
+        raw = base64.b64decode(data.get("image", ""), validate=True)
+    except Exception:
+        return jsonify({"error": "bad_image"}), 400
+    if not raw.startswith(b"\xff\xd8") or len(raw) > 1_500_000:
+        return jsonify({"error": "bad_image"}), 400
+
+    _clean_old_files()
+    digest = hashlib.sha256(raw).hexdigest()
+    cache_path = os.path.join(MATCH_DIR, "cache-" + digest[:32] + ".json")
+    if os.path.exists(cache_path):
+        with open(cache_path) as f:
+            return jsonify({"matches": json.load(f), "cached": True})
+
+    visitor = (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip()
+    ok, why = _allow_search(visitor)
+    if not ok:
+        return jsonify({"error": "limit_" + why}), 429
+
+    token = digest[:32]
+    with open(os.path.join(MATCH_DIR, token + ".jpg"), "wb") as f:
+        f.write(raw)
+    base = os.getenv("PUBLIC_BASE_URL", "https://studio-lou-rag.onrender.com").rstrip("/")
+    params = urllib.parse.urlencode({
+        "engine": "google_lens", "type": "visual_matches",
+        "url": base + "/api/crop/" + token + ".jpg",
+        "hl": "en", "country": "us", "api_key": key,
+    })
+    try:
+        with urllib.request.urlopen("https://serpapi.com/search.json?" + params, timeout=40) as r:
+            result = json.load(r)
+    except Exception:
+        return jsonify({"error": "search_failed"}), 502
+    finally:
+        try:
+            os.remove(os.path.join(MATCH_DIR, token + ".jpg"))
+        except OSError:
+            pass
+    if result.get("error") and not result.get("visual_matches"):
+        # SerpApi reports "no results" as an error message; anything else is a real failure
+        if "hasn't returned any results" not in result["error"]:
+            return jsonify({"error": "search_failed"}), 502
+
+    matches, seen = [], set()
+    for item in result.get("visual_matches", []):
+        if not _keep(item):
+            continue
+        link = item["link"]
+        if link in seen:
+            continue
+        seen.add(link)
+        matches.append({
+            "title": (item.get("title") or "")[:140],
+            "store": _store_name(item)[:40],
+            "price": item["price"]["extracted_value"],
+            "link": link,
+            "thumbnail": item.get("thumbnail") or "",
+        })
+        if len(matches) >= 30:
+            break
+    with open(cache_path, "w") as f:
+        json.dump(matches, f)
+    return jsonify({"matches": matches, "cached": False})
+
+
 @app.route("/api/claude", methods=["POST"])       # <-- add this new route here
 def claude_proxy():
     try:

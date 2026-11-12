@@ -95,7 +95,7 @@
     }
     .btn-primary { background: #A6BE47; color: #ffffff; border: none; transition: opacity 0.15s, transform 0.1s; }
     .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
-    .btn-secondary { background: transparent; color: #433E3C; border: 1.5px solid #d0c9bc; transition: border-color 0.15s; }
+    .btn-secondary { background: #ffffff; color: #433E3C; border: 1.5px solid #d0c9bc; transition: border-color 0.15s; }
     .btn-secondary:hover { border-color: #433E3C; }
     .btn-sm { padding: 8px 18px; font-size: 13px; }
 
@@ -116,7 +116,7 @@
     .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
     /* ── RESULTS ── */
-    .summary { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 32px; }
+    .summary { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 54px; }
     .style-line .eyebrow { margin-bottom: 4px; }
     .style-text {
       font-family: 'Crimson Text', serif; font-size: 30px; color: #582b36;
@@ -128,11 +128,12 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 8px 20px rgba(0,0,0,0.12); border-radius: 2px;
     }
     .tape {
-      position: absolute; top: -12px; width: 96px; height: 26px; z-index: 2; pointer-events: none;
+      position: absolute; top: -6px; width: 96px; height: 26px; z-index: 2; pointer-events: none;
       background: rgba(232,201,122,0.62); box-shadow: 0 1px 2px rgba(0,0,0,0.08);
     }
-    .tape.l { left: -18px; transform: rotate(-38deg); }
-    .tape.r { right: -18px; transform: rotate(38deg); }
+    /* Tucked in so the rotated tape stays within the photo's width (the toolkit frame clips anything past it) */
+    .tape.l { left: 0; transform: rotate(-38deg); }
+    .tape.r { right: 0; transform: rotate(38deg); }
     .print img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
 
     /* ── PINS ── */
@@ -175,7 +176,7 @@
     .pop-row .cell-label { display: block; flex: 0 0 50px; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; }
     .pop-row .cell-links { flex-direction: row; }
     .pin-pop.editing { width: 340px; }
-    .pop-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+    .pop-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
 
     .photo-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 40px; }
     .photo-hint { font-size: 13px; color: #6b6560; line-height: 1.45; }
@@ -245,6 +246,32 @@
 
     .empty-note { font-size: 14px; color: #6b6560; padding: 16px; }
 
+    /* Close matches (real listings found with Google Lens) */
+    .match-btn { margin-top: 8px; display: inline-block; }
+    .match-btn[disabled] { color: #6b6560; text-decoration: none; cursor: default; }
+    .matches { grid-column: 2 / -1; min-width: 0; margin-top: 2px; cursor: default; }
+    .match-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .match-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; }
+    .match-title b { color: #582b36; }
+    .match-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
+    .match {
+      flex: 0 0 132px; scroll-snap-align: start; text-decoration: none; color: #433E3C;
+      background: #ffffff; border: 1px solid #e6dfd2; border-radius: 10px; overflow: hidden;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .match:hover { border-color: #582b36; box-shadow: 0 4px 12px rgba(67,62,60,0.10); }
+    .match-img { display: block; width: 100%; height: 112px; object-fit: contain; background: #f5f0e8; }
+    .match-body { display: block; padding: 8px 9px 10px; }
+    .match-price { display: block; font-size: 13px; font-weight: 700; color: #582b36; }
+    .match-name {
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      font-size: 11.5px; line-height: 1.35; margin: 2px 0 3px; color: #433E3C;
+    }
+    .match-store { display: block; font-size: 10.5px; color: #6b6560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .match-note { font-size: 12.5px; color: #6b6560; line-height: 1.45; }
+    .match-note button { font-size: 12.5px; }
+    .match-fine { font-size: 10.5px; color: #8a837c; margin-top: 4px; }
+
 
     /* ── INSIDE THE HOMEOWNER TOOLKIT (wrapper supplies folder and graph paper) ── */
     .in-toolkit, .in-toolkit body { background: transparent; min-height: 0; }
@@ -284,6 +311,8 @@
       .item-row > .text-btn { grid-row: 1; grid-column: 3; }
       .pin-pop { position: relative; left: auto !important; top: auto !important; width: auto; margin-top: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
       .lv-cell { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; }
+      .matches { grid-column: 1 / -1; }
+      .match { flex-basis: 124px; }
       .store { padding: 4px 9px; font-size: 11.5px; }
       .pin-pop.editing { width: auto; }
     }
@@ -292,6 +321,30 @@
   <script>
     // Opened from your own computer (localhost), the page uses your local Flask server so app.py changes can be tested before pushing
     var API_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '/api/vision' : 'https://studio-lou-rag.onrender.com/api/vision';
+    var MATCH_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '/api/matches' : 'https://studio-lou-rag.onrender.com/api/matches';
+
+    // Price ranges (US dollars) that sort close matches into budget levels, per category:
+    // [top of Save, top of Mid]. Anything above the second number is Splurge.
+    var PRICE_BANDS = {
+      'sofa': [1200, 3500], 'chair': [400, 1500], 'bench': [300, 1000], 'ottoman': [250, 900],
+      'coffee table': [350, 1300], 'side table': [150, 600], 'console table': [350, 1300], 'desk': [400, 1500],
+      'dining table': [700, 2800], 'dining chair': [175, 600], 'bed': [800, 2800], 'dresser': [700, 2500],
+      'nightstand': [250, 900], 'bedding': [120, 400], 'shelving': [300, 1200], 'storage': [100, 450],
+      'rug': [350, 1500], 'curtains': [80, 250], 'floor lamp': [150, 600], 'table lamp': [100, 400],
+      'pendant': [150, 700], 'chandelier': [350, 1500], 'sconce': [100, 400], 'mirror': [150, 700],
+      'art': [120, 700], 'pillow': [45, 130], 'throw': [60, 220], 'vase': [40, 150], 'decor object': [40, 150],
+      'other': [100, 500]
+    };
+    function bandFor(it) { return PRICE_BANDS[it.category] || PRICE_BANDS.other; }
+    function levelOfPrice(it, price) {
+      var b = bandFor(it);
+      return price <= b[0] ? 'save' : price <= b[1] ? 'mid' : 'splurge';
+    }
+    function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
+    function bandLabel(it, level) {
+      var b = bandFor(it);
+      return level === 'save' ? 'under ' + money(b[0]) : level === 'mid' ? money(b[0]) + ' to ' + money(b[1]) : 'over ' + money(b[1]);
+    }
     // The photo is resized to exactly what the vision model will see, so its pixel positions map straight back.
     // These must match the model in app.py's /api/vision route.
     // claude-sonnet-5-5 is on Claude's high-resolution image tier (2576 px edge, 4784 visual tokens).
@@ -619,16 +672,113 @@
     function findItem(id) { for (var i = 0; i < state.items.length; i++) if (state.items[i].id === id) return state.items[i]; return null; }
     function indexOfItem(id) { for (var i = 0; i < state.items.length; i++) if (state.items[i].id === id) return i; return -1; }
 
+    /* ---------- Close matches ---------- */
+    // Crops one piece out of the photo the model saw, using its box (or a square around a tagged pin)
+    function cropPiece(it) {
+      return new Promise(function (resolve, reject) {
+        var im = new Image();
+        im.onload = function () {
+          var W = state.sendW, H = state.sendH, x1, y1, x2, y2;
+          if (it.box) {
+            x1 = it.box[0] / 100 * W; y1 = it.box[1] / 100 * H; x2 = it.box[2] / 100 * W; y2 = it.box[3] / 100 * H;
+          } else {
+            var half = Math.min(W, H) * 0.14, cx = it.point.x / 100 * W, cy = it.point.y / 100 * H;
+            x1 = cx - half; y1 = cy - half; x2 = cx + half; y2 = cy + half;
+          }
+          // A little breathing room around the piece, and never smaller than 120 px
+          var pw = (x2 - x1) * 0.08 + 6, ph = (y2 - y1) * 0.08 + 6;
+          x1 -= pw; x2 += pw; y1 -= ph; y2 += ph;
+          if (x2 - x1 < 120) { var gx = (120 - (x2 - x1)) / 2; x1 -= gx; x2 += gx; }
+          if (y2 - y1 < 120) { var gy = (120 - (y2 - y1)) / 2; y1 -= gy; y2 += gy; }
+          x1 = clamp(x1, 0, W); y1 = clamp(y1, 0, H); x2 = clamp(x2, 0, W); y2 = clamp(y2, 0, H);
+          var cw = x2 - x1, ch = y2 - y1, k = Math.min(1, 800 / Math.max(cw, ch));
+          var c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
+          c.getContext('2d').drawImage(im, x1, y1, cw, ch, 0, 0, c.width, c.height);
+          resolve(c.toDataURL('image/jpeg', 0.86).split(',')[1]);
+        };
+        im.onerror = reject;
+        im.src = 'data:image/jpeg;base64,' + state.sendB64;
+      });
+    }
+
+    var MATCH_ERRORS = {
+      not_configured: 'Close matches are not switched on yet.',
+      limit_visitor: 'That is the limit for match searches this hour. Try again a little later, or browse the stores for now.',
+      limit_daily: 'Match searches are paused for today. Browse the stores for now.',
+      limit_monthly: 'Match searches are paused for now. Browse the stores in the meantime.'
+    };
+
+    function findMatches(it) {
+      if (!it || (it.match && it.match.status === 'loading')) return;
+      it.match = { status: 'loading' };
+      render();
+      cropPiece(it).then(function (b64) {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function () { ctrl.abort(); }, 60000);
+        return fetch(MATCH_URL, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: b64 }), signal: ctrl.signal
+        }).then(function (r) {
+          clearTimeout(timer);
+          return r.json().catch(function () { return {}; });
+        });
+      }).then(function (data) {
+        if (!findItem(it.id)) return;   // removed while searching
+        if (data && data.matches) {
+          it.match = { status: 'done', items: data.matches.map(function (m) {
+            m.level = levelOfPrice(it, m.price); return m;
+          }) };
+        } else {
+          it.match = { status: 'error', message: MATCH_ERRORS[data && data.error] || 'Could not reach the match search. Try again in a moment.' };
+        }
+        render();
+      }).catch(function () {
+        if (!findItem(it.id)) return;
+        it.match = { status: 'error', message: 'Could not reach the match search. Try again in a moment.' };
+        render();
+      });
+    }
+
+    function matchesHTML(it) {
+      var m = it.match;
+      if (m.status === 'loading') return '<p class="match-note">Looking for close matches...</p>';
+      if (m.status === 'error')
+        return '<p class="match-note">' + esc(m.message) + ' <button type="button" class="text-btn" data-act="match">Try again</button></p>';
+      var lvLabel = LEVELS.filter(function (l) { return l.id === state.level; })[0].label;
+      var here = m.items.filter(function (x) { return x.level === state.level; });
+      if (!m.items.length)
+        return '<p class="match-note">No close matches turned up for this piece. Browse the stores for similar pieces.</p>';
+      var head = '<div class="match-head"><span class="match-title"><b>Close matches</b> &middot; ' + lvLabel + ', ' + bandLabel(it, state.level) + '</span></div>';
+      if (!here.length) {
+        var others = LEVELS.filter(function (l) { return l.id !== state.level; }).map(function (l) {
+          var n = m.items.filter(function (x) { return x.level === l.id; }).length;
+          return n ? '<button type="button" class="text-btn" data-goto-level="' + l.id + '">' + n + ' at ' + l.label + '</button>' : '';
+        }).filter(Boolean);
+        return head + '<p class="match-note">None at this budget. ' + others.join(' &middot; ') + '</p>';
+      }
+      return head + '<div class="match-strip">' + here.map(function (x) {
+        return '<a class="match" href="' + esc(x.link) + '" target="_blank" rel="noopener">' +
+          (x.thumbnail ? '<img class="match-img" src="' + esc(x.thumbnail) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="match-img"></span>') +
+          '<span class="match-body"><span class="match-price">' + money(x.price) + '</span>' +
+          '<span class="match-name">' + esc(x.title) + '</span>' +
+          '<span class="match-store">' + esc(x.store) + '</span></span></a>';
+      }).join('') + '</div>' +
+      '<p class="match-fine">Found with Google Lens. Prices come from each store and can change.</p>';
+    }
+
     function rowHTML(it, i) {
       return '<div class="item-row' + (state.active === it.id ? ' active' : '') + '" data-id="' + it.id + '">' +
         '<span class="item-num">' + (i + 1) + '</span>' +
         '<div class="row-piece"><span class="item-name">' + esc(it.name || 'New piece') + '</span>' +
-          (it.details ? '<span class="item-details">' + esc(it.details) + '</span>' : '') + '</div>' +
+          (it.details ? '<span class="item-details">' + esc(it.details) + '</span>' : '') +
+          (it.match ? '' : '<button type="button" class="text-btn match-btn" data-act="match">Find close matches</button>') + '</div>' +
         shownLevels().map(function (lv) {
           return '<div class="lv-cell" data-level="' + lv.id + '"><span class="cell-label">' + lv.label + '</span>' +
             '<span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
         }).join('') +
-        '<button type="button" class="text-btn" data-act="edit">Edit</button></div>';
+        '<button type="button" class="text-btn" data-act="edit">Edit</button>' +
+        (it.match ? '<div class="matches">' + matchesHTML(it) + '</div>' : '') + '</div>';
     }
 
     function render() {
@@ -648,7 +798,7 @@
       var list = $('itemList');
       list.className = 'shop-list';
       var cols = '<div class="list-cols"><span></span><span>Piece</span>' +
-        shownLevels().map(function (lv) { return '<span>' + lv.label + ' stores</span>'; }).join('') +
+        shownLevels().map(function (lv) { return '<span>Browse ' + lv.label + ' stores</span>'; }).join('') +
         '<span></span></div>';
       list.innerHTML = state.items.length ? cols + state.items.map(rowHTML).join('') :
         '<p class="empty-note">No pieces left. Tap "Tag something we missed" to add one.</p>';
@@ -754,7 +904,9 @@
           '<div class="edit-actions" style="margin-top:12px">' +
             '<button type="button" class="text-btn muted" data-act="remove">Remove this piece</button>' +
             '<button type="button" class="btn-primary btn-sm" data-act="done">Done</button></div>'
-        : '<div class="pop-foot"><button type="button" class="text-btn" data-act="edit">Edit</button></div>');
+        : '<div class="pop-foot"><button type="button" class="text-btn" data-act="match">' +
+            (it.match ? 'See close matches' : 'Find close matches') + '</button>' +
+            '<button type="button" class="text-btn" data-act="edit">Edit</button></div>');
       pop.classList.toggle('editing', editing);
       pop.classList.remove('hidden');
       placePop(it);
@@ -838,7 +990,15 @@
         down = false;
         pin.classList.remove('dragging');
         if (!moved) setActive(state.active === it.id ? null : it.id, 'pin');
-        else setActive(it.id, 'drag');
+        else {
+          // A moved pin means the box was on the wrong spot: the crop for matches now follows the pin,
+          // and any matches from the old spot are cleared
+          if (it.box && (it.point.x < it.box[0] || it.point.x > it.box[2] || it.point.y < it.box[1] || it.point.y > it.box[3])) {
+            it.box = null;
+            if (it.match && it.match.status !== 'loading') { it.match = null; renderList(); }
+          }
+          setActive(it.id, 'drag');
+        }
       }
       pin.addEventListener('pointerup', end);
       pin.addEventListener('pointercancel', end);
@@ -879,7 +1039,10 @@
       if (!row) return;
       var id = +row.getAttribute('data-id');
       if (e.target.closest('[data-act="edit"]')) { openEdit(id); return; }
-      if (e.target.closest('a')) return;
+      var lvBtn = e.target.closest('[data-goto-level]');
+      if (lvBtn) { state.level = lvBtn.getAttribute('data-goto-level'); render(); return; }
+      if (e.target.closest('[data-act="match"]')) { findMatches(findItem(id)); return; }
+      if (e.target.closest('a') || e.target.closest('.matches')) return;
       setActive(state.active === id ? null : id, 'row');
     }
 
@@ -891,6 +1054,13 @@
       if (!act) return;
       var a = act.getAttribute('data-act');
       if (a === 'edit') openEdit(it.id);
+      else if (a === 'match') {
+        var mid = it.id;
+        setActive(mid, 'row');
+        if (!it.match) findMatches(it);
+        var row = document.querySelector('.item-row[data-id="' + mid + '"]');
+        if (row && row.scrollIntoView) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       else if (a === 'done') finishEdit(it);
       else if (a === 'remove') removeItem(it.id);
     }
@@ -1034,138 +1204,300 @@
       });
     }
 
+    // Brand fonts for the PDF, loaded only when someone downloads one. If they can't load,
+    // the PDF falls back to the built-in Helvetica and Times so the download still works.
+    var FONT_URL = 'https://studio-lou-rag.onrender.com/static/fonts/';
+    var PDF_FONTS = [
+      { file: 'DMSans-Regular.ttf',     name: 'DMSans',  style: 'normal' },
+      { file: 'DMSans-Medium.ttf',      name: 'DMSansMedium', style: 'normal' },
+      { file: 'DMSans-SemiBold.ttf',    name: 'DMSansSemi',   style: 'normal' },
+      { file: 'CrimsonText-Italic.ttf', name: 'Crimson', style: 'italic' }
+    ];
+    var fontCache = null;
+    function loadFonts() {
+      if (fontCache) return Promise.resolve(fontCache);
+      return Promise.all(PDF_FONTS.map(function (f) {
+        return fetch(FONT_URL + f.file).then(function (r) {
+          if (!r.ok) throw new Error('font ' + r.status);
+          return r.arrayBuffer();
+        }).then(function (buf) {
+          var bytes = new Uint8Array(buf), bin = '';
+          for (var i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+          return { f: f, b64: btoa(bin) };
+        });
+      })).then(function (list) { fontCache = list; return list; }).catch(function () { return null; });
+    }
+
     function exportPDF() {
       if (!window.jspdf) { alert('The PDF maker did not load. Refresh the page and try again.'); return; }
       if (state.editing != null) finishEdit(findItem(state.editing));
       var btn = $('pdfBtn');
       btn.disabled = true;
       var L = pdfLayout();
-      Promise.all([loadLogo(), pinnedPhoto(L.pin, L.iw)]).then(function (res) {
-        try { buildPDF(res[0], res[1], L); } finally { btn.disabled = false; }
+      Promise.all([loadLogo(), pinnedPhoto(L.pin, L.iw), loadFonts()]).then(function (res) {
+        try { buildPDF(res[0], res[1], L, res[2]); } finally { btn.disabled = false; }
       });
     }
 
     // Photo size on the page: full width for wide photos, capped height for tall phone photos
     function pdfLayout() {
-      var pageW = 612, margin = 56, contentW = pageW - margin * 2;
-      var maxH = state.sendH > state.sendW ? 395 : 360;
+      var contentW = 612 - 48 * 2;
+      var maxH = state.sendH > state.sendW ? 380 : 330;
       var iw = contentW, ih = iw * state.sendH / state.sendW;
       if (ih > maxH) { ih = maxH; iw = ih * state.sendW / state.sendH; }
-      return { iw: iw, ih: ih, pin: 17 };
+      return { iw: iw, ih: ih, pin: 14 };
     }
 
-    function buildPDF(logo, photo, L) {
+    var STUDIO_URL = 'https://www.studiolouinteriors.com';
+
+    function buildPDF(logo, photo, L, fonts) {
       var doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' });
-      var margin = 56, pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
-      var contentW = pageW - margin * 2, y = margin;
-      function ascii(t) { return String(t).replace(/[‘’′]/g, "'").replace(/[“”″]/g, '"').replace(/[–—]/g, '-').replace(/[^\x20-\xFF]/g, ''); }
+      var M = 48, pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+      var W = pageW - M * 2, bottom = pageH - 54, y = M;
 
-      // Header
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(67, 62, 60);
-      doc.text('Shop the Room', margin, y + 6);
-      if (logo) doc.addImage(logo, 'PNG', pageW - margin - 54, margin - 18, 54, 54);
-      y += 28;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(107, 101, 96);
-      var date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      var n = state.items.length;
-      doc.text(n + (n === 1 ? ' piece' : ' pieces') + '  ·  ' + date, margin, y);
-      y += 26;
+      // Fonts: brand fonts when they loaded, built-in ones when they didn't
+      var hasFonts = !!fonts;
+      if (hasFonts) fonts.forEach(function (x) {
+        doc.addFileToVFS(x.f.file, x.b64);
+        doc.addFont(x.f.file, x.f.name, x.f.style);
+      });
+      var FONT = {
+        body:   hasFonts ? ['DMSans', 'normal']       : ['helvetica', 'normal'],
+        medium: hasFonts ? ['DMSansMedium', 'normal'] : ['helvetica', 'normal'],
+        semi:   hasFonts ? ['DMSansSemi', 'normal']   : ['helvetica', 'bold'],
+        serif:  hasFonts ? ['Crimson', 'italic']      : ['times', 'italic']
+      };
+      function use(f, size, rgb) { doc.setFont(f[0], f[1]); doc.setFontSize(size); doc.setTextColor(rgb[0], rgb[1], rgb[2]); }
+      var INK = [67, 62, 60], GRAY = [107, 101, 96], WINE = [88, 43, 54], RULE = [208, 201, 188], SOFT = [232, 226, 215], GREEN = [166, 190, 71];
+      // Plain-text cleanup: brand fonts cover Latin letters and curly quotes; built-in fonts only basic Latin
+      function clean(t) {
+        t = String(t || '').replace(/[–—]/g, '-');
+        if (!hasFonts) t = t.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+        return t.replace(/[^\x20-\x7E -ſ‘’“”]/g, '');
+      }
+      // Shortens text to fit a width, ending with "..." (measured in the current font)
+      function fit(t, room) {
+        if (doc.getTextWidth(t) <= room) return t;
+        var cut = t;
+        while (cut.length > 1 && doc.getTextWidth(cut.trim() + '...') > room) cut = cut.slice(0, -1);
+        return cut.length > 1 ? cut.trim() + '...' : '';
+      }
+      function hair(yy, rgb, w) { doc.setDrawColor(rgb[0], rgb[1], rgb[2]); doc.setLineWidth(w || 0.5); doc.line(M, yy, M + W, yy); }
 
-      // Style line
+      // Hand-drawn marks. A small seeded wobble keeps each mark slightly different
+      // but the same every time the PDF is made.
+      function wobble(seed) { var t = Math.sin(seed * 12.9898) * 43758.5453; return t - Math.floor(t); }
+      function pen(rgb, w) {
+        doc.setDrawColor(rgb[0], rgb[1], rgb[2]); doc.setLineWidth(w);
+        doc.setLineCap('round'); doc.setLineJoin('round');
+      }
+      // A pen underline: a long, slightly bowed stroke with a lighter second pass that ends early
+      function handUnderline(x1, x2, yy, rgb, w, seed) {
+        var len = x2 - x1, a = (wobble(seed) - 0.5) * 1.2;
+        pen(rgb, w);
+        doc.lines([[len * 0.3, -1.4 + a, len * 0.68, 1.1, len, -0.8 + a]], x1, yy + 0.6, [1, 1], 'S');
+        pen(rgb, w * 0.55);
+        var s2 = x1 + len * 0.06, len2 = len * 0.82;
+        doc.lines([[len2 * 0.35, 1.2, len2 * 0.7, -0.6 - a, len2, 0.9]], s2, yy + 2.9, [1, 1], 'S');
+        doc.setLineCap('butt'); doc.setLineJoin('miter');
+      }
+      // A loose hand-drawn circle that overshoots where it started, like a pen loop
+      function handCircle(cx, cy, r, rgb, w, seed) {
+        var start = -2.2 + wobble(seed) * 0.8, sweep = Math.PI * 2 + 0.45, n = 44;
+        var p1 = wobble(seed + 1) * 6, p2 = wobble(seed + 2) * 6;
+        var pts = [];
+        for (var k = 0; k <= n; k++) {
+          var th = start + sweep * k / n;
+          var rr = r * (1 + 0.06 * Math.sin(2 * th + p1) + 0.035 * Math.sin(3 * th + p2)) * (1 + 0.05 * k / n);
+          pts.push([cx + rr * 1.07 * Math.cos(th), cy + rr * 0.95 * Math.sin(th)]);
+        }
+        var segs = [];
+        for (var j = 1; j < pts.length; j++) segs.push([pts[j][0] - pts[j - 1][0], pts[j][1] - pts[j - 1][1]]);
+        pen(rgb, w);
+        doc.lines(segs, pts[0][0], pts[0][1], [1, 1], 'S');
+        doc.setLineCap('butt'); doc.setLineJoin('miter');
+      }
+
+      /* ---- Header ---- */
+      if (logo) doc.addImage(logo, 'PNG', pageW - M - 46, M - 8, 46, 46);
+      use(FONT.medium, 26, WINE);
+      doc.setCharSpace(-0.5);
+      doc.text('Shop the Room', M, y + 18);
+      doc.setCharSpace(0);
+      y += 30;
       if (state.style) {
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(107, 101, 96);
-        doc.text('YOUR ROOM READS AS', margin, y);
-        y += 17;
-        doc.setFont('times', 'normal'); doc.setFontSize(19); doc.setTextColor(88, 43, 54);
-        var styleLines = doc.splitTextToSize(ascii(state.style), contentW - 70);
-        doc.text(styleLines, margin, y);
-        y += styleLines.length * 20 + 10;
+        y += 10;
+        use(FONT.semi, 7, GRAY);
+        doc.setCharSpace(1);
+        doc.text('YOUR ROOM READS AS', M, y);
+        doc.setCharSpace(0);
+        y += 21;
+        use(FONT.serif, 19, INK);
+        var styleLines = doc.splitTextToSize(clean(state.style), W - 70);
+        doc.text(styleLines, M, y);
+        var lastW = doc.getTextWidth(styleLines[styleLines.length - 1]);
+        y += (styleLines.length - 1) * 21;
+        handUnderline(M - 2, M + lastW + 4, y + 5, GREEN, 1.7, 3);
+        y += 30;
+      } else {
+        y += 6;
       }
 
-      // Pinned photo
+      /* ---- Photo ---- */
       if (photo) {
-        var ix = margin + (contentW - L.iw) / 2;
+        var ix = M + (W - L.iw) / 2;
         doc.addImage(photo, 'JPEG', ix, y, L.iw, L.ih);
-        doc.setDrawColor(208, 201, 188); doc.setLineWidth(1); doc.rect(ix, y, L.iw, L.ih);
-        y += L.ih + 30;
+        y += L.ih + 26;
       }
 
-      // Shopping list: one block per piece, Save, Mid, and Splurge rows with clickable store names
-      var labelX = margin + 30, linksX = margin + 98;
-      function blockHeight(it) {
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-        var d = it.details ? doc.splitTextToSize(ascii(it.details), contentW - 30).length : 0;
-        return 15 + d * 12 + 6 + 9 + LEVELS.length * 17 + 4 + 22;
+      /* ---- Table ---- */
+      // Columns: number, piece (name + details), then one column per budget level
+      var numW = 26, pieceW = 190, levelW = (W - numW - pieceW) / LEVELS.length;
+      var colX = [M, M + numW];
+      LEVELS.forEach(function (lv, k) { colX.push(M + numW + pieceW + k * levelW); });
+      var storeW = levelW - 10;
+
+      function tableHead() {
+        use(FONT.semi, 6.8, GRAY);
+        doc.setCharSpace(0.9);
+        doc.text('PIECE', colX[1], y);
+        LEVELS.forEach(function (lv, k) { doc.text(lv.label.toUpperCase(), colX[2 + k], y); });
+        doc.setCharSpace(0);
+        y += 7;
+        hair(y, INK, 0.6);
       }
-      function newPage() { doc.addPage(); y = margin; }
-      function heading() {
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
-        doc.text('Pieces to shop', margin, y);
-        y += 20;
+      // Measures one row so it never splits across pages
+      function rowInfo(it) {
+        use(FONT.body, 7.8, GRAY);
+        var det = it.details ? doc.splitTextToSize(clean(it.details), pieceW - 14).slice(0, 3) : [];
+        use(FONT.semi, 9.2, INK);
+        var nameLines = doc.splitTextToSize(clean(it.name || 'New piece'), pieceW - 14).slice(0, 2);
+        var left = nameLines.length * 11.5 + det.length * 10;
+        var right = STORES_PER_LEVEL * 12;
+        return { name: nameLines, det: det, h: Math.max(left, right) + 18 };
       }
-      if (y + 40 + blockHeight(state.items[0] || {}) > pageH - margin - 20) newPage();
-      heading();
+
+      // Intro line, then the column headings
+      var first = state.items.length ? rowInfo(state.items[0]).h : 0;
+      if (y + 44 + first > bottom) { doc.addPage(); y = M; }
+      use(FONT.semi, 11, INK);
+      doc.text('Pieces to shop', M, y);
+      use(FONT.body, 7.8, GRAY);
+      doc.text('Tap a store to see similar pieces at that budget. Selection and prices change often.', M + W, y, { align: 'right' });
+      y += 20;
+      tableHead();
 
       state.items.forEach(function (it, i) {
-        if (y + blockHeight(it) > pageH - margin - 20) newPage();
-        // Number and name
-        doc.setFillColor(88, 43, 54); doc.circle(margin + 9, y - 4, 9, 'F');
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(250, 249, 246);
-        doc.text(String(i + 1), margin + 9, y - 0.8, { align: 'center' });
-        doc.setFontSize(12.5); doc.setTextColor(88, 43, 54);
-        doc.text(ascii(it.name || 'New piece'), labelX, y);
-        y += 15;
-        if (it.details) {
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(107, 101, 96);
-          var dl = doc.splitTextToSize(ascii(it.details), contentW - 30);
-          doc.text(dl, labelX, y);
-          y += dl.length * 12;
+        var r = rowInfo(it);
+        if (y + r.h > bottom) { doc.addPage(); y = M + 6; tableHead(); }
+        var top = y + 15;   // first baseline in the row
+
+        // Number, matching the pins on the photo
+        handCircle(colX[0] + 7, top - 3.1, 6.6, WINE, 0.75, i + 7);
+        use(FONT.semi, 7.6, WINE);
+        doc.text(String(i + 1), colX[0] + 7, top - 0.4, { align: 'center' });
+
+        // Name and details
+        use(FONT.semi, 9.2, INK);
+        doc.text(r.name, colX[1], top, { lineHeightFactor: 1.25 });
+        var dy = top + r.name.length * 11.5;
+        if (r.det.length) {
+          use(FONT.body, 7.8, GRAY);
+          doc.text(r.det, colX[1], dy - 1.5, { lineHeightFactor: 1.28 });
         }
-        y += 6;
-        // Store rows on a light card
-        var cardH = LEVELS.length * 17 + 6;
-        doc.setFillColor(245, 240, 232); doc.roundedRect(labelX - 8, y - 4, contentW - 22, cardH, 5, 5, 'F');
-        y += 9;
+
+        // Stores: two per level, stacked, each a link to that store's search
         var terms = searchTerms(it);
-        LEVELS.forEach(function (lv) {
-          doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(107, 101, 96);
-          doc.text(lv.label.toUpperCase(), labelX, y);
-          var x = linksX;
-          doc.setFontSize(10);
-          if (!terms) {
-            doc.setFont('helvetica', 'normal'); doc.setTextColor(185, 176, 161);
-            doc.text('No search words', x, y);
-          } else {
-            pickStores(it, lv.id).forEach(function (s, k) {
-              if (k) {
-                doc.setFont('helvetica', 'normal'); doc.setTextColor(185, 176, 161);
-                doc.text('·', x + 6, y); x += 18;
-              }
-              doc.setFont('helvetica', 'bold'); doc.setTextColor(88, 43, 54);
-              var label = ascii(s.name), w = doc.getTextWidth(label);
-              doc.textWithLink(label, x, y, { url: storeURL(s, terms) });
-              doc.setDrawColor(88, 43, 54); doc.setLineWidth(0.5); doc.line(x, y + 1.6, x + w, y + 1.6);
-              x += w;
-            });
-          }
+        LEVELS.forEach(function (lv, k) {
+          var sy = top;
+          if (!terms) { use(FONT.body, 8.2, RULE); doc.text('-', colX[2 + k], sy); return; }
+          pickStores(it, lv.id).forEach(function (s) {
+            use(FONT.medium, 8.4, WINE);
+            var label = fit(clean(s.name), storeW);
+            doc.textWithLink(label, colX[2 + k], sy, { url: storeURL(s, terms) });
+            sy += 12;
+          });
+        });
+
+        y += r.h;
+        if (i < state.items.length - 1) hair(y, SOFT, 0.5);
+      });
+      hair(y, INK, 0.6);
+      y += 34;
+
+      /* ---- Close matches the person found ---- */
+      var found = [];
+      state.items.forEach(function (it, i) {
+        if (!it.match || it.match.status !== 'done' || !it.match.items.length) return;
+        var order = { save: 0, mid: 1, splurge: 2 };
+        var picks = it.match.items.slice(0, 12).sort(function (a, b) {
+          var sa = a.level === state.level ? -1 : order[a.level], sb = b.level === state.level ? -1 : order[b.level];
+          return sa - sb || a.price - b.price;
+        }).slice(0, 4);
+        found.push({ n: i + 1, it: it, picks: picks });
+      });
+      if (found.length) {
+        if (y + 70 > bottom) { doc.addPage(); y = M + 6; }
+        use(FONT.semi, 11, INK);
+        doc.text('Close matches', M, y);
+        use(FONT.body, 7.8, GRAY);
+        doc.text('Similar pieces found with Google Lens. Prices come from each store and can change.', M + W, y, { align: 'right' });
+        y += 18;
+        found.forEach(function (f) {
+          var need = 15 + f.picks.length * 13 + 19;
+          if (y + need > bottom) { doc.addPage(); y = M + 6; }
+          handCircle(M + 7, y - 3.1, 6.6, WINE, 0.75, f.n + 7);
+          use(FONT.semi, 7.6, WINE);
+          doc.text(String(f.n), M + 7, y - 0.4, { align: 'center' });
+          use(FONT.semi, 9.2, INK);
+          doc.text(clean(f.it.name || 'New piece'), colX[1], y);
+          y += 15;
+          f.picks.forEach(function (m) {
+            use(FONT.semi, 8.4, WINE);
+            doc.text(money(m.price), colX[1], y);
+            use(FONT.body, 7, GRAY);
+            doc.setCharSpace(0.6);
+            doc.text(m.level.toUpperCase(), colX[1] + 52, y);
+            doc.setCharSpace(0);
+            use(FONT.medium, 8.4, WINE);
+            var store = clean(m.store);
+            doc.textWithLink(store, colX[1] + 100, y, { url: m.link });
+            var sw = doc.getTextWidth(store);
+            use(FONT.body, 8.2, INK);
+            var title = fit(clean(m.title), M + W - (colX[1] + 100 + sw + 10));
+            if (title) doc.textWithLink(title, colX[1] + 100 + sw + 10, y, { url: m.link });
+            y += 13;
+          });
+          y += 2;
+          hair(y, SOFT, 0.5);
           y += 17;
         });
-        y += 4;
-        // Search words, so the piece can be searched anywhere
-        if (terms) {
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(107, 101, 96);
-          doc.text('Search words: ' + ascii(terms), labelX, y);
-        }
-        y += 22;
-      });
+        y += 12;
+      }
 
-      // Footer on every page
+      /* ---- Closing line ---- */
+      if (y + 70 > bottom) { doc.addPage(); y = M + 10; }
+      use(FONT.serif, 17, WINE);
+      doc.text('Want help pulling the room together?', M, y);
+      y += 18;
+      use(FONT.body, 8.6, INK);
+      var pre = 'Studio Lou e-design turns a room you love into a plan for your own space. ';
+      doc.text(pre, M, y);
+      use(FONT.medium, 8.6, WINE);
+      var lx = M + (function () { use(FONT.body, 8.6, INK); return doc.getTextWidth(pre); })();
+      use(FONT.medium, 8.6, WINE);
+      var linkText = 'studiolouinteriors.com';
+      doc.textWithLink(linkText, lx, y, { url: STUDIO_URL });
+      handUnderline(lx - 1, lx + doc.getTextWidth(linkText) + 2, y + 2.2, GREEN, 1.2, 11);
+
+      /* ---- Footer on every page ---- */
       var pages = doc.internal.getNumberOfPages();
       for (var pg = 1; pg <= pages; pg++) {
         doc.setPage(pg);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(107, 101, 96);
-        doc.text('Store names open that store\'s search for similar pieces. Results, prices, and stock change over time.', pageW / 2, pageH - 42, { align: 'center' });
-        doc.text('Made with the Studio Lou Shop the Room tool  ·  studiolouinteriors.com', pageW / 2, pageH - 30, { align: 'center' });
+        hair(pageH - 38, RULE, 0.5);
+        use(FONT.body, 7, GRAY);
+        doc.textWithLink('Studio Lou Interiors  ·  studiolouinteriors.com', M, pageH - 26, { url: STUDIO_URL });
+        if (pages > 1) doc.text(pg + ' / ' + pages, M + W, pageH - 26, { align: 'right' });
       }
       doc.save('shop-the-room.pdf');
     }
