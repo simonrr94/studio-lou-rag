@@ -892,6 +892,32 @@ def _keep(item):
     return currency in ("$", "USD", "US$")
 
 
+# Product thumbnails for the PDF. Browsers can't copy Google's thumbnails into a PDF directly,
+# so the page fetches them through here. Only image hosts that Lens results use are allowed,
+# so this can't be used to fetch anything else.
+THUMB_HOSTS = ("gstatic.com", "googleusercontent.com", "serpapi.com")
+
+
+@app.route("/api/thumb")
+def shop_thumb():
+    url = request.args.get("u", "")
+    host = urllib.parse.urlparse(url).hostname or ""
+    if not url.startswith("https://") or not any(host == h or host.endswith("." + h) for h in THUMB_HOSTS):
+        return "", 400
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            kind = r.headers.get("Content-Type", "")
+            body = r.read(2_000_001)
+    except Exception:
+        return "", 502
+    if not kind.startswith("image/") or len(body) > 2_000_000:
+        return "", 400
+    resp = app.response_class(body, mimetype=kind.split(";")[0])
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
 @app.route("/api/crop/<token>.jpg")
 def shop_crop(token):
     if not re.fullmatch(r"[a-f0-9]{32}", token):
@@ -966,7 +992,7 @@ def shop_matches():
             "link": link,
             "thumbnail": item.get("thumbnail") or "",
         })
-        if len(matches) >= 30:
+        if len(matches) >= 60:
             break
     with open(cache_path, "w") as f:
         json.dump(matches, f)
