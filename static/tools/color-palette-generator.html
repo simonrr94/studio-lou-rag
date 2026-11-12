@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Color Palette Generator: Studio Lou</title>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&family=DM+Mono:wght@500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { background: transparent; font-family: 'DM Sans', sans-serif; color: #433E3C; padding: 0; }
@@ -58,6 +58,109 @@
     .restart-wrap { text-align: center; margin-top: 24px; }
     .restart-btn { background: none; border: none; font-size: 13px; color: #6b6560; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
 
+    /* ── PALETTE BOARD (sized by priority) ── */
+    .board-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .board-hint { font-size: 13px; color: #6b6560; }
+    .board-hint .touch { display: none; }
+    @media (hover: none) { .board-hint .mouse { display: none; } .board-hint .touch { display: inline; } }
+    .save-btn { padding: 8px 18px; background: #fff; color: #582b36; font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif; border: 1px solid #582b36; border-radius: 50px; cursor: pointer; transition: background 0.2s; }
+    .save-btn:hover { background: #f5eef0; }
+    .save-btn:disabled { opacity: 0.5; cursor: wait; }
+
+    .board {
+      display: grid;
+      grid-template-columns: 58fr 42fr;
+      height: 460px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(67,62,60,0.12), 0 8px 24px rgba(67,62,60,0.10);
+      margin-bottom: 32px;
+    }
+    .board-side { display: flex; flex-direction: column; min-height: 0; }
+    /* Priority: secondary > trim > accent, with a floor so the accent popup always fits */
+    .board-side .chip:nth-child(1) { flex: 3 1 0; }
+    .board-side .chip:nth-child(2) { flex: 2 1 0; }
+    .board-side .chip:nth-child(3) { flex: 1.4 1 0; }
+    .chip {
+      position: relative;
+      min-height: 104px;
+      background-color: var(--c);
+      cursor: pointer;
+      outline: none;
+      overflow: hidden;
+    }
+    /* Paper grain + soft edge shading so each chip reads as a textured card */
+    .chip::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.45 0 0 0 0 0.4 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode: multiply;
+      opacity: 0.22;
+      pointer-events: none;
+    }
+    .chip::after {
+      content: '';
+      position: absolute; inset: 0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.10);
+      pointer-events: none;
+    }
+    .chip-label { position: absolute; left: 22px; right: 22px; bottom: 18px; }
+    .chip-name {
+      font-family: 'Crimson Text', serif;
+      font-style: italic;
+      font-weight: 600;
+      font-size: 30px;
+      line-height: 1.05;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      text-shadow: 0 1px 0 var(--hi), 0 -1px 0 var(--lo);
+    }
+    .chip.primary .chip-name { font-size: 40px; }
+    .chip-hex {
+      font-family: 'DM Mono', ui-monospace, monospace;
+      font-weight: 500;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      margin-top: 4px;
+      color: var(--ink);
+      text-shadow: 0 1px 0 var(--hi), 0 -1px 0 var(--lo);
+    }
+    /* Hover / tap popup with the short description */
+    .chip-pop {
+      position: absolute; inset: 8px;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: rgba(250, 246, 238, 0.78);
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      pointer-events: none;
+    }
+    .chip.primary .chip-pop { inset: auto 14px 14px 14px; padding: 16px 20px; }
+    .chip-pop-role { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #582b36; margin-bottom: 4px; }
+    .chip-pop-text { font-size: 14px; line-height: 1.4; color: #433E3C; }
+    @media (hover: hover) { .chip:hover .chip-pop { opacity: 1; transform: none; } }
+    .chip.open .chip-pop, .chip:focus-visible .chip-pop { opacity: 1; transform: none; }
+    .chip:focus-visible { box-shadow: inset 0 0 0 3px rgba(88,43,54,0.55); }
+
+    .list-label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6560; margin-bottom: 12px; }
+
+    @media (max-width: 560px) {
+      .board { height: 420px; grid-template-columns: 54fr 46fr; }
+      .chip { min-height: 96px; }
+      .chip-label { left: 14px; right: 12px; bottom: 12px; }
+      .chip-name { font-size: 20px; }
+      .chip.primary .chip-name { font-size: 28px; }
+      .chip-hex { font-size: 10px; }
+      .chip-pop { padding: 8px 10px; inset: 6px; }
+      .chip-pop-text { font-size: 12.5px; }
+      .swatch-card { grid-template-columns: 64px 1fr; }
+      .swatch-info { padding: 16px 18px; }
+    }
+
     /* ── TOOL HEADER ── */
     .tool-header { padding: 0 0 8px; }
     .tool-title {
@@ -96,7 +199,7 @@
   <div class="tool-header">
     <h1 class="tool-title">Color Palette Generator</h1>
     <div class="tool-num">TOOL 02</div>
-    <p class="tool-desc">Working around an art piece, an existing paint color, or just need a starting point? Answer a few quick questions and we'll build a complete four-color palette (primary wall, secondary surface, accent, and trim) with real Sherwin-Williams and Benjamin Moore color recommendations for each.</p>
+    <p class="tool-desc">Working around an art piece, an existing paint color, or just need a starting point? Answer a few quick questions to get a complete four-color palette (primary wall, secondary surface, accent, and trim) with real Sherwin-Williams and Benjamin Moore color recommendations for each.</p>
   </div>
 
   <div id="quizArea">
@@ -108,7 +211,7 @@
     <!-- Step 1: Room -->
     <div class="step active" id="step1">
       <div class="step-question">Which room is this for?</div>
-      <div class="step-hint">We'll tailor the palette to how the space is used and what light it typically gets.</div>
+      <div class="step-hint">The palette is tailored to how the space is used and what light it typically gets.</div>
       <div class="select-wrap">
         <select id="room">
           <option value="" disabled selected>Select a room</option>
@@ -181,7 +284,7 @@
     <!-- Step 5: Color comfort -->
     <div class="step" id="step5">
       <div class="step-question">How much color are you comfortable with?</div>
-      <div class="step-hint">There's no wrong answer: this helps us calibrate the palette to where you actually want to land.</div>
+      <div class="step-hint">There's no wrong answer: this calibrates the palette to where you actually want to land.</div>
       <div class="pill-group" id="color-comfort">
         <button class="pill" data-value="keep it mostly neutral">Mostly neutral</button>
         <button class="pill" data-value="a mix of neutral and color">Mix of neutral and color</button>
@@ -206,6 +309,12 @@
   <div class="results" id="results">
     <div class="divider"></div>
     <div class="palette-intro" id="palette-intro"></div>
+    <div class="board-head">
+      <div class="board-hint"><span class="mouse">Hover over a color to see why it works.</span><span class="touch">Tap a color to see why it works.</span></div>
+      <button class="save-btn" id="save-btn" onclick="savePalette()">Save palette</button>
+    </div>
+    <div class="board" id="board"></div>
+    <div class="list-label">Paint colors</div>
     <div class="swatch-stack" id="swatch-stack"></div>
     <p class="sample-note">Paint colors shown are recommendations based on your inputs. Order samples before committing: colors read differently depending on your specific lighting and finishes.</p>
     <div class="restart-wrap"><button class="restart-btn" onclick="resetTool()">← Start over</button></div>
@@ -276,17 +385,17 @@ Return this exact structure:
 {
   "intro": "2-3 sentence paragraph explaining the palette logic for this specific room and situation. Warm, direct, professional: written as advice from a designer who knows what they're doing. Reference the user's specific inputs.",
   "colors": [
-    { "role": "Primary Wall", "name": "A descriptive name for this color in plain language", "sw_name": "Exact Sherwin-Williams paint name", "sw_number": "SW XXXX", "bm_name": "Exact Benjamin Moore paint name", "bm_number": "BM XXXX or OC-XXX or HC-XXX", "hex": "#xxxxxx", "why": "One specific sentence explaining why this color works for this person's exact situation." },
-    { "role": "Secondary Surface", "name": "...", "sw_name": "...", "sw_number": "...", "bm_name": "...", "bm_number": "...", "hex": "...", "why": "..." },
-    { "role": "Accent", "name": "...", "sw_name": "...", "sw_number": "...", "bm_name": "...", "bm_number": "...", "hex": "...", "why": "..." },
-    { "role": "Trim", "name": "...", "sw_name": "...", "sw_number": "...", "bm_name": "...", "bm_number": "...", "hex": "...", "why": "..." }
+    { "role": "Primary Wall", "name": "A descriptive name for this color in plain language, two or three words", "sw_name": "Exact Sherwin-Williams paint name", "sw_number": "SW XXXX", "bm_name": "Exact Benjamin Moore paint name", "bm_number": "BM XXXX or OC-XXX or HC-XXX", "hex": "#xxxxxx", "why": "One specific sentence explaining why this color works for this person's exact situation.", "short": "A shorter version of why, 8 to 12 words, a complete phrase that stands on its own." },
+    { "role": "Secondary Surface", "name": "...", "sw_name": "...", "sw_number": "...", "bm_name": "...", "bm_number": "...", "hex": "...", "why": "...", "short": "..." },
+    { "role": "Accent", "name": "...", "sw_name": "...", "sw_number": "...", "bm_name": "...", "bm_number": "...", "hex": "...", "why": "...", "short": "..." },
+    { "role": "Trim", "name": "...", "sw_name": "...", "sw_number": "...", "bm_name": "...", "bm_number": "...", "hex": "...", "why": "...", "short": "..." }
   ]
 }
 
-Rules: Only recommend real, currently available paint colors from Sherwin-Williams and Benjamin Moore. The four colors must work together as a cohesive palette. Be specific to the user's inputs. Never use em dashes. Trim is almost always a clean white or soft white.`;
+Rules: Only recommend real, currently available paint colors from Sherwin-Williams and Benjamin Moore. The four colors must work together as a cohesive palette. Be specific to the user's inputs. Never use em dashes. Never use \"we,\" \"us,\" or \"our\"; speak directly to the reader as \"you.\" Trim is almost always a clean white or soft white.`;
 
   try {
-    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system, messages: [{ role: 'user', content: 'Room: ' + room + '\nExisting fixed colors: ' + existing + '\nLighting: ' + lighting + '\nDesired feeling: ' + feeling + '\nColor comfort level: ' + comfort + '\n\nRecommend a complete 4-color paint palette for this room.' }], max_tokens: 1000 }) });
+    const res = await fetch('https://studio-lou-rag.onrender.com/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system, messages: [{ role: 'user', content: 'Room: ' + room + '\nExisting fixed colors: ' + existing + '\nLighting: ' + lighting + '\nDesired feeling: ' + feeling + '\nColor comfort level: ' + comfort + '\n\nRecommend a complete 4-color paint palette for this room.' }], max_tokens: 1400 }) });
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
     const parsed = JSON.parse(data.content[0].text.replace(/```json|```/g, '').trim());
@@ -301,8 +410,88 @@ Rules: Only recommend real, currently available paint colors from Sherwin-Willia
   }
 }
 
+let currentPalette = null;
+
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function hexToRgb(hex) {
+  const h = hexForSwatch(hex).slice(1);
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+function mix(rgb, target, t) {
+  return rgb.map((v, i) => Math.round(v + (target[i] - v) * t));
+}
+function luminance(rgb) {
+  const [r, g, b] = rgb.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+/* Embossed type: ink is a deeper (or lighter) shade of the chip color,
+   with a highlight below and a shadow above so it reads as pressed into the card. */
+function inkFor(hex) {
+  const rgb = hexToRgb(hex);
+  const light = luminance(rgb) > 0.32;
+  const ink = light ? mix(rgb, [42, 34, 32], 0.74) : mix(rgb, [255, 250, 242], 0.5);
+  return {
+    light,
+    ink: 'rgb(' + ink.join(',') + ')',
+    hi: light ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.16)',
+    lo: light ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.45)'
+  };
+}
+
+/* Fallback if the short line is missing: first clause of "why", trimmed on a word boundary. */
+function shortFor(c) {
+  if (c.short && c.short.trim()) return c.short.trim();
+  let s = String(c.why || '').split(/[,;:.]/)[0].trim();
+  if (s.length > 72) s = s.slice(0, 72).replace(/\s+\S*$/, '') + '...';
+  return s;
+}
+
+function orderedColors(colors) {
+  const find = word => colors.find(c => (c.role || '').toLowerCase().includes(word));
+  const primary = find('primary') || colors[0];
+  const secondary = find('secondary') || colors[1];
+  const trim = find('trim') || colors[3];
+  const accent = find('accent') || colors[2];
+  return { primary, side: [secondary, trim, accent] };
+}
+
+function chipHTML(c, cls) {
+  const t = inkFor(c.hex);
+  return '<div class="chip ' + cls + '" tabindex="0" role="button" aria-expanded="false" aria-label="' + esc(c.role + ': ' + c.name + '. ' + shortFor(c)) + '"' +
+    ' style="--c:' + hexForSwatch(c.hex) + ';--ink:' + t.ink + ';--hi:' + t.hi + ';--lo:' + t.lo + '">' +
+      '<div class="chip-label"><div class="chip-name">' + esc(c.name) + '</div><div class="chip-hex">' + esc(hexForSwatch(c.hex).toUpperCase()) + '</div></div>' +
+      '<div class="chip-pop" aria-hidden="true"><div class="chip-pop-role">' + esc(c.role) + '</div><div class="chip-pop-text">' + esc(shortFor(c)) + '</div></div>' +
+    '</div>';
+}
+
+function closeChips(except) {
+  document.querySelectorAll('.chip.open').forEach(ch => {
+    if (ch !== except) { ch.classList.remove('open'); ch.setAttribute('aria-expanded', 'false'); }
+  });
+}
+
 function renderResults(data) {
+  currentPalette = data;
   document.getElementById('palette-intro').textContent = data.intro;
+
+  const o = orderedColors(data.colors);
+  const board = document.getElementById('board');
+  board.innerHTML = chipHTML(o.primary, 'primary') +
+    '<div class="board-side">' + o.side.map(c => chipHTML(c, '')).join('') + '</div>';
+  board.querySelectorAll('.chip').forEach(chip => {
+    const toggle = () => {
+      const open = !chip.classList.contains('open');
+      closeChips(chip);
+      chip.classList.toggle('open', open);
+      chip.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    chip.addEventListener('click', e => { e.stopPropagation(); toggle(); });
+    chip.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  });
+
   const stack = document.getElementById('swatch-stack');
   stack.innerHTML = '';
   data.colors.forEach(c => {
@@ -313,15 +502,125 @@ function renderResults(data) {
     sw.style.backgroundColor = hexForSwatch(c.hex);
     const info = document.createElement('div');
     info.className = 'swatch-info';
-    info.innerHTML = '<div class="swatch-role">' + c.role + '</div><div class="swatch-name">' + c.name + '</div><div class="paint-refs"><div class="paint-ref">Sherwin-Williams \u2014 <span>' + c.sw_name + ' ' + c.sw_number + '</span></div><div class="paint-ref">Benjamin Moore \u2014 <span>' + c.bm_name + ' ' + c.bm_number + '</span></div></div><div class="swatch-why">' + c.why + '</div>';
+    info.innerHTML = '<div class="swatch-role">' + esc(c.role) + '</div><div class="swatch-name">' + esc(c.name) + '</div><div class="paint-refs"><div class="paint-ref">Sherwin-Williams: <span>' + esc(c.sw_name + ' ' + c.sw_number) + '</span></div><div class="paint-ref">Benjamin Moore: <span>' + esc(c.bm_name + ' ' + c.bm_number) + '</span></div></div><div class="swatch-why">' + esc(c.why) + '</div>';
     card.appendChild(sw); card.appendChild(info); stack.appendChild(card);
   });
   document.getElementById('results').style.display = 'block';
   document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+document.addEventListener('click', () => closeChips(null));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChips(null); });
+
+/* ── SAVE PALETTE: draws the board to a 1080x1350 image (Pinterest and Instagram friendly) ── */
+function grainPattern(ctx) {
+  const n = document.createElement('canvas');
+  n.width = n.height = 200;
+  const g = n.getContext('2d');
+  const img = g.createImageData(200, 200);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = 110 + Math.random() * 120;
+    img.data[i] = v; img.data[i + 1] = v * 0.94; img.data[i + 2] = v * 0.88; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return ctx.createPattern(n, 'repeat');
+}
+
+function drawEmbossed(ctx, text, x, y, t) {
+  ctx.fillStyle = t.lo; ctx.fillText(text, x, y - 1.5);
+  ctx.fillStyle = t.hi; ctx.fillText(text, x, y + 1.5);
+  ctx.fillStyle = t.ink; ctx.fillText(text, x, y);
+}
+
+function fitFont(ctx, text, family, size, maxW) {
+  let s = size;
+  ctx.font = family.replace('{s}', s);
+  while (ctx.measureText(text).width > maxW && s > 18) { s -= 2; ctx.font = family.replace('{s}', s); }
+  return s;
+}
+
+function drawChip(ctx, c, x, y, w, h, big, pattern) {
+  const t = inkFor(c.hex);
+  ctx.fillStyle = hexForSwatch(c.hex);
+  ctx.fillRect(x, y, w, h);
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.globalAlpha = 0.09;
+  ctx.fillStyle = pattern;
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+
+  const pad = big ? 44 : 32;
+  const nameFont = "italic 600 {s}px 'Crimson Text', serif";
+  const size = fitFont(ctx, c.name, nameFont, big ? 76 : 54, w - pad * 2);
+  const refs = (c.sw_number || '') + (c.bm_number ? '  ·  ' + c.bm_number : '');
+  let baseY = y + h - pad;
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = "500 20px 'DM Mono', monospace";
+  if (refs.trim()) { drawEmbossed(ctx, refs, x + pad, baseY, t); baseY -= 30; }
+  drawEmbossed(ctx, hexForSwatch(c.hex).toUpperCase(), x + pad, baseY, t);
+  baseY -= 34;
+  ctx.font = nameFont.replace('{s}', size);
+  drawEmbossed(ctx, c.name, x + pad, baseY, t);
+}
+
+async function savePalette() {
+  if (!currentPalette) return;
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  try {
+    await Promise.all([
+      document.fonts.load("italic 600 60px 'Crimson Text'"),
+      document.fonts.load("500 20px 'DM Mono'"),
+      document.fonts.load("600 20px 'DM Sans'")
+    ]);
+  } catch (e) { /* fall back to system fonts */ }
+
+  const W = 1080, H = 1350, M = 56, FOOT = 92;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#FAF6EA';
+  ctx.fillRect(0, 0, W, H);
+
+  const pattern = grainPattern(ctx);
+  const o = orderedColors(currentPalette.colors);
+  const bx = M, by = M, bw = W - M * 2, bh = H - M - FOOT - M;
+  const leftW = Math.round(bw * 0.58);
+  ctx.save();
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 22); else ctx.rect(bx, by, bw, bh);
+  ctx.clip();
+  drawChip(ctx, o.primary, bx, by, leftW, bh, true, pattern);
+  const weights = [3, 2, 1.4], total = 6.4;
+  let cy = by;
+  o.side.forEach((c, i) => {
+    const h = i === 2 ? by + bh - cy : Math.round(bh * weights[i] / total);
+    drawChip(ctx, c, bx + leftW, cy, bw - leftW, h, false, pattern);
+    cy += h;
+  });
+  ctx.restore();
+
+  ctx.fillStyle = '#582B36';
+  ctx.font = "600 22px 'DM Sans', sans-serif";
+  ctx.fillText('Studio Lou', M, H - M - 10);
+  ctx.fillStyle = '#6b6560';
+  ctx.font = "500 20px 'DM Sans', sans-serif";
+  const url = 'studiolouinteriors.com';
+  ctx.fillText(url, W - M - ctx.measureText(url).width, H - M - 10);
+
+  const a = document.createElement('a');
+  a.download = 'studio-lou-palette.png';
+  a.href = cv.toDataURL('image/png');
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  btn.disabled = false;
+}
+
 function resetTool() {
   document.getElementById('results').style.display = 'none';
+  currentPalette = null;
   document.getElementById('room').value = '';
   document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
   document.getElementById('generate-btn').disabled = false;
