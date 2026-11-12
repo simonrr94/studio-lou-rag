@@ -269,6 +269,16 @@
     }
     .match-store { display: block; font-size: 10.5px; color: #6b6560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .match-note { font-size: 12.5px; color: #6b6560; line-height: 1.45; }
+    .match-group { font-size: 11.5px; font-weight: 600; color: #433E3C; margin: 4px 0 6px; }
+    .match-strip + .match-group { margin-top: 10px; }
+    .pop-matches { margin-top: 12px; }
+    .pop-matches .match { flex-basis: 112px; }
+    .pop-matches .match-img { height: 84px; }
+    .pop-matches .match-body { padding: 6px 8px 8px; }
+    .pop-matches .match-group { margin: 2px 0 5px; }
+    .pop-matches .match-strip + .match-group { margin-top: 6px; }
+    .pop-matches .match-fine { margin-top: 2px; }
+    .pin-pop.has-matches { width: 352px; }
     .match-note button { font-size: 12.5px; }
     .match-fine { font-size: 10.5px; color: #8a837c; margin-top: 4px; }
 
@@ -322,6 +332,7 @@
     // Opened from your own computer (localhost), the page uses your local Flask server so app.py changes can be tested before pushing
     var API_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '/api/vision' : 'https://studio-lou-rag.onrender.com/api/vision';
     var MATCH_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '/api/matches' : 'https://studio-lou-rag.onrender.com/api/matches';
+    var THUMB_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? '/api/thumb' : 'https://studio-lou-rag.onrender.com/api/thumb';
 
     // Price ranges (US dollars) that sort close matches into budget levels, per category:
     // [top of Save, top of Mid]. Anything above the second number is Splurge.
@@ -341,6 +352,55 @@
       return price <= b[0] ? 'save' : price <= b[1] ? 'mid' : 'splurge';
     }
     function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
+    // A close match only counts when its title names the right kind of piece. Lens matches whatever
+    // stands out in the crop (a coffee table sitting on a rug, a chair beside a sofa), so this drops those.
+    // Categories left out here (decor object, other) are too varied to check by title.
+    var TYPE_WORDS = {
+      'sofa': 'sofa|couch|sectional|loveseat|love seat|settee|chesterfield|davenport',
+      'chair': 'chair|armchair|stool|recliner|lounger|chaise|rocker|glider|seat',
+      'bench': 'bench|banquette',
+      'ottoman': 'ottoman|pouf|pouffe|footstool|foot stool|hassock',
+      'coffee table': 'coffee table|cocktail table|center table|centre table|coffee tables',
+      'side table': 'side table|end table|accent table|drink table|drinks table|pedestal table|martini table|c table|nightstand|night stand|bedside',
+      'console table': 'console|sofa table|entry table|entryway table|hall table|hallway table',
+      'desk': 'desk|writing table|secretary',
+      'dining table': 'dining table|dining tables|kitchen table|dinner table|trestle table|pedestal table|farmhouse table|round table|extension table|extending table',
+      'dining chair': 'chair|stool|seat',
+      'bed': 'bed|headboard|bedframe',
+      'dresser': 'dresser|chest|bureau|drawers|highboy|lowboy',
+      'nightstand': 'nightstand|night stand|bedside|side table|end table|night table',
+      'bedding': 'duvet|comforter|quilt|sheet|coverlet|blanket|bedspread|pillowcase|sham|bedding|bed set',
+      'shelving': 'shelf|shelves|shelving|bookcase|bookshelf|etagere|étagère|book case',
+      'storage': 'basket|bin|cabinet|storage|box|trunk|chest|sideboard|credenza|buffet|hamper|crate',
+      'rug': 'rug|runner|carpet',
+      'curtains': 'curtain|drape|drapery|draperies|panel|sheer|shade|blind',
+      'floor lamp': 'lamp|torchiere|light',
+      'table lamp': 'lamp|light',
+      'pendant': 'pendant|chandelier|light|lantern|lamp|fixture',
+      'chandelier': 'chandelier|pendant|light|fixture',
+      'sconce': 'sconce|wall light|wall lamp|wall mount|light',
+      'mirror': 'mirror',
+      'art': 'art|print|painting|canvas|poster|artwork|photograph|framed|wall decor|lithograph|drawing',
+      'pillow': 'pillow|cushion|sham',
+      'throw': 'throw|blanket',
+      'vase': 'vase|vessel|jug|urn|amphora|pot|bottle'
+    };
+    var TYPE_RE = {};
+    Object.keys(TYPE_WORDS).forEach(function (k) {
+      TYPE_RE[k] = new RegExp('(^|[^a-z])(' + TYPE_WORDS[k] + ')(e?s)?([^a-z]|$)', 'i');
+    });
+    function rightType(it, title) {
+      var re = TYPE_RE[it.category];
+      return !re || re.test(title || '');
+    }
+
+    // Matches from these stores (your store list) come first; everything else is "More from around the web"
+    function domainOf(u) {
+      try { return new URL(u).hostname.toLowerCase().replace(/^www\./, '').split('.').slice(-2).join('.'); }
+      catch (e) { return ''; }
+    }
+    var LIST_DOMAINS = {};
+
     function bandLabel(it, level) {
       var b = bandFor(it);
       return level === 'save' ? 'under ' + money(b[0]) : level === 'mid' ? money(b[0]) + ' to ' + money(b[1]) : 'over ' + money(b[1]);
@@ -423,6 +483,7 @@
       { name: 'The Citizenry', levels: ['mid', 'splurge'], url: 'https://www.the-citizenry.com/search?q={q}', cats: ['pillow', 'throw', 'vase', 'decor object'] },
       { name: 'Herman Miller', levels: ['splurge'], url: 'https://store.hermanmiller.com/search?q={q}', cats: ['chair'], match: /\b(desk|office|task)\b/i }
     ];
+    STORES.forEach(function (st) { LIST_DOMAINS[domainOf(st.url.replace('{q}', 'x'))] = true; });
     var LEVELS = [{ id: 'save', label: 'Save' }, { id: 'mid', label: 'Mid' }, { id: 'splurge', label: 'Splurge' }];
     var STORES_PER_LEVEL = 2;
 
@@ -727,7 +788,9 @@
         if (!findItem(it.id)) return;   // removed while searching
         if (data && data.matches) {
           it.match = { status: 'done', items: data.matches.map(function (m) {
-            m.level = levelOfPrice(it, m.price); return m;
+            m.level = levelOfPrice(it, m.price);
+            m.ours = !!LIST_DOMAINS[domainOf(m.link)];
+            return m;
           }) };
         } else {
           it.match = { status: 'error', message: MATCH_ERRORS[data && data.error] || 'Could not reach the match search. Try again in a moment.' };
@@ -740,31 +803,44 @@
       });
     }
 
+    // The matches that count for this piece right now: the right kind of item (checked against the
+    // current category, so a renamed piece re-checks), your stores before the rest
+    function goodMatches(it) {
+      if (!it.match || it.match.status !== 'done') return [];
+      return it.match.items.filter(function (x) { return rightType(it, x.title); });
+    }
+
+    function cardHTML(x) {
+      return '<a class="match" href="' + esc(x.link) + '" target="_blank" rel="noopener">' +
+        (x.thumbnail ? '<img class="match-img" src="' + esc(x.thumbnail) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="match-img"></span>') +
+        '<span class="match-body"><span class="match-price">' + money(x.price) + '</span>' +
+        '<span class="match-name">' + esc(x.title) + '</span>' +
+        '<span class="match-store">' + esc(x.store) + '</span></span></a>';
+    }
+
     function matchesHTML(it) {
       var m = it.match;
       if (m.status === 'loading') return '<p class="match-note">Looking for close matches...</p>';
       if (m.status === 'error')
         return '<p class="match-note">' + esc(m.message) + ' <button type="button" class="text-btn" data-act="match">Try again</button></p>';
-      var lvLabel = LEVELS.filter(function (l) { return l.id === state.level; })[0].label;
-      var here = m.items.filter(function (x) { return x.level === state.level; });
-      if (!m.items.length)
+      var all = goodMatches(it);
+      if (!all.length)
         return '<p class="match-note">No close matches turned up for this piece. Browse the stores for similar pieces.</p>';
+      var lvLabel = LEVELS.filter(function (l) { return l.id === state.level; })[0].label;
+      var here = all.filter(function (x) { return x.level === state.level; });
       var head = '<div class="match-head"><span class="match-title"><b>Close matches</b> &middot; ' + lvLabel + ', ' + bandLabel(it, state.level) + '</span></div>';
       if (!here.length) {
         var others = LEVELS.filter(function (l) { return l.id !== state.level; }).map(function (l) {
-          var n = m.items.filter(function (x) { return x.level === l.id; }).length;
+          var n = all.filter(function (x) { return x.level === l.id; }).length;
           return n ? '<button type="button" class="text-btn" data-goto-level="' + l.id + '">' + n + ' at ' + l.label + '</button>' : '';
         }).filter(Boolean);
         return head + '<p class="match-note">None at this budget. ' + others.join(' &middot; ') + '</p>';
       }
-      return head + '<div class="match-strip">' + here.map(function (x) {
-        return '<a class="match" href="' + esc(x.link) + '" target="_blank" rel="noopener">' +
-          (x.thumbnail ? '<img class="match-img" src="' + esc(x.thumbnail) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="match-img"></span>') +
-          '<span class="match-body"><span class="match-price">' + money(x.price) + '</span>' +
-          '<span class="match-name">' + esc(x.title) + '</span>' +
-          '<span class="match-store">' + esc(x.store) + '</span></span></a>';
-      }).join('') + '</div>' +
-      '<p class="match-fine">Found with Google Lens. Prices come from each store and can change.</p>';
+      var ours = here.filter(function (x) { return x.ours; }), web = here.filter(function (x) { return !x.ours; });
+      return head +
+        (ours.length ? '<p class="match-group">From Studio Lou\'s go-to stores</p><div class="match-strip">' + ours.map(cardHTML).join('') + '</div>' : '') +
+        (web.length ? '<p class="match-group">More from around the web</p><div class="match-strip">' + web.map(cardHTML).join('') + '</div>' : '') +
+        '<p class="match-fine">Found with Google Lens. Prices come from each store and can change.</p>';
     }
 
     function rowHTML(it, i) {
@@ -900,13 +976,14 @@
           '</div>'
         : (it.details ? '<p class="pop-details">' + esc(it.details) + '</p>' : '<div style="height:10px"></div>')) +
         '<div class="pop-shop">' + popLinksHTML(it) + '</div>' +
+        (!editing && it.match ? '<div class="pop-matches">' + matchesHTML(it) + '</div>' : '') +
         (editing ?
           '<div class="edit-actions" style="margin-top:12px">' +
             '<button type="button" class="text-btn muted" data-act="remove">Remove this piece</button>' +
             '<button type="button" class="btn-primary btn-sm" data-act="done">Done</button></div>'
-        : '<div class="pop-foot"><button type="button" class="text-btn" data-act="match">' +
-            (it.match ? 'See close matches' : 'Find close matches') + '</button>' +
+        : '<div class="pop-foot">' + (it.match ? '<span></span>' : '<button type="button" class="text-btn" data-act="match">Find close matches</button>') +
             '<button type="button" class="text-btn" data-act="edit">Edit</button></div>');
+      pop.classList.toggle('has-matches', !editing && !!it.match);
       pop.classList.toggle('editing', editing);
       pop.classList.remove('hidden');
       placePop(it);
@@ -1050,17 +1127,13 @@
       var it = state.popId != null ? findItem(state.popId) : null;
       if (!it) return;
       if (e.target.closest('.pop-close')) { setActive(null); return; }
+      var lvBtn = e.target.closest('[data-goto-level]');
+      if (lvBtn) { state.level = lvBtn.getAttribute('data-goto-level'); render(); return; }
       var act = e.target.closest('[data-act]');
       if (!act) return;
       var a = act.getAttribute('data-act');
       if (a === 'edit') openEdit(it.id);
-      else if (a === 'match') {
-        var mid = it.id;
-        setActive(mid, 'row');
-        if (!it.match) findMatches(it);
-        var row = document.querySelector('.item-row[data-id="' + mid + '"]');
-        if (row && row.scrollIntoView) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      else if (a === 'match') findMatches(it);   // results show right here in the popover, and in the list
       else if (a === 'done') finishEdit(it);
       else if (a === 'remove') removeItem(it.id);
     }
@@ -1234,9 +1307,58 @@
       var btn = $('pdfBtn');
       btn.disabled = true;
       var L = pdfLayout();
-      Promise.all([loadLogo(), pinnedPhoto(L.pin, L.iw), loadFonts()]).then(function (res) {
-        try { buildPDF(res[0], res[1], L, res[2]); } finally { btn.disabled = false; }
+      btn.textContent = 'Making your PDF...';
+      Promise.all([loadLogo(), pinnedPhoto(L.pin, L.iw), loadFonts(), matchAssets()]).then(function (res) {
+        try { buildPDF(res[0], res[1], L, res[2], res[3]); } finally { btn.disabled = false; btn.textContent = 'Download PDF'; }
       });
+    }
+
+    // For each piece with close matches: a cutout of the piece from the room photo, and up to four
+    // matches (this budget first, your stores before others, then the rest) with their product photos
+    function pdfPicks(it) {
+      var all = goodMatches(it).map(function (x, k) { return { x: x, k: k }; });
+      all.sort(function (a, b) {
+        return ((a.x.level === state.level ? 0 : 1) - (b.x.level === state.level ? 0 : 1)) ||
+               ((a.x.ours ? 0 : 1) - (b.x.ours ? 0 : 1)) || (a.k - b.k);
+      });
+      return all.slice(0, 4).map(function (o) { return o.x; });
+    }
+    function toJpeg(src, max) {
+      return new Promise(function (resolve) {
+        var im = new Image();
+        im.onload = function () {
+          var k = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+          var c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k));
+          var ctx = c.getContext('2d');
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(im, 0, 0, c.width, c.height);
+          try { resolve({ data: c.toDataURL('image/jpeg', 0.88), w: c.width, h: c.height }); } catch (e) { resolve(null); }
+        };
+        im.onerror = function () { resolve(null); };
+        im.src = src;
+      });
+    }
+    function loadThumb(url) {
+      if (!url) return Promise.resolve(null);
+      return fetch(THUMB_URL + '?u=' + encodeURIComponent(url)).then(function (r) {
+        if (!r.ok) throw new Error('thumb');
+        return r.blob();
+      }).then(function (blob) {
+        var u = URL.createObjectURL(blob);
+        return toJpeg(u, 240).then(function (img) { URL.revokeObjectURL(u); return img; });
+      }).catch(function () { return null; });
+    }
+    function matchAssets() {
+      var jobs = state.items.map(function (it, i) {
+        var picks = pdfPicks(it);
+        if (!picks.length) return null;
+        return Promise.all([
+          cropPiece(it).then(function (b64) { return toJpeg('data:image/jpeg;base64,' + b64, 300); }).catch(function () { return null; }),
+          Promise.all(picks.map(function (x) { return loadThumb(x.thumbnail); }))
+        ]).then(function (r) { return { n: i + 1, it: it, crop: r[0], picks: picks, thumbs: r[1] }; });
+      });
+      return Promise.all(jobs).then(function (list) { return list.filter(Boolean); });
     }
 
     // Photo size on the page: full width for wide photos, capped height for tall phone photos
@@ -1250,7 +1372,7 @@
 
     var STUDIO_URL = 'https://www.studiolouinteriors.com';
 
-    function buildPDF(logo, photo, L, fonts) {
+    function buildPDF(logo, photo, L, fonts, found) {
       var doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' });
       var M = 48, pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
       var W = pageW - M * 2, bottom = pageH - 54, y = M;
@@ -1425,54 +1547,62 @@
       hair(y, INK, 0.6);
       y += 34;
 
-      /* ---- Close matches the person found ---- */
-      var found = [];
-      state.items.forEach(function (it, i) {
-        if (!it.match || it.match.status !== 'done' || !it.match.items.length) return;
-        var order = { save: 0, mid: 1, splurge: 2 };
-        var picks = it.match.items.slice(0, 12).sort(function (a, b) {
-          var sa = a.level === state.level ? -1 : order[a.level], sb = b.level === state.level ? -1 : order[b.level];
-          return sa - sb || a.price - b.price;
-        }).slice(0, 4);
-        found.push({ n: i + 1, it: it, picks: picks });
-      });
+      /* ---- Close matches, with pictures so each one is easy to place ---- */
+      found = found || [];
+      var LEVEL_NAME = { save: 'Save', mid: 'Mid', splurge: 'Splurge' };
+      // Draws an image centered inside a box, keeping its shape, on a soft background
+      function fitImage(img, x, yy, w, h) {
+        doc.setFillColor(245, 240, 232); doc.rect(x, yy, w, h, 'F');
+        if (!img) return;
+        var k = Math.min(w / img.w, h / img.h), iw = img.w * k, ih = img.h * k;
+        doc.addImage(img.data, 'JPEG', x + (w - iw) / 2, yy + (h - ih) / 2, iw, ih);
+      }
       if (found.length) {
-        if (y + 70 > bottom) { doc.addPage(); y = M + 6; }
+        var PIC = 84, CARD = 96, GAP = 8, cardsX = M + 104;
+        var blockH = 18 + PIC + 52;
+        if (y + 40 + blockH > bottom) { doc.addPage(); y = M + 6; }
         use(FONT.semi, 11, INK);
         doc.text('Close matches', M, y);
         use(FONT.body, 7.8, GRAY);
-        doc.text('Similar pieces found with Google Lens. Prices come from each store and can change.', M + W, y, { align: 'right' });
-        y += 18;
-        found.forEach(function (f) {
-          var need = 15 + f.picks.length * 13 + 19;
-          if (y + need > bottom) { doc.addPage(); y = M + 6; }
+        doc.text('Found with Google Lens. Tap a match to see it. Prices come from each store and can change.', M + W, y, { align: 'right' });
+        y += 22;
+        found.forEach(function (f, fi) {
+          if (y + blockH > bottom) { doc.addPage(); y = M + 6; }
+          // Piece number and name
           handCircle(M + 7, y - 3.1, 6.6, WINE, 0.75, f.n + 7);
           use(FONT.semi, 7.6, WINE);
           doc.text(String(f.n), M + 7, y - 0.4, { align: 'center' });
           use(FONT.semi, 9.2, INK);
-          doc.text(clean(f.it.name || 'New piece'), colX[1], y);
-          y += 15;
-          f.picks.forEach(function (m) {
-            use(FONT.semi, 8.4, WINE);
-            doc.text(money(m.price), colX[1], y);
-            use(FONT.body, 7, GRAY);
-            doc.setCharSpace(0.6);
-            doc.text(m.level.toUpperCase(), colX[1] + 52, y);
+          doc.text(fit(clean(f.it.name || 'New piece'), W - 24), M + 22, y);
+          y += 9;
+          // The piece itself, cut from the room photo
+          fitImage(f.crop, M, y, PIC, PIC);
+          use(FONT.semi, 6.3, GRAY);
+          doc.setCharSpace(0.7);
+          doc.text('IN YOUR ROOM', M, y + PIC + 11);
+          doc.setCharSpace(0);
+          // Up to four matches
+          f.picks.forEach(function (m, k) {
+            var x = cardsX + k * (CARD + GAP);
+            fitImage(f.thumbs[k], x, y, CARD, PIC);
+            doc.link(x, y, CARD, PIC, { url: m.link });
+            use(FONT.semi, 8.6, WINE);
+            doc.text(money(m.price), x, y + PIC + 12);
+            use(FONT.semi, 6.3, GRAY);
+            doc.setCharSpace(0.7);
+            doc.text(LEVEL_NAME[m.level].toUpperCase(), x + CARD, y + PIC + 11.5, { align: 'right' });
             doc.setCharSpace(0);
-            use(FONT.medium, 8.4, WINE);
-            var store = clean(m.store);
-            doc.textWithLink(store, colX[1] + 100, y, { url: m.link });
-            var sw = doc.getTextWidth(store);
-            use(FONT.body, 8.2, INK);
-            var title = fit(clean(m.title), M + W - (colX[1] + 100 + sw + 10));
-            if (title) doc.textWithLink(title, colX[1] + 100 + sw + 10, y, { url: m.link });
-            y += 13;
+            use(FONT.medium, 7.8, WINE);
+            doc.textWithLink(fit(clean(m.store), CARD), x, y + PIC + 23, { url: m.link });
+            use(FONT.body, 7, GRAY);
+            var t = doc.splitTextToSize(clean(m.title), CARD);
+            if (t.length > 1) t = [t[0], fit(t.slice(1).join(' '), CARD)];
+            doc.text(t, x, y + PIC + 32.5, { lineHeightFactor: 1.25 });
           });
-          y += 2;
-          hair(y, SOFT, 0.5);
-          y += 17;
+          y += PIC + 49;
+          if (fi < found.length - 1) { hair(y, SOFT, 0.5); y += 20; }
         });
-        y += 12;
+        y += 18;
       }
 
       /* ---- Closing line ---- */
