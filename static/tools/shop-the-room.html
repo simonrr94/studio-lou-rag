@@ -173,7 +173,7 @@
     .pop-shop { background: #f5f0e8; border-radius: 10px; padding: 4px 10px; }
     .pop-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
     .pop-row + .pop-row { border-top: 1px solid #e6dfd2; }
-    .pop-row .cell-label { display: block; flex: 0 0 50px; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; }
+    .pop-row .cell-label { display: block; flex: 0 0 66px; line-height: 1.3; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; }
     .pop-row .cell-links { flex-direction: row; }
     .pin-pop.editing { width: 340px; }
     .pop-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
@@ -185,6 +185,8 @@
     /* ── SHOPPING LIST ── */
     .list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
     .list-head .eyebrow { margin: 0; }
+    .list-note { font-size: 12.5px; line-height: 1.5; color: #6b6560; margin: -2px 0 14px; max-width: 640px; }
+    .list-note b { font-weight: 600; color: #433E3C; }
     .list-head .eyebrow span { color: #b9b0a1; margin-left: 6px; }
     .budget { display: inline-flex; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 3px; }
     .budget button {
@@ -321,6 +323,7 @@
       .item-row > .text-btn { grid-row: 1; grid-column: 3; }
       .pin-pop { position: relative; left: auto !important; top: auto !important; width: auto; margin-top: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
       .lv-cell { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; }
+      .lv-cell .cell-label { display: block; flex-shrink: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6560; }
       .matches { grid-column: 1 / -1; }
       .match { flex-basis: 124px; }
       .store { padding: 4px 9px; font-size: 11.5px; }
@@ -720,7 +723,7 @@
       var terms = searchTerms(it);
       if (!terms) return '<span class="cell-empty">Add search words</span>';
       return pickStores(it, level).map(function (s) {
-        return '<a class="store" href="' + esc(storeURL(s, terms)) + '" target="_blank" rel="noopener">' + esc(s.name) + '</a>';
+        return '<a class="store" href="' + esc(storeURL(s, terms)) + '" target="_blank" rel="noopener" title="' + esc('Search ' + s.name + ' for "' + terms + '"') + '">' + esc(s.name) + '</a>';
       }).join('');
     }
 
@@ -850,7 +853,7 @@
           (it.details ? '<span class="item-details">' + esc(it.details) + '</span>' : '') +
           (it.match ? '' : '<button type="button" class="text-btn match-btn" data-act="match">Find close matches</button>') + '</div>' +
         shownLevels().map(function (lv) {
-          return '<div class="lv-cell" data-level="' + lv.id + '"><span class="cell-label">' + lv.label + '</span>' +
+          return '<div class="lv-cell" data-level="' + lv.id + '"><span class="cell-label">Search ' + lv.label + '</span>' +
             '<span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
         }).join('') +
         '<button type="button" class="text-btn" data-act="edit">Edit</button>' +
@@ -874,7 +877,7 @@
       var list = $('itemList');
       list.className = 'shop-list';
       var cols = '<div class="list-cols"><span></span><span>Piece</span>' +
-        shownLevels().map(function (lv) { return '<span>Browse ' + lv.label + ' stores</span>'; }).join('') +
+        shownLevels().map(function (lv) { return '<span>Search ' + lv.label + ' stores</span>'; }).join('') +
         '<span></span></div>';
       list.innerHTML = state.items.length ? cols + state.items.map(rowHTML).join('') :
         '<p class="empty-note">No pieces left. Tap "Tag something we missed" to add one.</p>';
@@ -991,7 +994,7 @@
 
     function popLinksHTML(it) {
       return shownLevels().map(function (lv) {
-        return '<div class="pop-row"><span class="cell-label">' + lv.label + '</span><span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
+        return '<div class="pop-row"><span class="cell-label">Search ' + lv.label + ' stores</span><span class="cell-links">' + linksHTML(it, lv.id) + '</span></div>';
       }).join('');
     }
 
@@ -1483,7 +1486,7 @@
         use(FONT.semi, 6.8, GRAY);
         doc.setCharSpace(0.9);
         doc.text('PIECE', colX[1], y);
-        LEVELS.forEach(function (lv, k) { doc.text(lv.label.toUpperCase(), colX[2 + k], y); });
+        LEVELS.forEach(function (lv, k) { doc.text('SEARCH ' + lv.label.toUpperCase(), colX[2 + k], y); });
         doc.setCharSpace(0);
         y += 7;
         hair(y, INK, 0.6);
@@ -1505,7 +1508,7 @@
       use(FONT.semi, 11, INK);
       doc.text('Pieces to shop', M, y);
       use(FONT.body, 7.8, GRAY);
-      doc.text('Tap a store to see similar pieces at that budget. Selection and prices change often.', M + W, y, { align: 'right' });
+      doc.text('Each store link opens that store\'s search for similar pieces, not an exact match.', M + W, y, { align: 'right' });
       y += 20;
       tableHead();
 
@@ -1789,6 +1792,7 @@
             <button type="button" data-level="splurge">Splurge</button>
           </div>
         </div>
+        <p class="list-note"><b>Close matches</b> are real pieces found from your photo. <b>Store buttons</b> open that store's own search for similar pieces, so they're a place to start looking, not an exact match.</p>
         <div class="shop-list" id="itemList"></div>
 
       </div>
