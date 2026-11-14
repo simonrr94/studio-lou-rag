@@ -210,6 +210,23 @@ var SNAP = (function () {
       });
       if (cands.length > before) voters++; // rooms that agreed on the scale
     });
+    // Printed areas beat dimension lines when the plan has them: a box's size
+    // against its printed sq ft isn't thrown off by dimension lines that measure
+    // outside the walls or only part of an L-shaped room. Rooms whose printed
+    // area agrees with their own dimensions are trusted first; if none agree,
+    // every room with a printed area votes.
+    var trusted = [], all = [];
+    work.forEach(function (it) {
+      var r = it.room, q = it.rect;
+      if (!r.printedArea || !q || q.l == null || q.r == null || q.t == null || q.b == null) return;
+      var c = Math.sqrt((q.r - q.l) * (q.b - q.t) / r.printedArea);
+      all.push(c);
+      if (!r.width || !r.length || Math.abs(r.width * r.length / r.printedArea - 1) <= 0.10) trusted.push(c);
+    });
+    var areaCands = trusted.length ? trusted : all;
+    if (areaCands.length) { cands = areaCands; voters = areaCands.length; }
+    var ppfFrom = areaCands.length ? 'area' : 'dims';
+
     cands.sort(function (p, q) { return p - q; });
     var ppf = cands.length ? cands[Math.floor(cands.length / 2)] : null;
 
@@ -231,7 +248,7 @@ var SNAP = (function () {
       r.bbox = { x: x[0] / a.w * 100, y: y[0] / a.h * 100, w: (x[1] - x[0]) / a.w * 100, h: (y[1] - y[0]) / a.h * 100 };
       r.snapped = true;
     });
-    return { rooms: rooms, ppf: ppf, ppfRooms: ppf ? voters : 0, wallPx: a.k };
+    return { rooms: rooms, ppf: ppf, ppfRooms: ppf ? voters : 0, ppfFrom: ppf ? ppfFrom : null, wallPx: a.k };
   }
 
   // Share of a box edge that sits on a wall: samples along the edge, looking a few px either side.
@@ -307,7 +324,18 @@ var PLAN = (function () {
     if (m) return parseFloat(m[1]) / 12;
     return null;
   }
-  function area(r) { return (r.width && r.length) ? r.width * r.length : 0; }
+  // The plan's printed sq ft wins until the person edits the dimensions
+  function area(r) {
+    if (r.printedArea && !r.dimsEdited) return r.printedArea;
+    return dimsArea(r);
+  }
+  function dimsArea(r) { return (r.width && r.length) ? r.width * r.length : 0; }
+  // Width x length vs the printed area, when they disagree by more than 10%
+  function areaConflict(r) {
+    if (!r.printedArea || r.dimsEdited || !dimsArea(r)) return null;
+    var d = dimsArea(r);
+    return Math.abs(d / r.printedArea - 1) > MISMATCH ? { printed: r.printedArea, dims: d } : null;
+  }
   function fmtArea(a) { return Math.round(a).toLocaleString() + ' sq ft'; }
 
   /* ---------- Scale ---------- */
@@ -346,7 +374,7 @@ var PLAN = (function () {
 
   return {
     MISMATCH: MISMATCH,
-    fmtFtIn: fmtFtIn, parseFtIn: parseFtIn, area: area, fmtArea: fmtArea,
+    fmtFtIn: fmtFtIn, parseFtIn: parseFtIn, area: area, dimsArea: dimsArea, areaConflict: areaConflict, fmtArea: fmtArea,
     scaleFromAnalysis: scaleFromAnalysis, scaleFromLine: scaleFromLine,
     boxFt: boxFt, mismatch: mismatch
   };

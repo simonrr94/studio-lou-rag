@@ -247,7 +247,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=1"></script>
+  <script src="/static/tools/plan-engine.js?v=2"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -258,11 +258,12 @@
       'You are reading a residential floor plan image. Identify every distinct interior space, including labeled rooms AND unlabeled spaces such as closets, hallways, pantries, laundry, nooks, foyers, and powder rooms.',
       '',
       'Return ONLY a JSON object. No prose, no markdown, no code fences. Use exactly this shape:',
-      '{"unit":"ft","rooms":[{"name":"Living Room","label":"Living Room","width_ft":14.5,"length_ft":12,"source":"labeled","bbox":{"x":10,"y":20,"w":30,"h":25}}]}',
+      '{"unit":"ft","rooms":[{"name":"Living Room","label":"Living Room","width_ft":14.5,"length_ft":12,"area_sqft":174,"source":"labeled","bbox":{"x":10,"y":20,"w":30,"h":25}}]}',
       '',
       'Rules:',
       '- width_ft is the HORIZONTAL dimension of the space as it appears in the image. length_ft is the VERTICAL dimension. Use decimal feet (12\'6" = 12.5). If the plan is metric, convert to feet.',
       '- source is "labeled" only when dimensions for that space are printed on the plan. Otherwise estimate them from the scale implied by labeled rooms and set source to "estimated".',
+      '- area_sqft is the square footage printed on the plan for that space (for example "Bedroom 101 sq ft"), copied exactly as printed. If the plan is metric, convert square meters to square feet. Use null when no area is printed for that space. Never calculate it from width and length.',
       '- bbox traces the interior walls of the space as percentages of the FULL image (0 to 100). x,y is the top left corner; w,h are width and height. Be precise: the box should sit just inside the walls.',
       '- For L-shaped spaces, box the largest rectangular portion.',
       '- label is the room name exactly as it is printed on the plan (for example "Vaulted Sleeping" or "Kitchen"). Use "" if the space has no printed name.',
@@ -316,12 +317,15 @@
       var width = dim(raw.width_ft != null ? raw.width_ft : raw.width);
       var length = dim(raw.length_ft != null ? raw.length_ft : raw.length);
       if (unit && /^m/i.test(unit)) { if (width) width *= 3.28084; if (length) length *= 3.28084; }
+      var printedArea = num(raw.area_sqft);
+      if (!printedArea || printedArea <= 0) printedArea = null;
 
       return {
         id: state.nextId++,
         name: String(raw.name || 'Room').slice(0, 40),
         label: raw.label ? String(raw.label).slice(0, 60) : '',
         width: width, length: length,
+        printedArea: printedArea,
         source: raw.source === 'labeled' ? 'labeled' : 'estimated',
         bbox: { x: x, y: y, w: w, h: h }
       };
@@ -381,7 +385,7 @@
               var words = an.words.map(function (wd) { return { text: wd.text, x: wd.x, y: wd.y }; });
               state.snapInfo = SNAP.place(rooms, an.a, words);
               var f = PLAN.scaleFromAnalysis(state.snapInfo.ppf, an.a.w, state.W);
-              if (f) state.scale = { ftPerPx: f, source: 'auto', rooms: state.snapInfo.ppfRooms };
+              if (f) state.scale = { ftPerPx: f, source: 'auto', rooms: state.snapInfo.ppfRooms, from: state.snapInfo.ppfFrom };
             } catch (e) { if (window.console) console.warn('Snapping skipped:', e); }
           }
           return rooms;
@@ -568,7 +572,7 @@
     // against the plan's own dimension lines. Shown on screen only.
     function drawRuler(ctx) {
       var ratio = displayRatio(), f = state.scale.ftPerPx;
-      var feet = [1, 2, 5, 10, 20, 50].filter(function (n) { return n / f <= state.W * 0.22; }).pop();
+      var feet = [1, 2, 5, 10, 20, 50].filter(function (n) { return n / f <= state.W * 0.3; }).pop();
       if (!feet) return;
       var len = feet / f, pad = 10 * ratio, x = pad + 8 * ratio, y = state.H - pad - 10 * ratio;
       var label = feet + ' ft';
@@ -757,7 +761,7 @@
         msg.innerHTML = '<b>Scale set by you</b> from a ' + esc(fmtFtIn(sc.line.feet)) + ' line. Use the ruler on the plan to check it.';
         btn.textContent = 'Set it again'; btn.className = 'btn-secondary btn-sm';
       } else {
-        msg.innerHTML = '<b>Scale found</b> from ' + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + ' on the plan. Compare the ruler on the plan with a printed dimension to check it.';
+        msg.innerHTML = '<b>Scale found</b> from ' + (sc.from === 'area' ? 'the printed square footage of ' : '') + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + ' on the plan. Compare the ruler on the plan with a printed dimension to check it.';
         btn.textContent = 'Check scale'; btn.className = 'btn-secondary btn-sm';
       }
     }
@@ -801,8 +805,12 @@
       $('roomGrid').innerHTML = html;
     }
 
-    // Shown when the room's box on the plan and its dimensions disagree by more than 10%
+    // Shown when the plan's printed area and its dimensions disagree, or when the
+    // room's box on the plan and its dimensions disagree, by more than 10%
     function noteFor(r) {
+      var ac = PLAN.areaConflict(r);
+      if (ac) return '<div class="box-note">The plan prints ' + fmtArea(ac.printed) + ', so that is used. ' + esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) +
+        ' gives ' + fmtArea(ac.dims) + '. The dimension lines may measure outside the walls or only part of the room.</div>';
       if (!r.mismatch) return '<div class="box-note hidden"></div>';
       return '<div class="box-note">The box on the plan measures ' + esc(fmtFtIn(r.mismatch.w)) + ' x ' + esc(fmtFtIn(r.mismatch.h)) +
         '. Adjust the box or the size, or check the scale.</div>';
@@ -835,6 +843,7 @@
         el.classList.toggle('bad', el.value.trim() !== '' && v == null);
         if (v != null && v > 0) {
           r[f] = v;
+          r.dimsEdited = true; // the area now follows the typed dimensions
           if (r.source === 'estimated') r.source = 'edited';
           var card = el.closest('.room-card');
           card.querySelector('.area').textContent = fmtArea(area(r));
@@ -1005,7 +1014,7 @@
           return {
             name: r.name, width: fmtFtIn(r.width), length: fmtFtIn(r.length),
             width_ft: r.width ? +r.width.toFixed(3) : null, length_ft: r.length ? +r.length.toFixed(3) : null,
-            area_sqft: Math.round(area(r)), source: r.source,
+            area_sqft: Math.round(area(r)), printed_area_sqft: r.printedArea && !r.dimsEdited ? r.printedArea : null, source: r.source,
             bbox_pct: { x: +r.bbox.x.toFixed(2), y: +r.bbox.y.toFixed(2), w: +r.bbox.w.toFixed(2), h: +r.bbox.h.toFixed(2) },
             box_ft: r.ftBox ? { x: +r.ftBox.x.toFixed(2), y: +r.ftBox.y.toFixed(2), w: +r.ftBox.w.toFixed(2), h: +r.ftBox.h.toFixed(2) } : null,
             box_mismatch: !!r.mismatch
