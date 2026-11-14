@@ -324,9 +324,15 @@ var PLAN = (function () {
     if (m) return parseFloat(m[1]) / 12;
     return null;
   }
-  // The plan's printed sq ft wins until the person edits the dimensions
+  // Which number is the room's sq ft, in order:
+  //   1. the plan's printed area, until the person edits the dimensions
+  //   2. dimensions the person typed
+  //   3. the shape the person drew (needs a scale; see syncGeometry on the page)
+  //   4. width x length from the plan
   function area(r) {
     if (r.printedArea && !r.dimsEdited) return r.printedArea;
+    if (r.dimsEdited) return dimsArea(r);
+    if (r.shape && r.shapeArea) return r.shapeArea;
     return dimsArea(r);
   }
   function dimsArea(r) { return (r.width && r.length) ? r.width * r.length : 0; }
@@ -372,8 +378,56 @@ var PLAN = (function () {
     return { w: ftBox.w, h: ftBox.h };
   }
 
+  /* ---------- Room shapes ----------
+     A room is a rectangle (its bbox) until the person adds a corner. Then it
+     carries shape: a list of corner points in percent of the image, in order
+     around the room. bbox always stays the shape's bounding box. */
+  function rectPoints(b) {
+    return [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }];
+  }
+  function bounds(pts) {
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    pts.forEach(function (p) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+  // Four corners lined up with the image: a plain rectangle again
+  function isRect(pts) {
+    if (pts.length !== 4) return false;
+    var b = bounds(pts), e = 0.05;
+    return pts.every(function (p) {
+      return (Math.abs(p.x - b.x) < e || Math.abs(p.x - b.x - b.w) < e) && (Math.abs(p.y - b.y) < e || Math.abs(p.y - b.y - b.h) < e);
+    }) && b.w > 0 && b.h > 0 && pts[0].x !== pts[2].x;
+  }
+  function pointInPoly(p, pts) {
+    var inside = false;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var a = pts[i], b = pts[j];
+      if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
+  }
+  // Points in percent -> points in feet from the image's top left corner
+  function shapeFt(pts, ftPerPx, W, H) {
+    if (!pts || !ftPerPx) return null;
+    return pts.map(function (p) { return { x: p.x / 100 * W * ftPerPx, y: p.y / 100 * H * ftPerPx }; });
+  }
+  // Area of a polygon (points in feet), shoelace formula
+  function polyArea(ft) {
+    if (!ft || ft.length < 3) return 0;
+    var s = 0;
+    for (var i = 0, j = ft.length - 1; i < ft.length; j = i++) s += (ft[j].x + ft[i].x) * (ft[j].y - ft[i].y);
+    return Math.abs(s / 2);
+  }
+  // A drawn shape against the plan's printed area, when they disagree by more than 10%
+  function shapeConflict(r) {
+    if (!r.shape || !r.shapeArea || !r.printedArea || r.dimsEdited) return null;
+    return Math.abs(r.shapeArea / r.printedArea - 1) > MISMATCH ? { printed: r.printedArea, shape: r.shapeArea } : null;
+  }
+
   return {
     MISMATCH: MISMATCH,
+    rectPoints: rectPoints, bounds: bounds, isRect: isRect, pointInPoly: pointInPoly,
+    shapeFt: shapeFt, polyArea: polyArea, shapeConflict: shapeConflict,
     fmtFtIn: fmtFtIn, parseFtIn: parseFtIn, area: area, dimsArea: dimsArea, areaConflict: areaConflict, fmtArea: fmtArea,
     scaleFromAnalysis: scaleFromAnalysis, scaleFromLine: scaleFromLine,
     boxFt: boxFt, mismatch: mismatch

@@ -247,7 +247,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=2"></script>
+  <script src="/static/tools/plan-engine.js?v=3"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -293,8 +293,34 @@
       var f = state.scale ? state.scale.ftPerPx : null;
       state.rooms.forEach(function (r) {
         r.ftBox = f ? PLAN.boxFt(r.bbox, f, state.W, state.H) : null;
-        r.mismatch = PLAN.mismatch(r, r.ftBox);
+        r.ftShape = f ? PLAN.shapeFt(pts(r), f, state.W, state.H) : null;
+        r.shapeArea = r.shape && r.ftShape ? PLAN.polyArea(r.ftShape) : null;
+        // A drawn shape is checked against the printed area instead of the box
+        r.mismatch = r.shape ? null : PLAN.mismatch(r, r.ftBox);
       });
+    }
+
+    /* ---------- Room shapes ---------- */
+    // Corners in percent of the image: the drawn shape, or the box's four corners
+    function pts(r) { return r.shape || PLAN.rectPoints(r.bbox); }
+    function ptsPx(r) { return pts(r).map(function (q) { return { x: q.x / 100 * state.W, y: q.y / 100 * state.H }; }); }
+    // Store a new set of corners. Four corners lined up with the image become a plain box again.
+    function setShape(r, list) {
+      r.bbox = PLAN.bounds(list);
+      r.shape = PLAN.isRect(list) ? null : list;
+    }
+    function tracePath(ctx, list) {
+      ctx.beginPath();
+      list.forEach(function (q, k) { if (k) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+      ctx.closePath();
+    }
+    function removePoint(i, k) {
+      var r = state.rooms[i];
+      if (!r || !r.shape || r.shape.length <= 3) return;
+      var list = r.shape.slice(); list.splice(k, 1);
+      setShape(r, list);
+      state.drag = null;
+      renderAll();
     }
 
     /* ---------- Measurement helpers (live in plan-engine.js) ---------- */
@@ -488,14 +514,16 @@
 
       // Boxes first, labels on top so they never get covered
       state.rooms.forEach(function (r, i) {
-        var b = px(r), sel = !forExport && i === state.selected;
+        var sel = !forExport && i === state.selected;
         ctx.save();
+        tracePath(ctx, ptsPx(r));
         ctx.fillStyle = sel ? 'rgba(166,190,71,0.20)' : 'rgba(88,43,54,0.07)';
-        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.fill();
         ctx.lineWidth = (sel ? 3.5 : 2.2) * s;
+        ctx.lineJoin = 'round';
         ctx.strokeStyle = sel ? '#7f9433' : '#582b36';
         ctx.setLineDash(r.source === 'estimated' ? [9 * s, 6 * s] : []);
-        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        ctx.stroke();
         ctx.restore();
       });
 
@@ -515,7 +543,18 @@
         // Tuck the label into the room's top left corner so it does not cover the plan's own text.
         // Rooms too small to hold it get a centered label instead.
         var inset = 5 * ratio, cx, cy;
-        if (cw + inset * 2 <= b.w && ch + inset * 2 <= b.h) { cx = b.x + inset; cy = b.y + inset; }
+        if (cw + inset * 2 <= b.w && ch + inset * 2 <= b.h) {
+          cx = b.x + inset; cy = b.y + inset;
+          // A drawn shape may not reach the box's top left corner: try the other corners
+          if (r.shape) {
+            var poly = ptsPx(r), spots = [[b.x + inset, b.y + inset], [b.x + b.w - inset - cw, b.y + inset],
+              [b.x + inset, b.y + b.h - inset - ch], [b.x + b.w - inset - cw, b.y + b.h - inset - ch]];
+            var fit = spots.filter(function (sp) {
+              return [[0, 0], [cw, 0], [0, ch], [cw, ch]].every(function (o) { return PLAN.pointInPoly({ x: sp[0] + o[0], y: sp[1] + o[1] }, poly); });
+            })[0];
+            if (fit) { cx = fit[0]; cy = fit[1]; } else { cx = b.x + b.w / 2 - cw / 2; cy = b.y + b.h / 2 - ch / 2; }
+          }
+        }
         else { cx = b.x + b.w / 2 - cw / 2; cy = b.y + b.h / 2 - ch / 2; }
         cx = clamp(cx, 2, state.W - cw - 2); cy = clamp(cy, 2, state.H - ch - 2);
 
@@ -536,12 +575,20 @@
         ctx.restore();
       });
 
-      // Corner handles on the selected room
+      // Corner handles on the selected room, and a + in the middle of each side to add a corner
       if (!forExport && state.selected > -1 && state.rooms[state.selected]) {
-        var b = px(state.rooms[state.selected]), hs = handleSize();
+        var hs = handleSize(), ratio2 = displayRatio();
         ctx.save();
+        mids(state.rooms[state.selected]).forEach(function (m) {
+          ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.strokeStyle = '#582b36'; ctx.lineWidth = 1.5 * ratio2;
+          ctx.beginPath(); ctx.arc(m.x, m.y, hs * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.lineWidth = 1.8 * ratio2; ctx.beginPath();
+          ctx.moveTo(m.x - hs * 0.15, m.y); ctx.lineTo(m.x + hs * 0.15, m.y);
+          ctx.moveTo(m.x, m.y - hs * 0.15); ctx.lineTo(m.x, m.y + hs * 0.15);
+          ctx.stroke();
+        });
         ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 2.5 * s;
-        corners(b).forEach(function (p) {
+        ptsPx(state.rooms[state.selected]).forEach(function (p) {
           ctx.beginPath(); ctx.arc(p.x, p.y, hs * 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         });
         ctx.restore();
@@ -591,12 +638,6 @@
       ctx.restore();
     }
 
-    function corners(b) {
-      return [
-        { k: 'nw', x: b.x, y: b.y }, { k: 'ne', x: b.x + b.w, y: b.y },
-        { k: 'sw', x: b.x, y: b.y + b.h }, { k: 'se', x: b.x + b.w, y: b.y + b.h }
-      ];
-    }
     // Handle size in canvas pixels, tuned so it is ~22 CSS px on screen
     function handleSize() { return 22 * displayRatio(); }
     // Canvas pixels per on-screen pixel, so labels and handles stay readable at any size
@@ -612,12 +653,23 @@
       var c = $('planCanvas');
       return { x: e.offsetX * state.W / c.clientWidth, y: e.offsetY * state.H / c.clientHeight };
     }
+    // Middle of each side, where the + handles sit (canvas px)
+    function mids(r) {
+      var list = ptsPx(r);
+      return list.map(function (a, k) { var b = list[(k + 1) % list.length]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, k: k }; });
+    }
+    // { type: 'pt', k } for a corner (plus its compass name while the room is still a box),
+    // { type: 'mid', k } for the + on side k
+    var RECT_KEYS = ['nw', 'ne', 'se', 'sw'];
     function hitHandle(p) {
       if (state.selected < 0) return null;
-      var b = px(state.rooms[state.selected]), hs = handleSize();
-      var hit = null;
-      corners(b).forEach(function (c) {
-        if (Math.abs(p.x - c.x) <= hs * 0.7 && Math.abs(p.y - c.y) <= hs * 0.7) hit = c.k;
+      var r = state.rooms[state.selected], hs = handleSize(), hit = null;
+      ptsPx(r).forEach(function (c, k) {
+        if (!hit && Math.abs(p.x - c.x) <= hs * 0.7 && Math.abs(p.y - c.y) <= hs * 0.7) hit = { type: 'pt', k: k, corner: r.shape ? null : RECT_KEYS[k] };
+      });
+      if (hit) return hit;
+      mids(r).forEach(function (m) {
+        if (!hit && Math.abs(p.x - m.x) <= hs * 0.55 && Math.abs(p.y - m.y) <= hs * 0.55) hit = { type: 'mid', k: m.k };
       });
       return hit;
     }
@@ -625,7 +677,8 @@
       var best = -1, bestArea = Infinity;
       state.rooms.forEach(function (r, i) {
         var b = px(r);
-        if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) {
+        var inside = r.shape ? PLAN.pointInPoly(p, ptsPx(r)) : (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h);
+        if (inside) {
           var a = b.w * b.h; // prefer the smallest box so closets inside rooms stay clickable
           if (a < bestArea) { bestArea = a; best = i; }
         }
@@ -645,17 +698,34 @@
         return;
       }
       var p = toCanvas(e), h = hitHandle(p);
-      if (h) {
-        startDrag(e, 'resize', h, p);
+      if (h && h.type === 'pt' && h.corner) { startDrag(e, 'resize', h.corner, p); return; }
+      if (h && h.type === 'mid') {
+        // Add a corner in the middle of this side and start dragging it
+        var r0 = state.rooms[state.selected], list = pts(r0).map(function (q) { return { x: q.x, y: q.y }; });
+        var a = list[h.k], b = list[(h.k + 1) % list.length];
+        list.splice(h.k + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        r0.shape = list; r0.bbox = PLAN.bounds(list);
+        h = { type: 'pt', k: h.k + 1 };
+      }
+      if (h && h.type === 'pt') {
+        startDrag(e, 'point', null, p);
+        state.drag.k = h.k;
+        // Long press on a touch screen removes the corner
+        if (e.pointerType === 'touch') {
+          var room = state.selected, k = h.k;
+          state.drag.press = setTimeout(function () { removePoint(room, k); }, 600);
+        }
+        draw();
         return;
       }
       var i = hitRoom(p);
-      select(i, true);
+      select(i, false); // stay on the plan: jumping to the card would move the corners out of view
       if (i > -1) startDrag(e, 'move', null, p);
     }
     function startDrag(e, mode, corner, p) {
       var r = state.rooms[state.selected];
-      state.drag = { mode: mode, corner: corner, start: p, orig: { x: r.bbox.x, y: r.bbox.y, w: r.bbox.w, h: r.bbox.h } };
+      state.drag = { mode: mode, corner: corner, start: p, orig: { x: r.bbox.x, y: r.bbox.y, w: r.bbox.w, h: r.bbox.h },
+                     origPts: r.shape ? r.shape.map(function (q) { return { x: q.x, y: q.y }; }) : null };
       try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
       e.preventDefault();
     }
@@ -677,15 +747,32 @@
       }
       if (!state.drag) {
         var h = hitHandle(p);
-        c.style.cursor = h ? (h === 'nw' || h === 'se' ? 'nwse-resize' : 'nesw-resize') : (hitRoom(p) > -1 ? 'move' : 'default');
+        c.style.cursor = !h ? (hitRoom(p) > -1 ? 'move' : 'default') : h.type === 'mid' ? 'copy' :
+          !h.corner ? 'grab' : (h.corner === 'nw' || h.corner === 'se' ? 'nwse-resize' : 'nesw-resize');
         return;
       }
       var d = state.drag, r = state.rooms[state.selected], o = d.orig;
       var dx = (p.x - d.start.x) / state.W * 100, dy = (p.y - d.start.y) / state.H * 100;
       var MIN = 1.5;
+      if (d.press && Math.hypot(p.x - d.start.x, p.y - d.start.y) > 8 * displayRatio()) { clearTimeout(d.press); d.press = null; }
       if (d.mode === 'move') {
         r.bbox.x = clamp(o.x + dx, 0, 100 - o.w);
         r.bbox.y = clamp(o.y + dy, 0, 100 - o.h);
+        if (d.origPts) {
+          var mx = r.bbox.x - o.x, my = r.bbox.y - o.y;
+          r.shape = d.origPts.map(function (q) { return { x: q.x + mx, y: q.y + my }; });
+        }
+      } else if (d.mode === 'point') {
+        var list = r.shape, n = list.length, k = d.k;
+        var q = { x: clamp(p.x / state.W * 100, 0, 100), y: clamp(p.y / state.H * 100, 0, 100) };
+        // Magnet: line the corner up with its neighbors so walls stay straight
+        var tx = 10 * displayRatio() / state.W * 100, ty = 10 * displayRatio() / state.H * 100;
+        [list[(k + n - 1) % n], list[(k + 1) % n]].forEach(function (nb) {
+          if (Math.abs(q.x - nb.x) < tx) q.x = nb.x;
+          if (Math.abs(q.y - nb.y) < ty) q.y = nb.y;
+        });
+        list[k] = q;
+        r.bbox = PLAN.bounds(list);
       } else {
         var x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
         if (d.corner.indexOf('w') > -1) x1 = clamp(o.x + dx, 0, x2 - MIN);
@@ -711,9 +798,18 @@
       }
       if (state.drag) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        if (state.drag.press) clearTimeout(state.drag.press);
+        var r = state.rooms[state.selected];
+        if (r && r.shape) setShape(r, r.shape);
         state.drag = null;
-        renderCards(); // a moved or resized box can change its mismatch note
+        renderAll(); // a moved, resized or reshaped room can change its area and notes
       }
+    }
+    // Double-click a corner to remove it
+    function onDblClick(e) {
+      if (state.tool || state.selected < 0) return;
+      var h = hitHandle(toCanvas(e));
+      if (h && h.type === 'pt' && state.rooms[state.selected].shape) removePoint(state.selected, h.k);
     }
 
     /* ---------- Setting the scale ---------- */
@@ -798,11 +894,17 @@
             '<div><label>Width</label><input data-f="width" value="' + esc(fmtFtIn(r.width)) + '" placeholder="12\'6&quot;"></div>' +
             '<div><label>Length</label><input data-f="length" value="' + esc(fmtFtIn(r.length)) + '" placeholder="10\'"></div>' +
           '</div>' +
-          '<div class="card-foot"><span class="area">' + (area(r) ? fmtArea(area(r)) : 'Add dimensions') + '</span>' + badgeFor(r) + '</div>' +
+          '<div class="card-foot"><span class="area">' + areaText(r) + '</span>' + badgeFor(r) + '</div>' +
           noteFor(r) +
         '</div>';
       }).join('');
       $('roomGrid').innerHTML = html;
+    }
+
+    function areaText(r) {
+      if (!area(r)) return 'Add dimensions';
+      var fromShape = r.shape && r.shapeArea && !r.dimsEdited && !r.printedArea;
+      return fmtArea(area(r)) + (fromShape ? ' (from shape)' : '');
     }
 
     // Shown when the plan's printed area and its dimensions disagree, or when the
@@ -811,6 +913,9 @@
       var ac = PLAN.areaConflict(r);
       if (ac) return '<div class="box-note">The plan prints ' + fmtArea(ac.printed) + ', so that is used. ' + esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) +
         ' gives ' + fmtArea(ac.dims) + '. The dimension lines may measure outside the walls or only part of the room.</div>';
+      var sc = PLAN.shapeConflict(r);
+      if (sc) return '<div class="box-note">The shape you drew measures ' + fmtArea(sc.shape) + ', but the plan prints ' + fmtArea(sc.printed) +
+        '. Check the corners or the scale.</div>';
       if (!r.mismatch) return '<div class="box-note hidden"></div>';
       return '<div class="box-note">The box on the plan measures ' + esc(fmtFtIn(r.mismatch.w)) + ' x ' + esc(fmtFtIn(r.mismatch.h)) +
         '. Adjust the box or the size, or check the scale.</div>';
@@ -846,7 +951,7 @@
           r.dimsEdited = true; // the area now follows the typed dimensions
           if (r.source === 'estimated') r.source = 'edited';
           var card = el.closest('.room-card');
-          card.querySelector('.area').textContent = fmtArea(area(r));
+          card.querySelector('.area').textContent = areaText(r);
           card.querySelector('.badge').outerHTML = badgeFor(r);
           renderStats(); draw();
           card.querySelector('.box-note').outerHTML = noteFor(r);
@@ -1017,7 +1122,9 @@
             area_sqft: Math.round(area(r)), printed_area_sqft: r.printedArea && !r.dimsEdited ? r.printedArea : null, source: r.source,
             bbox_pct: { x: +r.bbox.x.toFixed(2), y: +r.bbox.y.toFixed(2), w: +r.bbox.w.toFixed(2), h: +r.bbox.h.toFixed(2) },
             box_ft: r.ftBox ? { x: +r.ftBox.x.toFixed(2), y: +r.ftBox.y.toFixed(2), w: +r.ftBox.w.toFixed(2), h: +r.ftBox.h.toFixed(2) } : null,
-            box_mismatch: !!r.mismatch
+            box_mismatch: !!r.mismatch,
+            shape_pct: r.shape ? r.shape.map(function (q) { return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) : null,
+            shape_ft: r.shape && r.ftShape ? r.ftShape.map(function (q) { return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) : null
           };
         })
       };
@@ -1085,6 +1192,7 @@
       c.addEventListener('pointermove', onMove);
       c.addEventListener('pointerup', onUp);
       c.addEventListener('pointercancel', onUp);
+      c.addEventListener('dblclick', onDblClick);
 
       grid.addEventListener('input', onGridInput);
       grid.addEventListener('change', onGridChange);
@@ -1232,7 +1340,7 @@
         <p class="hint">
           <span class="legend"><span class="swatch"></span>Measured from the plan</span>
           <span class="legend"><span class="swatch dash"></span>Estimated</span><br>
-          Click a room to select it, drag to move it, drag a corner to resize. Delete removes it.
+          Click a room to select it, drag to move it, drag a corner to resize. For rooms that aren't rectangles, tap a + on a side to add a corner, then drag it into place. Double-click a corner (or press and hold on a phone) to remove it. Delete removes the room.
         </p>
 
         <div class="rooms-head">
