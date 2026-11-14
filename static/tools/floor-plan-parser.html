@@ -134,7 +134,7 @@
     canvas { display: block; width: 100%; height: auto; touch-action: pan-y pinch-zoom; }
     canvas.editing { touch-action: none; }
 
-    .hint { font-size: 13px; color: #6b6560; margin: 16px 2px 34px; line-height: 1.6; }
+    .hint { font-size: 13px; color: #6b6560; margin: 14px 2px 34px; line-height: 1.6; }
     .legend { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; white-space: nowrap; }
     .swatch { width: 22px; height: 0; border-top: 2px solid #582b36; display: inline-block; }
     .swatch.dash { border-top-style: dashed; }
@@ -174,6 +174,45 @@
     .badge.labeled { background: #eef2dc; color: #4f5c1d; }
     .badge.estimated { background: #f6e6e9; color: #582b36; }
     .badge.edited { background: #efeae2; color: #433E3C; }
+    .box-note {
+      margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: #fdf6f7;
+      font-size: 12px; line-height: 1.45; color: #582b36;
+    }
+
+    /* ── MODE TABS (Measure, Furnish, Light, 3D) ── */
+    .modes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+    .mode {
+      font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: #433E3C;
+      background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 7px 18px;
+      cursor: pointer; transition: border-color 0.15s, color 0.15s;
+    }
+    .mode:hover:not(:disabled) { border-color: #582b36; color: #582b36; }
+    .mode.active { background: #f5eef0; border-color: #582b36; color: #582b36; }
+    .mode:disabled { color: #a39d92; cursor: default; background: rgba(255,255,255,0.6); }
+    .mode small { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-left: 4px; }
+
+    /* ── SCALE BAR ── */
+    .scale-bar {
+      margin-top: 18px; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 12px 14px;
+    }
+    .scale-bar.warn { background: #fdf6f7; border-color: #e8c4ca; }
+    .scale-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .scale-msg { font-size: 13px; line-height: 1.5; color: #6b6560; }
+    .scale-msg b { color: #433E3C; font-weight: 600; }
+    .scale-bar.warn .scale-msg b { color: #582b36; }
+    .scale-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0ebe3; }
+    .scale-ask label { font-size: 13px; font-weight: 600; color: #433E3C; }
+    .scale-ask input {
+      width: 110px; height: 36px; border: 1.5px solid #d0c9bc; border-radius: 10px; background: #FAF9F6;
+      color: #433E3C; font-family: 'DM Sans', sans-serif; font-size: 15px; padding: 0 10px;
+    }
+    .scale-ask input:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .scale-ask input.bad { border-color: #b3475b; background: #fdf6f7; }
+    .link-btn { background: none; border: none; font-family: 'DM Sans', sans-serif; font-size: 13px; color: #6b6560; text-decoration: underline; cursor: pointer; padding: 0; }
+    .link-btn:hover { color: #433E3C; }
+    @media (max-width: 520px) {
+      .scale-row { flex-direction: column; align-items: flex-start; }
+    }
 
     /* ── INSIDE THE HOMEOWNER TOOLKIT (wrapper supplies folder and graph paper) ── */
     .in-toolkit, .in-toolkit body { background: transparent; min-height: 0; }
@@ -237,8 +276,25 @@
       img: null, W: 0, H: 0,
       rooms: [], selected: -1,
       sendB64: '', sendType: 'image/jpeg',
-      drag: null, nextId: 1
+      drag: null, nextId: 1,
+      walls: null,   // SNAP's wall map and found words, kept for Furnish and 3D
+      scale: null,   // { ftPerPx, source: 'auto' | 'manual', rooms, line }
+      tool: null,    // 'scale' while the person is drawing a scale line
+      scaleLine: null,
+      mode: 'measure'
     };
+
+    /* ---------- Geometry in feet ---------- */
+    // Every room gets its box in feet once there is a scale. The box is the
+    // truth for placing things; rooms whose box and plan dimensions disagree
+    // by more than 10% are flagged on their card.
+    function syncGeometry() {
+      var f = state.scale ? state.scale.ftPerPx : null;
+      state.rooms.forEach(function (r) {
+        r.ftBox = f ? PLAN.boxFt(r.bbox, f, state.W, state.H) : null;
+        r.mismatch = PLAN.mismatch(r, r.ftBox);
+      });
+    }
 
     /* ---------- Measurement helpers (live in plan-engine.js) ---------- */
     var fmtFtIn = PLAN.fmtFtIn, parseFtIn = PLAN.parseFtIn, area = PLAN.area, fmtArea = PLAN.fmtArea;
@@ -318,10 +374,14 @@
       return Promise.all([vision, analysis])
         .then(function (res) {
           var rooms = res[0], an = res[1];
+          state.scale = null;
           if (an && an.a) {
+            state.walls = { map: an.a, words: an.words };
             try {
               var words = an.words.map(function (wd) { return { text: wd.text, x: wd.x, y: wd.y }; });
               state.snapInfo = SNAP.place(rooms, an.a, words);
+              var f = PLAN.scaleFromAnalysis(state.snapInfo.ppf, an.a.w, state.W);
+              if (f) state.scale = { ftPerPx: f, source: 'auto', rooms: state.snapInfo.ppfRooms };
             } catch (e) { if (window.console) console.warn('Snapping skipped:', e); }
           }
           return rooms;
@@ -388,6 +448,7 @@
       state.sendB64 = tmp.toDataURL('image/jpeg', 0.9).split(',')[1];
 
       state.rooms = []; state.selected = -1;
+      state.walls = null; state.scale = null; state.snapInfo = null; endScaleTool();
       // Find walls and printed room names while the model reads the plan
       state.analysis = new Promise(function (resolve) {
         setTimeout(function () {
@@ -416,6 +477,7 @@
 
     function draw(forExport) {
       var c = $('planCanvas'), ctx = c.getContext('2d'), s = scale();
+      syncGeometry();
       ctx.clearRect(0, 0, state.W, state.H);
       ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, state.W, state.H);
       ctx.drawImage(state.img, 0, 0, state.W, state.H);
@@ -480,6 +542,49 @@
         });
         ctx.restore();
       }
+
+      if (!forExport) {
+        if (state.tool === 'scale' && state.scaleLine) drawScaleLine(ctx, state.scaleLine.p1, state.scaleLine.p2);
+        else if (state.scale) drawRuler(ctx);
+      }
+    }
+
+    // The line being drawn to set the scale, with end ticks
+    function drawScaleLine(ctx, p1, p2) {
+      var ratio = displayRatio(), ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      var tx = Math.cos(ang + Math.PI / 2) * 8 * ratio, ty = Math.sin(ang + Math.PI / 2) * 8 * ratio;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 6 * ratio;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.strokeStyle = '#582b36'; ctx.lineWidth = 2.5 * ratio;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+      [p1, p2].forEach(function (p) { ctx.moveTo(p.x - tx, p.y - ty); ctx.lineTo(p.x + tx, p.y + ty); });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // A small ruler in the bottom left corner, so the scale can be checked by eye
+    // against the plan's own dimension lines. Shown on screen only.
+    function drawRuler(ctx) {
+      var ratio = displayRatio(), f = state.scale.ftPerPx;
+      var feet = [1, 2, 5, 10, 20, 50].filter(function (n) { return n / f <= state.W * 0.22; }).pop();
+      if (!feet) return;
+      var len = feet / f, pad = 10 * ratio, x = pad + 8 * ratio, y = state.H - pad - 10 * ratio;
+      var label = feet + ' ft';
+      ctx.save();
+      ctx.font = '600 ' + (11 * ratio) + 'px "DM Sans", sans-serif';
+      var lw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      roundRect(ctx, pad, y - 22 * ratio, len + lw + 30 * ratio, 30 * ratio, 6 * ratio);
+      ctx.fill();
+      ctx.strokeStyle = '#582b36'; ctx.lineWidth = 2 * ratio;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 6 * ratio); ctx.lineTo(x, y); ctx.lineTo(x + len, y); ctx.lineTo(x + len, y - 6 * ratio);
+      ctx.stroke();
+      ctx.fillStyle = '#582b36'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(label, x + len + 8 * ratio, y);
+      ctx.restore();
     }
 
     function corners(b) {
@@ -526,6 +631,15 @@
 
     function onDown(e) {
       if (!state.img) return;
+      if (state.tool === 'scale') {
+        var q = toCanvas(e);
+        state.scaleLine = { p1: q, p2: q, drawing: true };
+        $('scaleAsk').classList.add('hidden');
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        draw();
+        return;
+      }
       var p = toCanvas(e), h = hitHandle(p);
       if (h) {
         startDrag(e, 'resize', h, p);
@@ -544,6 +658,19 @@
     function onMove(e) {
       if (!state.img) return;
       var p = toCanvas(e), c = $('planCanvas');
+      if (state.tool === 'scale') {
+        c.style.cursor = 'crosshair';
+        if (state.scaleLine && state.scaleLine.drawing) {
+          // Hold Shift for a perfectly straight line along a wall
+          if (e.shiftKey) {
+            var a = state.scaleLine.p1;
+            p = Math.abs(p.x - a.x) > Math.abs(p.y - a.y) ? { x: p.x, y: a.y } : { x: a.x, y: p.y };
+          }
+          state.scaleLine.p2 = p;
+          draw();
+        }
+        return;
+      }
       if (!state.drag) {
         var h = hitHandle(p);
         c.style.cursor = h ? (h === 'nw' || h === 'se' ? 'nwse-resize' : 'nesw-resize') : (hitRoom(p) > -1 ? 'move' : 'default');
@@ -566,9 +693,72 @@
       draw();
     }
     function onUp(e) {
+      if (state.tool === 'scale' && state.scaleLine && state.scaleLine.drawing) {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        var l = state.scaleLine;
+        l.drawing = false;
+        // Ignore taps: the line has to be long enough to measure from
+        if (Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y) < 20 * displayRatio()) { state.scaleLine = null; draw(); return; }
+        $('scaleAsk').classList.remove('hidden');
+        var inp = $('scaleLen');
+        inp.value = ''; inp.classList.remove('bad');
+        try { inp.focus({ preventScroll: true }); } catch (err) { inp.focus(); }
+        return;
+      }
       if (state.drag) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
         state.drag = null;
+        renderCards(); // a moved or resized box can change its mismatch note
+      }
+    }
+
+    /* ---------- Setting the scale ---------- */
+    function startScaleTool() {
+      if (!state.img) return;
+      select(-1);
+      state.tool = 'scale'; state.scaleLine = null;
+      $('planCanvas').classList.add('editing');
+      $('scaleAsk').classList.add('hidden');
+      renderScaleBar();
+      draw();
+      var pr = document.querySelector('.print');
+      if (pr && pr.scrollIntoView) pr.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    function endScaleTool() {
+      state.tool = null; state.scaleLine = null;
+      if (!$('planCanvas')) return;
+      $('planCanvas').classList.remove('editing');
+      $('planCanvas').style.cursor = 'default';
+      $('scaleAsk').classList.add('hidden');
+      renderScaleBar();
+      if (state.img && state.rooms.length) draw();
+    }
+    function saveScale() {
+      var l = state.scaleLine, inp = $('scaleLen');
+      var feet = parseFtIn(inp.value);
+      if (!l || !feet || feet <= 0) { inp.classList.add('bad'); inp.focus(); return; }
+      state.scale = { ftPerPx: PLAN.scaleFromLine(l.p1, l.p2, feet), source: 'manual',
+                      line: { p1: l.p1, p2: l.p2, feet: feet } };
+      endScaleTool();
+      renderAll();
+    }
+
+    function renderScaleBar() {
+      var bar = $('scaleBar'), msg = $('scaleMsg'), btn = $('scaleBtn'), sc = state.scale;
+      if (!bar) return;
+      bar.classList.toggle('warn', !sc && state.tool !== 'scale');
+      if (state.tool === 'scale') {
+        msg.innerHTML = '<b>Set the scale.</b> Drag along a wall or dimension line whose length you know. Hold Shift to keep the line straight.';
+        btn.textContent = 'Cancel'; btn.className = 'btn-secondary btn-sm';
+      } else if (!sc) {
+        msg.innerHTML = '<b>No scale found on this plan.</b> Set it once by tracing one wall you know the length of, so furniture and lights can be drawn to size.';
+        btn.textContent = 'Set the scale'; btn.className = 'btn-primary btn-sm';
+      } else if (sc.source === 'manual') {
+        msg.innerHTML = '<b>Scale set by you</b> from a ' + esc(fmtFtIn(sc.line.feet)) + ' line. Use the ruler on the plan to check it.';
+        btn.textContent = 'Set it again'; btn.className = 'btn-secondary btn-sm';
+      } else {
+        msg.innerHTML = '<b>Scale found</b> from ' + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + ' on the plan. Compare the ruler on the plan with a printed dimension to check it.';
+        btn.textContent = 'Check scale'; btn.className = 'btn-secondary btn-sm';
       }
     }
 
@@ -605,9 +795,17 @@
             '<div><label>Length</label><input data-f="length" value="' + esc(fmtFtIn(r.length)) + '" placeholder="10\'"></div>' +
           '</div>' +
           '<div class="card-foot"><span class="area">' + (area(r) ? fmtArea(area(r)) : 'Add dimensions') + '</span>' + badgeFor(r) + '</div>' +
+          noteFor(r) +
         '</div>';
       }).join('');
       $('roomGrid').innerHTML = html;
+    }
+
+    // Shown when the room's box on the plan and its dimensions disagree by more than 10%
+    function noteFor(r) {
+      if (!r.mismatch) return '<div class="box-note hidden"></div>';
+      return '<div class="box-note">The box on the plan measures ' + esc(fmtFtIn(r.mismatch.w)) + ' x ' + esc(fmtFtIn(r.mismatch.h)) +
+        '. Adjust the box or the size, or check the scale.</div>';
     }
 
     function renderStats() {
@@ -618,7 +816,7 @@
       $('statEst').textContent = est;
     }
 
-    function renderAll() { renderCards(); renderStats(); draw(); }
+    function renderAll() { syncGeometry(); renderCards(); renderStats(); renderScaleBar(); draw(); }
 
     function cardIndex(el) {
       var card = el.closest('.room-card');
@@ -642,6 +840,7 @@
           card.querySelector('.area').textContent = fmtArea(area(r));
           card.querySelector('.badge').outerHTML = badgeFor(r);
           renderStats(); draw();
+          card.querySelector('.box-note').outerHTML = noteFor(r);
         }
       }
     }
@@ -801,12 +1000,15 @@
       var data = {
         unit: 'ft',
         total_sqft: Math.round(state.rooms.reduce(function (t, r) { return t + area(r); }, 0)),
+        scale: state.scale ? { ft_per_px: +state.scale.ftPerPx.toFixed(6), source: state.scale.source, canvas_px: [state.W, state.H] } : null,
         rooms: state.rooms.map(function (r) {
           return {
             name: r.name, width: fmtFtIn(r.width), length: fmtFtIn(r.length),
             width_ft: r.width ? +r.width.toFixed(3) : null, length_ft: r.length ? +r.length.toFixed(3) : null,
             area_sqft: Math.round(area(r)), source: r.source,
-            bbox_pct: { x: +r.bbox.x.toFixed(2), y: +r.bbox.y.toFixed(2), w: +r.bbox.w.toFixed(2), h: +r.bbox.h.toFixed(2) }
+            bbox_pct: { x: +r.bbox.x.toFixed(2), y: +r.bbox.y.toFixed(2), w: +r.bbox.w.toFixed(2), h: +r.bbox.h.toFixed(2) },
+            box_ft: r.ftBox ? { x: +r.ftBox.x.toFixed(2), y: +r.ftBox.y.toFixed(2), w: +r.ftBox.w.toFixed(2), h: +r.ftBox.h.toFixed(2) } : null,
+            box_mismatch: !!r.mismatch
           };
         })
       };
@@ -840,6 +1042,8 @@
 
     function reset() {
       state.img = null; state.rooms = []; state.selected = -1; state.sendB64 = '';
+      state.walls = null; state.scale = null; state.snapInfo = null;
+      endScaleTool();
       $('fileInput').value = '';
       showScreen('upload');
     }
@@ -886,7 +1090,17 @@
       $('retryBtn').addEventListener('click', extract);
       $('newBtn').addEventListener('click', reset);
 
+      $('scaleBtn').addEventListener('click', function () { if (state.tool === 'scale') endScaleTool(); else startScaleTool(); });
+      $('scaleSave').addEventListener('click', saveScale);
+      $('scaleRedo').addEventListener('click', function () { state.scaleLine = null; $('scaleAsk').classList.add('hidden'); draw(); });
+      $('scaleLen').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); saveScale(); }
+        if (e.key === 'Escape') endScaleTool();
+      });
+      $('scaleLen').addEventListener('input', function () { this.classList.remove('bad'); });
+
       document.addEventListener('keydown', function (e) {
+        if (state.tool === 'scale') { if (e.key === 'Escape' && !/INPUT/.test(document.activeElement.tagName)) endScaleTool(); return; }
         if (state.selected < 0 || /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
         if (e.key === 'Escape') select(-1);
         if (e.key === 'Delete' || e.key === 'Backspace') { state.rooms.splice(state.selected, 1); state.selected = -1; renderAll(); e.preventDefault(); }
@@ -981,10 +1195,31 @@
           </div>
         </div>
 
+        <div class="modes" role="tablist" aria-label="What to do with this plan">
+          <button class="mode active" role="tab" aria-selected="true" data-mode="measure">Measure</button>
+          <button class="mode" role="tab" aria-selected="false" data-mode="furnish" disabled>Furnish <small>Soon</small></button>
+          <button class="mode" role="tab" aria-selected="false" data-mode="light" disabled>Light <small>Soon</small></button>
+          <button class="mode" role="tab" aria-selected="false" data-mode="3d" disabled>3D <small>Soon</small></button>
+        </div>
+
         <div class="print">
           <div class="tape l"></div><div class="tape r"></div>
           <canvas id="planCanvas"></canvas>
         </div>
+
+        <div class="scale-bar" id="scaleBar">
+          <div class="scale-row">
+            <p class="scale-msg" id="scaleMsg"></p>
+            <button class="btn-secondary btn-sm" id="scaleBtn">Check scale</button>
+          </div>
+          <div class="scale-ask hidden" id="scaleAsk">
+            <label for="scaleLen">How long is that line?</label>
+            <input id="scaleLen" placeholder="12'6&quot;" autocomplete="off" inputmode="text">
+            <button class="btn-primary btn-sm" id="scaleSave">Save scale</button>
+            <button class="link-btn" id="scaleRedo">Draw it again</button>
+          </div>
+        </div>
+
         <p class="hint">
           <span class="legend"><span class="swatch"></span>Measured from the plan</span>
           <span class="legend"><span class="swatch dash"></span>Estimated</span><br>
