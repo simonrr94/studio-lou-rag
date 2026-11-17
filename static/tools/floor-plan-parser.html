@@ -221,6 +221,28 @@
       background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 10px 14px; }
     .rug-placed p { font-size: 13px; line-height: 1.5; color: #433E3C; }
     .rug-empty { font-size: 14px; color: #6b6560; padding: 6px 2px; }
+    .piece-area { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1.5px solid #d0c9bc; }
+    .piece-area .furnish-sub { margin-bottom: 12px; }
+    .piece-group, .custom-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .piece-group-name { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #6b6560; width: 110px; flex-shrink: 0; }
+    .piece-chip {
+      font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: #433E3C; background: #ffffff;
+      border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 6px 14px; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+    }
+    .piece-chip:hover { border-color: #582b36; color: #582b36; }
+    .piece-chip small { font-size: 11px; font-weight: 500; color: #6b6560; margin-left: 2px; }
+    .custom-row input {
+      height: 34px; border: 1.5px solid #d0c9bc; border-radius: 10px; background: #FAF9F6; color: #433E3C;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 0 10px; width: 160px;
+    }
+    .custom-row input.short { width: 92px; }
+    .custom-row input:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .custom-row input.bad { border-color: #b3475b; background: #fdf6f7; }
+    @media (max-width: 520px) {
+      .piece-group-name { width: 100%; }
+      .custom-row input { width: 100%; }
+      .custom-row input.short { width: calc(50% - 3px); }
+    }
 
     /* ── SCALE BAR ── */
     .scale-bar {
@@ -278,7 +300,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=4"></script>
+  <script src="/static/tools/plan-engine.js?v=5"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -314,7 +336,9 @@
       tool: null,    // 'scale' while the person is drawing a scale line
       scaleLine: null,
       mode: 'measure',  // 'measure' or 'furnish'
-      rugCheck: null    // { room, key, result }: the rug sizes checked for the selected room
+      rugCheck: null,   // { room, key, result }: the rug sizes checked for the selected room
+      pieces: [],       // furniture placed in Furnish
+      pieceSel: -1      // index of the selected piece, or -1
     };
 
     /* ---------- Geometry in feet ---------- */
@@ -511,6 +535,7 @@
 
       state.rooms = []; state.selected = -1;
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null; endScaleTool();
+      state.pieces = []; state.pieceSel = -1;
       setMode('measure');
       // Find walls and printed room names while the model reads the plan
       state.analysis = new Promise(function (resolve) {
@@ -560,7 +585,7 @@
         ctx.restore();
       });
 
-      if (state.scale) drawRugs(ctx, forExport);
+      if (state.scale) { drawRugs(ctx, forExport); drawPieces(ctx, forExport); }
 
       state.rooms.forEach(function (r, i) {
         var b = px(r), sel = !forExport && i === state.selected;
@@ -744,14 +769,16 @@
         shape(5 * ratio);
         ctx.setLineDash([4 * ratio, 3 * ratio]); ctx.lineWidth = 1 * ratio; ctx.strokeStyle = 'rgba(88,43,54,0.55)'; ctx.stroke();
         ctx.setLineDash([]);
-        // Size in the middle
+        // Size tag in a corner of the rug (the top of a round one), where furniture rarely sits
         var fs = 11.5 * ratio;
         ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
         var tw = ctx.measureText(q.label).width, pw = tw + 12 * ratio, ph = fs + 8 * ratio;
+        var lx = q.round ? q.cx : q.x + 9 * ratio + pw / 2, ly = q.round ? q.y + 9 * ratio + ph / 2 : q.y + 9 * ratio + ph / 2;
+        if (pw + 18 * ratio > q.w || ph + 18 * ratio > q.h) { lx = q.cx; ly = q.cy; }
         ctx.fillStyle = 'rgba(255,255,255,0.92)';
-        roundRect(ctx, q.cx - pw / 2, q.cy - ph / 2, pw, ph, ph / 2); ctx.fill();
+        roundRect(ctx, lx - pw / 2, ly - ph / 2, pw, ph, ph / 2); ctx.fill();
         ctx.fillStyle = '#582b36'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(q.label, q.cx, q.cy + 0.5 * ratio);
+        ctx.fillText(q.label, lx, ly + 0.5 * ratio);
         ctx.restore();
       });
     }
@@ -787,6 +814,172 @@
       });
     }
 
+    /* ---------- Furniture (Furnish mode) ----------
+       Pieces belong to the plan, not to a room, so they can sit anywhere
+       (open plans, doorways). Each is { id, type, name, kind, w, d, h, x, y, rot }:
+       size in inches, center in percent of the image, rot in degrees clockwise. */
+    function pieceOK(pc) { return pc && state.scale; }
+    function piecePx(pc) {
+      var f = state.scale.ftPerPx;
+      return { cx: pc.x / 100 * state.W, cy: pc.y / 100 * state.H, w: pc.w / 12 / f, d: pc.d / 12 / f };
+    }
+    function hitPiece(p) {
+      if (!state.scale) return -1;
+      for (var k = state.pieces.length - 1; k >= 0; k--) {   // topmost first
+        var q = piecePx(state.pieces[k]);
+        if (FURNITURE.contains(p, q.cx, q.cy, q.w, q.d, state.pieces[k].rot)) return k;
+      }
+      return -1;
+    }
+    function pieceSize(pc) { return FURNITURE.fmtIn(pc.w) + ' x ' + FURNITURE.fmtIn(pc.d); }
+    // Smallest room whose outline holds the piece's center, for the PDF list
+    function pieceRoom(pc) {
+      var p = { x: pc.x / 100 * state.W, y: pc.y / 100 * state.H }, best = null, bestA = Infinity;
+      state.rooms.forEach(function (r) {
+        if (!PLAN.pointInPoly(p, ptsPx(r))) return;
+        var b = px(r), a = b.w * b.h;
+        if (a < bestA) { bestA = a; best = r; }
+      });
+      return best;
+    }
+
+    function drawPieces(ctx, forExport) {
+      var ratio = displayRatio();
+      state.pieces.forEach(function (pc, k) {
+        var q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && k === state.pieceSel;
+        ctx.save();
+        ctx.translate(q.cx, q.cy);
+        ctx.rotate(pc.rot * Math.PI / 180);
+        ctx.shadowColor = 'rgba(67,62,60,0.22)'; ctx.shadowBlur = 4 * ratio; ctx.shadowOffsetY = 1 * ratio;
+        ctx.fillStyle = '#f5f0e8';
+        roundRect(ctx, -q.w / 2, -q.d / 2, q.w, q.d, Math.min(4 * ratio, q.w / 4, q.d / 4)); ctx.fill();
+        ctx.shadowColor = 'transparent';
+        // The back of seating and the headboard of a bed, so you can tell which way it faces
+        if (pc.kind === 'seat' || pc.kind === 'bed') {
+          var band = Math.min(q.d * (pc.kind === 'bed' ? 0.08 : 0.24), 8 / 12 / state.scale.ftPerPx);
+          ctx.fillStyle = '#d0c9bc';
+          ctx.fillRect(-q.w / 2, -q.d / 2, q.w, band);
+          if (pc.kind === 'bed') { // two pillows
+            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#d0c9bc'; ctx.lineWidth = 1 * ratio;
+            var pw = q.w * 0.4, ph = q.d * 0.12, py = -q.d / 2 + band + q.d * 0.03;
+            [-q.w / 4, q.w / 4].forEach(function (x) { roundRect(ctx, x - pw / 2, py, pw, ph, ph / 3); ctx.fill(); ctx.stroke(); });
+          }
+        }
+        roundRect(ctx, -q.w / 2, -q.d / 2, q.w, q.d, Math.min(4 * ratio, q.w / 4, q.d / 4));
+        ctx.lineWidth = (sel ? 3 : 1.6) * ratio; ctx.strokeStyle = sel ? '#7f9433' : '#433E3C'; ctx.stroke();
+        // Name and size, kept upright
+        var turned = pc.rot % 360 > 90 && pc.rot % 360 <= 270;
+        if (turned) ctx.rotate(Math.PI);
+        var fs = 10.5 * ratio, size = pieceSize(pc), ty = pc.kind === 'bed' ? q.d * 0.12 : 0;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
+        var nw = ctx.measureText(pc.name).width;
+        ctx.font = '500 ' + (fs * 0.9) + 'px "DM Sans", sans-serif';
+        var sw = ctx.measureText(size).width;
+        var room = q.w - 6 * ratio, twoLines = q.d > fs * 2.6;
+        if (nw <= room || sel) {
+          ctx.fillStyle = '#433E3C';
+          ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
+          ctx.fillText(pc.name, 0, ty - (twoLines && sw <= room ? fs * 0.55 : 0));
+          if (twoLines && sw <= room) {
+            ctx.fillStyle = '#6b6560'; ctx.font = '500 ' + (fs * 0.9) + 'px "DM Sans", sans-serif';
+            ctx.fillText(size, 0, ty + fs * 0.6);
+          }
+        }
+        ctx.restore();
+      });
+    }
+
+    // Where a new piece lands: the open spot nearest the middle of the room,
+    // clear of the other pieces by a couple of inches and inside the room's outline.
+    // Falls back to the middle of the room when nothing is clear.
+    function openSpot(spec, r) {
+      var f = state.scale.ftPerPx, w = spec.w / 12 / f, d = spec.d / 12 / f, gap = 2 / 12 / f;
+      var b = r ? px(r) : { x: 0, y: 0, w: state.W, h: state.H }, poly = r ? ptsPx(r) : null;
+      var mid = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      var boxes = state.pieces.map(function (pc) {
+        var q = piecePx(pc), cs = FURNITURE.corners(q.cx, q.cy, q.w, q.d, pc.rot);
+        var xs = cs.map(function (c) { return c.x; }), ys = cs.map(function (c) { return c.y; });
+        return { x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs), y0: Math.min.apply(null, ys), y1: Math.max.apply(null, ys) };
+      });
+      var step = Math.max(3 / 12 / f, Math.min(b.w, b.h) / 30), spots = [];
+      for (var x = b.x + w / 2; x <= b.x + b.w - w / 2 + 0.01; x += step)
+        for (var y = b.y + d / 2; y <= b.y + b.h - d / 2 + 0.01; y += step) spots.push({ x: x, y: y });
+      spots.sort(function (p, q) { return Math.hypot(p.x - mid.x, p.y - mid.y) - Math.hypot(q.x - mid.x, q.y - mid.y); });
+      for (var i = 0; i < spots.length; i++) {
+        var c = spots[i], x0 = c.x - w / 2, x1 = c.x + w / 2, y0 = c.y - d / 2, y1 = c.y + d / 2;
+        if (poly && ![[x0, y0], [x1, y0], [x1, y1], [x0, y1]].every(function (k) { return PLAN.pointInPoly({ x: k[0], y: k[1] }, poly); })) continue;
+        var clear = boxes.every(function (o) { return x1 + gap <= o.x0 || x0 - gap >= o.x1 || y1 + gap <= o.y0 || y0 - gap >= o.y1; });
+        if (clear) return { x: c.x / state.W * 100, y: c.y / state.H * 100 };
+      }
+      return { x: mid.x / state.W * 100, y: mid.y / state.H * 100 };
+    }
+    function addPiece(spec) {
+      if (!state.scale) return;
+      var at = openSpot(spec, state.rooms[state.selected]);
+      state.pieces.push({ id: state.nextId++, type: spec.id || 'custom', name: spec.name, kind: spec.kind || 'other',
+                          w: spec.w, d: spec.d, h: spec.h || null, x: at.x, y: at.y, rot: 0 });
+      state.pieceSel = state.pieces.length - 1;
+      renderPieceBar(); draw();
+    }
+    function addCustom() {
+      var nameEl = $('customName'), wEl = $('customW'), dEl = $('customD');
+      var w = FURNITURE.parseInches(wEl.value), d = FURNITURE.parseInches(dEl.value), ok = true;
+      [[wEl, w], [dEl, d]].forEach(function (pair) {
+        var bad = !pair[1] || pair[1] < 4 || pair[1] > 240;
+        pair[0].classList.toggle('bad', bad); if (bad) ok = false;
+      });
+      if (!ok) return;
+      addPiece({ name: (nameEl.value.trim() || 'My piece').slice(0, 30), w: w, d: d, kind: 'other' });
+      nameEl.value = ''; wEl.value = ''; dEl.value = '';
+    }
+    function removePiece() {
+      if (state.pieceSel < 0) return;
+      state.pieces.splice(state.pieceSel, 1);
+      state.pieceSel = -1;
+      renderPieceBar(); draw();
+    }
+    function turnPiece(deg) {
+      var pc = state.pieces[state.pieceSel];
+      if (!pc) return;
+      pc.rot = ((pc.rot + deg) % 360 + 360) % 360;
+      renderPieceBar(); draw();
+    }
+
+    // Static part of the furniture panel: the catalog buttons, built once
+    function buildPieceChips() {
+      $('pieceChips').innerHTML = FURNITURE.CATALOG.map(function (g) {
+        return '<div class="piece-group"><span class="piece-group-name">' + g.group + '</span>' +
+          g.items.map(function (it) {
+            return '<button class="piece-chip" data-piece="' + it.id + '">' + it.name + ' <small>' + FURNITURE.fmtIn(it.w) + ' x ' + FURNITURE.fmtIn(it.d) + '</small></button>';
+          }).join('') + '</div>';
+      }).join('');
+    }
+    // The line about the selected piece, with its buttons
+    function renderPieceBar() {
+      var bar = $('pieceBar'), pc = state.pieces[state.pieceSel];
+      $('pieceSub').innerHTML = !state.scale ? 'Furniture is drawn to scale, so this plan needs a scale first.'
+        : state.rooms[state.selected] ? 'Tap a piece to drop it into <b>' + esc(state.rooms[state.selected].name) + '</b> at its real size.'
+        : 'Pick a room, then tap a piece to drop it in at its real size.';
+      if (!pc) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+      bar.classList.remove('hidden');
+      bar.innerHTML = '<p><b>' + esc(pc.name) + '</b>, ' + pieceSize(pc) + (pc.rot ? ', turned ' + pc.rot + '&deg;' : '') + '. Drag it on the plan to move it.</p>' +
+        '<div class="btn-row">' +
+          '<button class="btn-secondary btn-sm" data-pact="turn15">Turn 15&deg;</button>' +
+          '<button class="btn-secondary btn-sm" data-pact="turn90">Turn 90&deg;</button>' +
+          '<button class="btn-secondary btn-sm" data-pact="remove">Remove</button>' +
+        '</div>';
+    }
+    function onPieceClick(e) {
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      var id = btn.getAttribute('data-piece'), act = btn.getAttribute('data-pact');
+      if (id) addPiece(FURNITURE.get(id));
+      else if (act === 'turn15') turnPiece(15);
+      else if (act === 'turn90') turnPiece(90);
+      else if (act === 'remove') removePiece();
+    }
+
     /* ---------- Furnish panel ---------- */
     var RUG_ADVICE = {
       living: 'In a living room, leave 12" to 18" of floor between the rug and the walls.',
@@ -812,6 +1005,7 @@
 
     function renderFurnish() {
       if (!$('furnishPanel')) return;
+      renderPieceBar();
       var r = state.rooms[state.selected];
       $('rugRoom').innerHTML = '<option value="-1">Pick a room</option>' + state.rooms.map(function (rm, i) {
         return '<option value="' + i + '"' + (i === state.selected ? ' selected' : '') + '>' + esc(rm.name) + '</option>';
@@ -986,7 +1180,18 @@
     }
     // Furnish: grab a rug to move it, or tap a room to pick it
     function furnishDown(e) {
-      var p = toCanvas(e), i = hitRug(p);
+      var p = toCanvas(e), pk = hitPiece(p);
+      if (pk > -1) {
+        state.pieceSel = pk;
+        var pc = state.pieces[pk];
+        state.drag = { mode: 'piece', start: p, orig: { x: pc.x, y: pc.y } };
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        renderPieceBar(); draw();
+        return;
+      }
+      if (state.pieceSel > -1) { state.pieceSel = -1; renderPieceBar(); }
+      var i = hitRug(p);
       if (i > -1) {
         if (i !== state.selected) select(i, false);
         var r = state.rooms[i];
@@ -1021,13 +1226,18 @@
         return;
       }
       if (state.mode === 'furnish') {
-        if (state.drag && state.drag.mode === 'rug') {
+        if (state.drag && state.drag.mode === 'piece') {
+          var pp = state.pieces[state.pieceSel], pd = state.drag;
+          pp.x = clamp(pd.orig.x + (p.x - pd.start.x) / state.W * 100, 0, 100);
+          pp.y = clamp(pd.orig.y + (p.y - pd.start.y) / state.H * 100, 0, 100);
+          draw();
+        } else if (state.drag && state.drag.mode === 'rug') {
           var rr = state.rooms[state.selected], dd = state.drag;
           rr.rug.x = clamp(dd.orig.x + (p.x - dd.start.x) / state.W * 100, 0, 100);
           rr.rug.y = clamp(dd.orig.y + (p.y - dd.start.y) / state.H * 100, 0, 100);
           draw(); updatePlacedMsg();
         } else {
-          c.style.cursor = hitRug(p) > -1 ? 'move' : hitRoom(p) > -1 ? 'pointer' : 'default';
+          c.style.cursor = hitPiece(p) > -1 || hitRug(p) > -1 ? 'move' : hitRoom(p) > -1 ? 'pointer' : 'default';
         }
         return;
       }
@@ -1080,6 +1290,11 @@
         var inp = $('scaleLen');
         inp.value = ''; inp.classList.remove('bad');
         try { inp.focus({ preventScroll: true }); } catch (err) { inp.focus(); }
+        return;
+      }
+      if (state.drag && state.drag.mode === 'piece') {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        state.drag = null;
         return;
       }
       if (state.drag && state.drag.mode === 'rug') {
@@ -1380,6 +1595,35 @@
       doc.text(Math.round(total).toLocaleString(), cols[3], y + 15);
       y += 34;
 
+      // Furniture placed in Furnish
+      if (state.scale && state.pieces.length) {
+        y += 8;
+        checkPage(90);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+        doc.text('Furniture', margin, y);
+        y += 12;
+        var fc = [margin + 8, margin + 230, pageW - margin - 8];
+        doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 22, 'F');
+        doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+        doc.text('PIECE', fc[0], y + 14);
+        doc.text('SIZE (W X D)', fc[1], y + 14);
+        doc.text('ROOM', fc[2], y + 14, { align: 'right' });
+        y += 22;
+        state.pieces.forEach(function (pc, i) {
+          checkPage(22);
+          var rm = pieceRoom(pc);
+          doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
+          doc.rect(margin, y, contentW, 20, 'F');
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+          doc.text(ascii(pc.name).slice(0, 34), fc[0], y + 13);
+          doc.text(ascii(pieceSize(pc)), fc[1], y + 13);
+          doc.setTextColor(107, 101, 96);
+          doc.text(rm ? ascii(rm.name).slice(0, 30) : '-', fc[2], y + 13, { align: 'right' });
+          y += 20;
+        });
+        y += 10;
+      }
+
       // Rugs placed in Furnish
       var rugRooms = state.rooms.filter(rugOK);
       if (rugRooms.length) {
@@ -1444,6 +1688,11 @@
         unit: 'ft',
         total_sqft: Math.round(state.rooms.reduce(function (t, r) { return t + area(r); }, 0)),
         scale: state.scale ? { ft_per_px: +state.scale.ftPerPx.toFixed(6), source: state.scale.source, canvas_px: [state.W, state.H] } : null,
+        furniture: state.scale ? state.pieces.map(function (pc) {
+          var f = state.scale.ftPerPx, rm = pieceRoom(pc);
+          return { name: pc.name, type: pc.type, width_in: pc.w, depth_in: pc.d, height_in: pc.h, turned_deg: pc.rot,
+                   center_ft: [+(pc.x / 100 * state.W * f).toFixed(2), +(pc.y / 100 * state.H * f).toFixed(2)], room: rm ? rm.name : null };
+        }) : [],
         rooms: state.rooms.map(function (r) {
           return {
             name: r.name, width: fmtFtIn(r.width), length: fmtFtIn(r.length),
@@ -1493,6 +1742,7 @@
     function reset() {
       state.img = null; state.rooms = []; state.selected = -1; state.sendB64 = '';
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
+      state.pieces = []; state.pieceSel = -1;
       endScaleTool();
       setMode('measure');
       $('fileInput').value = '';
@@ -1546,6 +1796,13 @@
       for (var mb = 0; mb < modeBtns.length; mb++) modeBtns[mb].addEventListener('click', function () { if (!this.disabled) setMode(this.getAttribute('data-mode')); });
       $('rugRoom').addEventListener('change', function () { select(+this.value, false); });
       $('rugBody').addEventListener('click', onFurnishClick);
+      buildPieceChips();
+      $('pieceArea').addEventListener('click', onPieceClick);
+      $('customAdd').addEventListener('click', addCustom);
+      ['customName', 'customW', 'customD'].forEach(function (id) {
+        $(id).addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } });
+        $(id).addEventListener('input', function () { this.classList.remove('bad'); });
+      });
 
       $('scaleBtn').addEventListener('click', function () { if (state.tool === 'scale') endScaleTool(); else startScaleTool(); });
       $('scaleSave').addEventListener('click', saveScale);
@@ -1558,6 +1815,11 @@
 
       document.addEventListener('keydown', function (e) {
         if (state.tool === 'scale') { if (e.key === 'Escape' && !/INPUT/.test(document.activeElement.tagName)) endScaleTool(); return; }
+        if (state.mode === 'furnish' && state.pieceSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+          if (e.key === 'Delete' || e.key === 'Backspace') { removePiece(); e.preventDefault(); }
+          if (e.key === 'Escape') { state.pieceSel = -1; renderPieceBar(); draw(); }
+          return;
+        }
         if (state.selected < 0 || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
         if (e.key === 'Escape') select(-1);
         if (state.mode === 'furnish') {
@@ -1685,6 +1947,19 @@
         </div>
 
         <div id="furnishPanel" class="furnish hidden">
+          <div id="pieceArea" class="piece-area">
+            <p class="eyebrow">Furniture</p>
+            <p class="furnish-sub" id="pieceSub"></p>
+            <div id="pieceChips"></div>
+            <div class="custom-row">
+              <span class="piece-group-name">Your own piece</span>
+              <input id="customName" placeholder="Name" maxlength="30" autocomplete="off" aria-label="Piece name">
+              <input id="customW" class="short" placeholder="Width, inches" autocomplete="off" inputmode="decimal" aria-label="Width in inches">
+              <input id="customD" class="short" placeholder="Depth, inches" autocomplete="off" inputmode="decimal" aria-label="Depth in inches">
+              <button class="btn-secondary btn-sm" id="customAdd">Add</button>
+            </div>
+            <div class="rug-placed hidden" id="pieceBar"></div>
+          </div>
           <div class="furnish-head">
             <div>
               <p class="eyebrow">Rug helper</p>
@@ -1697,7 +1972,7 @@
             <span class="legend"><span class="swatch" style="border-top-color:#7f9433"></span>12" or more of floor</span>
             <span class="legend"><span class="swatch" style="border-top-color:#b07d14"></span>6" to 12"</span>
             <span class="legend"><span class="swatch"></span>Under 6"</span><br>
-            Sizes are checked against the room outline, so fix the outline in Measure first if it's off. Drag a rug to move it; Delete removes it.
+            Sizes are checked against the room outline, so fix the outline in Measure first if it's off. Drag a rug or piece to move it; Delete removes whichever is selected.
           </p>
         </div>
 

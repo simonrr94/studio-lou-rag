@@ -8,6 +8,7 @@
    PLAN   measurement and scale helpers that work in real feet, plus
           converting between the wall map and the displayed plan.
    RUG    standard rug sizes, which ones fit a room, and spacing lines.
+   FURNITURE  the starter catalog and the geometry of placed pieces.
 
    When this file changes, bump the ?v= number on its <script> tag in
    floor-plan-parser.html so browsers fetch the new copy.
@@ -621,4 +622,61 @@ var RUG = (function () {
     get: get, footprint: footprint, roomType: roomType,
     clearanceAt: clearanceAt, bestSpot: bestSpot, status: status, check: check, gaps: gaps
   };
+})();
+
+/* =====================================================================
+   FURNITURE: the starter catalog and the geometry of a placed piece
+   Sizes in inches: w is the width (side to side, as you face the piece),
+   d the depth (front to back), h the height (for the 3D view later).
+   Beds are listed with the frame. At rot 0 a piece faces down the plan:
+   its back is at the top. The code only measures; the person places.
+   ===================================================================== */
+var FURNITURE = (function () {
+  var CATALOG = [
+    { group: 'Living', items: [
+      { id: 'sofa', name: 'Sofa', w: 84, d: 38, h: 34, kind: 'seat' },
+      { id: 'loveseat', name: 'Loveseat', w: 64, d: 36, h: 34, kind: 'seat' },
+      { id: 'armchair', name: 'Armchair', w: 32, d: 34, h: 32, kind: 'seat' },
+      { id: 'coffee', name: 'Coffee table', w: 48, d: 24, h: 18, kind: 'table' },
+      { id: 'side', name: 'Side table', w: 20, d: 20, h: 24, kind: 'table' }
+    ] },
+    { group: 'Bedroom', items: [
+      { id: 'queen', name: 'Queen bed', w: 64, d: 86, h: 24, kind: 'bed' },
+      { id: 'king', name: 'King bed', w: 80, d: 86, h: 24, kind: 'bed' },
+      { id: 'nightstand', name: 'Nightstand', w: 24, d: 18, h: 26, kind: 'table' }
+    ] }
+  ];
+  function get(id) {
+    for (var g = 0; g < CATALOG.length; g++) for (var i = 0; i < CATALOG[g].items.length; i++) if (CATALOG[g].items[i].id === id) return CATALOG[g].items[i];
+    return null;
+  }
+  // Width or depth as typed: a plain number is inches (how furniture is listed);
+  // anything with ' or " goes through the feet-and-inches reader.
+  function parseInches(str) {
+    var s = String(str || '').trim();
+    if (!s) return null;
+    if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+    var ft = PLAN.parseFtIn(s);
+    return ft ? ft * 12 : null;
+  }
+  function fmtIn(n) { return Math.round(n) + '"'; }
+
+  // Four corners of a piece in whatever units cx, cy, w, d share, turned rot degrees clockwise
+  function corners(cx, cy, w, d, rot) {
+    var a = (rot || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    return [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(function (p) {
+      return { x: cx + p[0] * c - p[1] * s, y: cy + p[0] * s + p[1] * c };
+    });
+  }
+  // A point in the piece's own frame: x across its width, y from back (-) to front (+)
+  function toLocal(p, cx, cy, rot) {
+    var a = -(rot || 0) * Math.PI / 180, dx = p.x - cx, dy = p.y - cy;
+    return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) };
+  }
+  function contains(p, cx, cy, w, d, rot) {
+    var q = toLocal(p, cx, cy, rot);
+    return Math.abs(q.x) <= w / 2 && Math.abs(q.y) <= d / 2;
+  }
+
+  return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, corners: corners, toLocal: toLocal, contains: contains };
 })();
