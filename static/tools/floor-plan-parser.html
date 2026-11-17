@@ -338,7 +338,8 @@
       mode: 'measure',  // 'measure' or 'furnish'
       rugCheck: null,   // { room, key, result }: the rug sizes checked for the selected room
       pieces: [],       // furniture placed in Furnish
-      pieceSel: -1      // index of the selected piece, or -1
+      pieceSel: -1,     // index of the selected piece, or -1
+      ptSel: -1         // Measure: the corner tapped on the selected room's shape, which shows a remove (x) button
     };
 
     /* ---------- Geometry in feet ---------- */
@@ -375,7 +376,7 @@
       if (!r || !r.shape || r.shape.length <= 3) return;
       var list = r.shape.slice(); list.splice(k, 1);
       setShape(r, list);
-      state.drag = null;
+      state.drag = null; state.ptSel = -1;
       renderAll();
     }
 
@@ -656,10 +657,22 @@
           ctx.stroke();
         });
         ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 2.5 * s;
-        ptsPx(state.rooms[state.selected]).forEach(function (p) {
+        ptsPx(state.rooms[state.selected]).forEach(function (p, k) {
+          ctx.fillStyle = k === state.ptSel ? '#7f9433' : '#ffffff';
           ctx.beginPath(); ctx.arc(p.x, p.y, hs * 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         });
         ctx.restore();
+        // The remove button beside a tapped corner
+        var xb = removeBtn();
+        if (xb) {
+          ctx.save();
+          ctx.fillStyle = '#582b36'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * ratio2;
+          ctx.beginPath(); ctx.arc(xb.x, xb.y, xb.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          var t = xb.r * 0.42;
+          ctx.lineWidth = 2.2 * ratio2; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(xb.x - t, xb.y - t); ctx.lineTo(xb.x + t, xb.y + t); ctx.moveTo(xb.x + t, xb.y - t); ctx.lineTo(xb.x - t, xb.y + t); ctx.stroke();
+          ctx.restore();
+        }
       }
 
       if (!forExport) {
@@ -1116,6 +1129,17 @@
     // { type: 'pt', k } for a corner (plus its compass name while the room is still a box),
     // { type: 'mid', k } for the + on side k
     var RECT_KEYS = ['nw', 'ne', 'se', 'sw'];
+    // Where the remove (x) button sits for the tapped corner: up and to the right of it,
+    // or flipped inward when that would fall off the plan. Null when there is nothing to remove.
+    function removeBtn() {
+      var r = state.rooms[state.selected];
+      if (state.mode !== 'measure' || !r || !r.shape || r.shape.length <= 3 || state.ptSel < 0 || state.ptSel >= r.shape.length) return null;
+      var p = ptsPx(r)[state.ptSel], hs = handleSize(), off = hs * 1.1;
+      var x = p.x + off, y = p.y - off;
+      if (x + hs > state.W) x = p.x - off;
+      if (y - hs < 0) y = p.y + off;
+      return { x: x, y: y, r: hs * 0.48 };
+    }
     function hitHandle(p) {
       if (state.selected < 0) return null;
       var r = state.rooms[state.selected], hs = handleSize(), hit = null;
@@ -1153,9 +1177,12 @@
         return;
       }
       if (state.mode === 'furnish') { furnishDown(e); return; }
-      var p = toCanvas(e), h = hitHandle(p);
-      if (h && h.type === 'pt' && h.corner) { startDrag(e, 'resize', h.corner, p); return; }
+      var p = toCanvas(e), xb = removeBtn();
+      if (xb && Math.hypot(p.x - xb.x, p.y - xb.y) <= xb.r * 1.3) { removePoint(state.selected, state.ptSel); e.preventDefault(); return; }
+      var h = hitHandle(p), added = false;
+      if (h && h.type === 'pt' && h.corner) { state.ptSel = -1; startDrag(e, 'resize', h.corner, p); return; }
       if (h && h.type === 'mid') {
+        added = true;
         // Add a corner in the middle of this side and start dragging it
         var r0 = state.rooms[state.selected], list = pts(r0).map(function (q) { return { x: q.x, y: q.y }; });
         var a = list[h.k], b = list[(h.k + 1) % list.length];
@@ -1165,7 +1192,7 @@
       }
       if (h && h.type === 'pt') {
         startDrag(e, 'point', null, p);
-        state.drag.k = h.k;
+        state.drag.k = h.k; state.drag.added = added;
         // Long press on a touch screen removes the corner
         if (e.pointerType === 'touch') {
           var room = state.selected, k = h.k;
@@ -1174,6 +1201,7 @@
         draw();
         return;
       }
+      state.ptSel = -1;
       var i = hitRoom(p);
       select(i, false); // stay on the plan: jumping to the card would move the corners out of view
       if (i > -1) startDrag(e, 'move', null, p);
@@ -1251,6 +1279,8 @@
       var dx = (p.x - d.start.x) / state.W * 100, dy = (p.y - d.start.y) / state.H * 100;
       var MIN = 1.5;
       if (d.press && Math.hypot(p.x - d.start.x, p.y - d.start.y) > 8 * displayRatio()) { clearTimeout(d.press); d.press = null; }
+      // A tap is not a drag: nothing moves until the pointer has really moved
+      if (!d.moved) { if (Math.hypot(p.x - d.start.x, p.y - d.start.y) < 4 * displayRatio()) return; d.moved = true; }
       if (d.mode === 'move') {
         r.bbox.x = clamp(o.x + dx, 0, 100 - o.w);
         r.bbox.y = clamp(o.y + dy, 0, 100 - o.h);
@@ -1306,8 +1336,13 @@
       if (state.drag) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
         if (state.drag.press) clearTimeout(state.drag.press);
-        var r = state.rooms[state.selected];
+        var r = state.rooms[state.selected], dr = state.drag;
+        if (dr.mode === 'point' && !dr.moved && r && r.shape) {
+          if (dr.added) { r.shape.splice(dr.k, 1); state.ptSel = -1; }   // tapped a + by accident: no new corner
+          else state.ptSel = state.ptSel === dr.k ? -1 : dr.k;            // tapped a corner: show (or hide) its remove button
+        } else if (dr.mode === 'point') state.ptSel = dr.k;                // just dragged: keep it ready to remove
         if (r && r.shape) setShape(r, r.shape);
+        if (!r || !r.shape) state.ptSel = -1;
         state.drag = null;
         renderAll(); // a moved, resized or reshaped room can change its area and notes
       }
@@ -1370,6 +1405,7 @@
     }
 
     function select(i, scrollCard) {
+      if (i !== state.selected) state.ptSel = -1;
       state.selected = i;
       $('planCanvas').classList.toggle('editing', i > -1);
       var cards = document.querySelectorAll('.room-card');
@@ -1821,6 +1857,11 @@
           return;
         }
         if (state.selected < 0 || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+        // A tapped corner takes Delete and Escape before the room does
+        if (state.mode === 'measure' && removeBtn()) {
+          if (e.key === 'Delete' || e.key === 'Backspace') { removePoint(state.selected, state.ptSel); e.preventDefault(); return; }
+          if (e.key === 'Escape') { state.ptSel = -1; draw(); return; }
+        }
         if (e.key === 'Escape') select(-1);
         if (state.mode === 'furnish') {
           // In Furnish, Delete removes the room's rug, never the room
@@ -1980,7 +2021,7 @@
         <p class="hint">
           <span class="legend"><span class="swatch"></span>Measured from the plan</span>
           <span class="legend"><span class="swatch dash"></span>Estimated</span><br>
-          Click a room to select it, drag to move it, drag a corner to resize. For rooms that aren't rectangles, tap a + on a side to add a corner, then drag it into place. Double-click a corner (or press and hold on a phone) to remove it. Delete removes the room.
+          Click a room to select it, drag to move it, drag a corner to resize. For rooms that aren't rectangles, drag a + on a side to add a corner and pull it into place. To remove a corner, tap it and then tap the &times; beside it (or press Delete). With no corner picked, Delete removes the room.
         </p>
 
         <div class="rooms-head">
