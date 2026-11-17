@@ -5,7 +5,9 @@
 
    SNAP   reads the plan image: wall map, printed room names, box snapping,
           and pixels per foot.
-   PLAN   measurement and scale helpers that work in real feet.
+   PLAN   measurement and scale helpers that work in real feet, plus
+          converting between the wall map and the displayed plan.
+   RUG    standard rug sizes, which ones fit a room, and spacing lines.
 
    When this file changes, bump the ?v= number on its <script> tag in
    floor-plan-parser.html so browsers fetch the new copy.
@@ -424,12 +426,199 @@ var PLAN = (function () {
     return Math.abs(r.shapeArea / r.printedArea - 1) > MISMATCH ? { printed: r.printedArea, shape: r.shapeArea } : null;
   }
 
+  /* ---------- Wall map in plan coordinates ----------
+     SNAP's wall map is measured on a working copy 1400px on its longest side,
+     while everything else is measured on the displayed plan (state.W px wide).
+     It's the same image at a different size, so one ratio converts between them.
+     walls is state.walls ({ map, words }). */
+  function wallRatio(walls, displayW) { return walls && walls.map && displayW ? walls.map.w / displayW : null; }
+  // Is there wall ink at this point on the displayed plan?
+  function wallAt(walls, x, y, displayW) {
+    var k = wallRatio(walls, displayW);
+    if (!k) return false;
+    var a = walls.map, wx = Math.floor(x * k), wy = Math.floor(y * k);
+    if (wx < 0 || wy < 0 || wx >= a.w || wy >= a.h) return false;
+    return a.wall[wy * a.w + wx] === 1;
+  }
+  // Points between the two systems
+  function toWallPx(p, walls, displayW) { var k = wallRatio(walls, displayW); return k ? { x: p.x * k, y: p.y * k } : null; }
+  function fromWallPx(p, walls, displayW) { var k = wallRatio(walls, displayW); return k ? { x: p.x / k, y: p.y / k } : null; }
+
   return {
     MISMATCH: MISMATCH,
     rectPoints: rectPoints, bounds: bounds, isRect: isRect, pointInPoly: pointInPoly,
     shapeFt: shapeFt, polyArea: polyArea, shapeConflict: shapeConflict,
     fmtFtIn: fmtFtIn, parseFtIn: parseFtIn, area: area, dimsArea: dimsArea, areaConflict: areaConflict, fmtArea: fmtArea,
     scaleFromAnalysis: scaleFromAnalysis, scaleFromLine: scaleFromLine,
-    boxFt: boxFt, mismatch: mismatch
+    boxFt: boxFt, mismatch: mismatch,
+    wallRatio: wallRatio, wallAt: wallAt, toWallPx: toWallPx, fromWallPx: fromWallPx
+  };
+})();
+
+/* =====================================================================
+   RUG: which standard rug sizes fit a room, and where
+   Everything here works in feet, on a room's outline (r.ftShape), so it
+   handles L-shaped and other drawn shapes, not only boxes. The code only
+   measures and reports; the person decides where the rug goes.
+   ===================================================================== */
+var RUG = (function () {
+  var SIZES = [
+    { id: '5x8', label: "5' x 8'", w: 5, h: 8 },
+    { id: '6x9', label: "6' x 9'", w: 6, h: 9 },
+    { id: '8x10', label: "8' x 10'", w: 8, h: 10 },
+    { id: '9x12', label: "9' x 12'", w: 9, h: 12 },
+    { id: '10x14', label: "10' x 14'", w: 10, h: 14 },
+    { id: '6r', label: "6' round", d: 6 },
+    { id: '8r', label: "8' round", d: 8 }
+  ];
+  var COMFORT = 1;   // 12" of floor between rug and walls
+  var TIGHT = 0.5;   // 6" or more still works, just tight
+  var EPS = 1e-6;
+
+  function get(id) { for (var i = 0; i < SIZES.length; i++) if (SIZES[i].id === id) return SIZES[i]; return null; }
+  function sizeArea(s) { return s.d ? Math.PI * s.d * s.d / 4 : s.w * s.h; }
+  // Footprint in feet on the plan: rot 90 turns a rectangle on its side
+  function footprint(s, rot) {
+    if (s.d) return { w: s.d, h: s.d, round: true };
+    return rot === 90 ? { w: s.h, h: s.w } : { w: s.w, h: s.h };
+  }
+
+  // Room type from its name, for the advice shown with the sizes
+  function roomType(name) {
+    var n = String(name || '').toLowerCase();
+    if (/bath|powder|closet|wic|laundry|pantry|kitchen|hall|garage|stair|utility|mud/.test(n)) return 'other';
+    if (/dining|breakfast/.test(n)) return 'dining';
+    if (/bed|primary|master|sleep|guest|nursery|kid/.test(n)) return 'bedroom';
+    if (/living|family|great|den|lounge|sitting|media|bonus|rec\b|loft/.test(n)) return 'living';
+    return 'other';
+  }
+
+  /* ---------- Geometry (feet) ---------- */
+  function ptSegDist(p, a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+    var t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L)) : 0;
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+  function ptRectDist(p, r) {
+    var dx = Math.max(r.x0 - p.x, 0, p.x - r.x1), dy = Math.max(r.y0 - p.y, 0, p.y - r.y1);
+    return Math.hypot(dx, dy);
+  }
+  function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+  function segsCross(a, b, c, d) {
+    var d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
+    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  }
+  function rectCorners(r) { return [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }]; }
+  // Shortest distance between a rectangle and a wall segment (0 if they touch)
+  function rectSegDist(r, a, b) {
+    var inA = a.x > r.x0 && a.x < r.x1 && a.y > r.y0 && a.y < r.y1;
+    var inB = b.x > r.x0 && b.x < r.x1 && b.y > r.y0 && b.y < r.y1;
+    if (inA || inB) return 0;
+    var cs = rectCorners(r);
+    for (var i = 0; i < 4; i++) if (segsCross(a, b, cs[i], cs[(i + 1) % 4])) return 0;
+    var d = Math.min(ptRectDist(a, r), ptRectDist(b, r));
+    cs.forEach(function (c) { d = Math.min(d, ptSegDist(c, a, b)); });
+    return d;
+  }
+
+  // Floor left between the rug and the nearest wall, in feet, with the rug
+  // centered at (cx, cy). Negative when the rug runs past the room's outline.
+  function clearanceAt(poly, s, rot, cx, cy) {
+    var f = footprint(s, rot), n = poly.length, d = Infinity, i;
+    if (f.round) {
+      var c = { x: cx, y: cy }, r = f.w / 2;
+      if (!PLAN.pointInPoly(c, poly)) return -r;
+      for (i = 0; i < n; i++) d = Math.min(d, ptSegDist(c, poly[i], poly[(i + 1) % n]));
+      return d - r;
+    }
+    var rect = { x0: cx - f.w / 2, y0: cy - f.h / 2, x1: cx + f.w / 2, y1: cy + f.h / 2 };
+    var outside = rectCorners(rect).some(function (p) { return !PLAN.pointInPoly(p, poly); });
+    for (i = 0; i < n; i++) d = Math.min(d, rectSegDist(rect, poly[i], poly[(i + 1) % n]));
+    return outside ? -Math.max(d, 0.01) : d;
+  }
+
+  // Where this rug leaves the most floor at the walls. Ties go to the spot
+  // closest to the middle of the room, so the rug doesn't hug one end.
+  function bestSpot(poly, s) {
+    var b = PLAN.bounds(poly), mid = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    var rots = s.d ? [0] : [0, 90], best = null;
+    function consider(rot, x, y) {
+      var c = clearanceAt(poly, s, rot, x, y);
+      var dm = Math.hypot(x - mid.x, y - mid.y);
+      if (!best || c > best.clearance + 0.005 || (Math.abs(c - best.clearance) <= 0.005 && dm < best.dm)) {
+        best = { rot: rot, cx: x, cy: y, clearance: c, dm: dm };
+      }
+    }
+    // Coarse grid over the room, then zoom in on the best spot down to about
+    // a quarter inch. Fast enough to check every size on a phone.
+    var step = Math.max(0.5, Math.max(b.w, b.h) / 24);
+    rots.forEach(function (rot) {
+      for (var x = b.x + step / 2; x < b.x + b.w; x += step)
+        for (var y = b.y + step / 2; y < b.y + b.h; y += step) consider(rot, x, y);
+    });
+    if (!best) return null;
+    for (var st = step / 2; st > 0.02; st /= 2) {
+      var bx = best.cx, by = best.cy, br = best.rot;
+      for (var i = -2; i <= 2; i++) for (var j = -2; j <= 2; j++) if (i || j) consider(br, bx + i * st, by + j * st);
+    }
+    return { rot: best.rot, cx: best.cx, cy: best.cy, clearance: best.clearance };
+  }
+
+  // Judged on whole inches, the same number the person sees on the plan
+  function status(c) { var inch = Math.round(c * 12); return inch >= COMFORT * 12 ? 'fits' : inch >= TIGHT * 12 ? 'tight' : 'big'; }
+
+  // Every standard size checked against one room outline (feet).
+  // best: the largest size that leaves at least 12" of floor all around.
+  function check(poly) {
+    if (!poly || poly.length < 3) return null;
+    var list = SIZES.map(function (s) {
+      var spot = bestSpot(poly, s);
+      return { size: s, spot: spot, status: spot ? status(spot.clearance) : 'big' };
+    });
+    var best = null;
+    list.forEach(function (it) { if (it.status === 'fits' && (!best || sizeArea(it.size) > sizeArea(best.size))) best = it; });
+    return { list: list, best: best ? best.size.id : null };
+  }
+
+  /* ---------- Spacing lines ---------- */
+  // Distance from p along direction (dx, dy) to the first wall of the outline
+  function rayToPoly(p, dx, dy, poly) {
+    var best = Infinity, n = poly.length;
+    for (var i = 0; i < n; i++) {
+      var a = poly[i], b = poly[(i + 1) % n];
+      var ex = b.x - a.x, ey = b.y - a.y, den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-9) continue;
+      var t = ((a.x - p.x) * ey - (a.y - p.y) * ex) / den;   // along the ray
+      var u = ((a.x - p.x) * dy - (a.y - p.y) * dx) / den;   // along the wall
+      if (t >= -1e-9 && u >= -1e-9 && u <= 1 + 1e-9 && t < best) best = t;
+    }
+    return best === Infinity ? null : best;
+  }
+  // One line per side of the rug, from the rug's edge to the nearest wall on
+  // that side. Each side is sampled along its length so a jog in an L-shaped
+  // room is caught. Returns [{ from, to, gap }] in feet.
+  function gaps(poly, s, rot, cx, cy) {
+    var f = footprint(s, rot), out = [];
+    var dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+    dirs.forEach(function (dir) {
+      var bestG = null, bestP = null, samples = f.round ? [0] : [0, -0.2, 0.2, -0.45, 0.45]; // middle first, so it wins ties
+      samples.forEach(function (t) {
+        var p;
+        if (f.round) p = { x: cx + dir[0] * f.w / 2, y: cy + dir[1] * f.h / 2 };
+        else if (dir[0]) p = { x: cx + dir[0] * f.w / 2, y: cy + t * f.h };
+        else p = { x: cx + t * f.w, y: cy + dir[1] * f.h / 2 };
+        if (!PLAN.pointInPoly(p, poly)) return;
+        var g = rayToPoly(p, dir[0], dir[1], poly);
+        if (g != null && (bestG == null || g < bestG)) { bestG = g; bestP = p; }
+      });
+      if (bestG != null) out.push({ from: bestP, to: { x: bestP.x + dir[0] * bestG, y: bestP.y + dir[1] * bestG }, gap: bestG });
+    });
+    return out;
+  }
+
+  return {
+    SIZES: SIZES, COMFORT: COMFORT, TIGHT: TIGHT,
+    get: get, footprint: footprint, roomType: roomType,
+    clearanceAt: clearanceAt, bestSpot: bestSpot, status: status, check: check, gaps: gaps
   };
 })();
