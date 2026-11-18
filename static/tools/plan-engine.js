@@ -857,17 +857,28 @@ var SPACE = (function () {
   var RANGE = 8;          // feet: anything farther counts as open floor
   var AGAINST = 4;        // inches: closer than this, the piece is set against it on purpose
   var PASSAGE = 12;       // inches: walkway gaps from here up to 36" are flagged on the plan
-  var COFFEE_PAIR = 30;   // inches: a coffee table farther than this from a seat is not its pair
+  var COFFEE_PAIR = 36;   // inches: a coffee table farther than this from a seat is not part of its group
   var WALL_PATH = { seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, other: 1 };   // pieces whose gap to a wall can be a walkway
+  // Pieces set out together on purpose. A gap between them is part of the group, not a walkway.
+  function grouped(a, b) {
+    function pair(x, y) {
+      return (x.role === 'seat' && (y.role === 'coffee' || y.role === 'side')) || (x.role === 'bed' && y.role === 'nightstand');
+    }
+    return pair(a, b) || pair(b, a);
+  }
+  function seatCoffee(a, b) { return (a.role === 'seat' && b.role === 'coffee') || (a.role === 'coffee' && b.role === 'seat'); }
   // ok: comfortable from this many inches; tight: still works from here
   var RULES = {
     walk: { ok: 36, tight: 30 },     // main walkway
     dining: { ok: 36, tight: 30 },   // around a dining table
     bed: { ok: 24, tight: 18 }       // beside a bed
   };
+  // Seat to coffee table, from published designer guidance: 14" to 18" is the
+  // usual range, 12" works in a small room, past 20" is a stretch to reach.
+  var COFFEE = { min: 12, ok: 14, max: 18, reach: 20 };
   // Judged on whole inches, the number the person sees on the plan
   function status(rule, inch) {
-    if (rule === 'coffee') return inch < 14 ? 'close' : inch < 16 ? 'tight' : inch <= 20 ? 'ok' : 'tight';
+    if (rule === 'coffee') return inch < COFFEE.min ? 'close' : inch < COFFEE.ok ? 'tight' : inch <= COFFEE.max ? 'ok' : inch <= COFFEE.reach ? 'tight' : 'close';
     var r = RULES[rule];
     return inch >= r.ok ? 'ok' : inch >= r.tight ? 'tight' : 'close';
   }
@@ -944,13 +955,14 @@ var SPACE = (function () {
         if (!best) return;
         var inch = Math.round(best.gap * 12), other = best.hit.type === 'piece' ? pieces[best.hit.i] : null;
         var rule = 'walk';
-        if (pc.role === 'seat' && sd.name === 'front' && other && other.role === 'coffee' && inch <= COFFEE_PAIR) rule = 'coffee';
+        // A seat and its coffee table are one group, measured from whichever piece finds the gap
+        if (other && seatCoffee(pc, other) && inch <= COFFEE_PAIR) rule = 'coffee';
         else if (pc.role === 'bed' && (sd.name === 'left' || sd.name === 'right')) rule = 'bed';
         else if (pc.role === 'dining') rule = 'dining';
         // A narrow walkway is flagged between two pieces, or between a wall and a piece big enough
         // to make a path (36" or more across, and not a nightstand or side table). Chairs at a table are covered by the dining check.
         var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || (WALL_PATH[pc.role] && Math.max(pc.w, pc.d) >= 36));
-        var show = rule !== 'walk' ? 'always' : inch < AGAINST ? false : passage ? 'always' : 'selected';
+        var show = rule !== 'walk' ? 'always' : inch < AGAINST ? false : (passage && !(other && grouped(pc, other))) ? 'always' : 'selected';
         lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, status: status(rule, inch),
                      to: { x: best.from.x + sd.dir.x * best.gap, y: best.from.y + sd.dir.y * best.gap },
                      hit: best.hit, show: show });
@@ -962,8 +974,12 @@ var SPACE = (function () {
       if (a.hit.type !== 'piece' || a.dup) return;
       lines.forEach(function (b, ib) {
         if (ib === ia || b.dup || b.hit.type !== 'piece' || b.piece !== a.hit.i || b.hit.i !== a.piece) return;
-        if (Math.abs(a.gap - b.gap) > 1.5 / 12) return;
-        var drop = (a.rule === 'walk' && b.rule !== 'walk') ? a : (b.rule === 'walk' && a.rule !== 'walk') ? b : (ia < ib ? b : a);
+        var sameGroup = a.rule === 'coffee' && b.rule === 'coffee';
+        // Pieces at an angle measure the gap a little differently from each side; a group keeps one line either way
+        if (!sameGroup && Math.abs(a.gap - b.gap) > 1.5 / 12) return;
+        var drop;
+        if (sameGroup) drop = pieces[a.piece].role === 'seat' ? b : a;     // keep the seat's line
+        else drop = (a.rule === 'walk' && b.rule !== 'walk') ? a : (b.rule === 'walk' && a.rule !== 'walk') ? b : (ia < ib ? b : a);
         drop.dup = true;
       });
     });
@@ -1061,7 +1077,7 @@ var SPACE = (function () {
     return out;
   }
 
-  return { RULES: RULES, AGAINST: AGAINST, PASSAGE: PASSAGE, status: status, sides: sides, check: check, report: report,
+  return { RULES: RULES, COFFEE: COFFEE, AGAINST: AGAINST, PASSAGE: PASSAGE, grouped: grouped, status: status, sides: sides, check: check, report: report,
            conflicts: conflicts, overlap: overlap, intoWall: intoWall };
 })();
 

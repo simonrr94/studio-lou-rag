@@ -275,7 +275,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=7"></script>
+  <script src="/static/tools/plan-engine.js?v=8"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -1307,7 +1307,7 @@
     function nameOf(i) { var pc = state.pieces[i]; return pc ? pc.name : 'piece'; }
     function spaceWord(type, status, inch) {
       if (status === 'ok') return 'Comfortable';
-      if (type === 'coffee') return status === 'close' ? 'Too close' : inch > 20 ? 'A bit far' : 'Tight';
+      if (type === 'coffee') return status === 'close' ? (inch < SPACE.COFFEE.min ? 'Too close' : 'Too far') : inch > SPACE.COFFEE.max ? 'A bit far' : 'Tight';
       return status === 'close' ? 'Too narrow' : 'Tight';
     }
     function inchText(n) { return n < 36 ? n + '"' : fmtFtIn(n / 12); }
@@ -1352,7 +1352,7 @@
       $('checkCount').textContent = issues; $('checkCount').classList.toggle('hidden', !issues);
       $('spaceSub').innerHTML = !state.scale ? 'Spacing is measured to scale, so this plan needs a scale first.'
         : 'Measured square off each piece, so turned pieces are checked too' + (r ? ', in <b>' + esc(r.name) + '</b>.' : '.') +
-          ' Walkways want 36", the space beside a bed 24", around a dining table 36", and 16" to 18" from sofa to coffee table.';
+          ' Walkways want 36", the space beside a bed 24", around a dining table 36", and 14" to 18" from sofa to coffee table.';
       if (!rows.length) { el.innerHTML = '<p class="rug-empty">' + (state.pieces.length || state.doors.length ? 'Nothing to check here yet. Place seating with a coffee table, a bed, a dining table, or a door.' : 'Place a few pieces and the spacing between them shows up here.') + '</p>'; return; }
       el.innerHTML = rows.map(function (rw) {
         return '<div class="space-row"><span class="space-label">' + esc(rw.label) + '</span>' +
@@ -2374,7 +2374,7 @@
         });
         y += 10;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 101, 96);
-        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight), 24" beside a bed (18" is tight), 36" around a dining table (30" is tight), and 16" to 18" from sofa to coffee table. Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
+        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight), 24" beside a bed (18" is tight), 36" around a dining table (30" is tight), and 14" to 18" from sofa to coffee table. Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
         doc.text(sn, margin, y + 4);
         y += sn.length * 12 + 18;
       }
