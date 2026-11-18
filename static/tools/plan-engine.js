@@ -697,7 +697,8 @@ var GEO = (function () {
    kind  how it is drawn: 'seat' (shaded back), 'bed' (headboard and
          pillows), 'table' (plain)
    role  what it is for, which decides its spacing checks and rug styles:
-         seat, coffee, side, storage, bed, nightstand, dining, chair, desk
+         seat, coffee, side, console (behind a sofa), media, storage, dresser
+         (drawers), bed, nightstand, dining, chair, desk
    shape 'rect' (default), 'round' (an oval when w and d differ), or 'L'
          (a sectional: back along the top, the return down the left side,
          arm deep; flip mirrors it)
@@ -716,14 +717,15 @@ var FURNITURE = (function () {
       { id: 'ottoman', name: 'Round ottoman', w: 30, d: 30, h: 17, kind: 'table', role: 'coffee', shape: 'round' },
       { id: 'side', name: 'Side table', w: 20, d: 20, h: 24, kind: 'table', role: 'side' },
       { id: 'sideR', name: 'Round side table', w: 20, d: 20, h: 24, kind: 'table', role: 'side', shape: 'round' },
-      { id: 'media', name: 'Media console', w: 70, d: 18, h: 24, kind: 'table', role: 'storage' }
+      { id: 'media', name: 'Media console', w: 70, d: 18, h: 24, kind: 'table', role: 'media' },
+      { id: 'console', name: 'Console table', w: 60, d: 14, h: 30, kind: 'table', role: 'console' }
     ] },
     { group: 'Bedroom', items: [
       { id: 'full', name: 'Full bed', w: 58, d: 80, h: 24, kind: 'bed', role: 'bed' },
       { id: 'queen', name: 'Queen bed', w: 64, d: 86, h: 24, kind: 'bed', role: 'bed' },
       { id: 'king', name: 'King bed', w: 80, d: 86, h: 24, kind: 'bed', role: 'bed' },
       { id: 'nightstand', name: 'Nightstand', w: 24, d: 18, h: 26, kind: 'table', role: 'nightstand' },
-      { id: 'dresser', name: 'Dresser', w: 60, d: 20, h: 34, kind: 'table', role: 'storage' }
+      { id: 'dresser', name: 'Dresser', w: 60, d: 20, h: 34, kind: 'table', role: 'dresser' }
     ] },
     { group: 'Dining', items: [
       { id: 'dining4r', name: 'Round table for 4', w: 48, d: 48, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: { around: 4 } },
@@ -858,27 +860,50 @@ var SPACE = (function () {
   var AGAINST = 4;        // inches: closer than this, the piece is set against it on purpose
   var PASSAGE = 12;       // inches: walkway gaps from here up to 36" are flagged on the plan
   var COFFEE_PAIR = 36;   // inches: a coffee table farther than this from a seat is not part of its group
-  var WALL_PATH = { seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, other: 1 };   // pieces whose gap to a wall can be a walkway
-  // Pieces set out together on purpose. A gap between them is part of the group, not a walkway.
+  var WALL_PATH = { seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, dresser: 1, media: 1, console: 1, other: 1 };   // pieces whose gap to a wall can be a walkway
+  // Pieces set out together on purpose. A gap between them is part of the group, not a walkway:
+  // seating with its coffee, side, and console tables; seats side by side; a bed and its nightstands.
   function grouped(a, b) {
     function pair(x, y) {
-      return (x.role === 'seat' && (y.role === 'coffee' || y.role === 'side')) || (x.role === 'bed' && y.role === 'nightstand');
+      return (x.role === 'seat' && (y.role === 'coffee' || y.role === 'side' || y.role === 'console' || y.role === 'seat')) ||
+             (x.role === 'bed' && y.role === 'nightstand');
     }
     return pair(a, b) || pair(b, a);
   }
+  var SIDE_PATH = { seat: 1, bed: 1, other: 1 };   // pieces whose ends can face a walkway
+  function seatConsole(a, b) { return (a.role === 'seat' && b.role === 'console') || (a.role === 'console' && b.role === 'seat'); }
+  // Does a dining table have chairs on this side? (A chair of its own beyond this edge.)
+  function chairsOnSide(t, sd, pieces) {
+    return pieces.some(function (o) {
+      if (o.role !== 'chair' || o.group !== t.id) return false;
+      var q = FURNITURE.toLocal({ x: o.cx, y: o.cy }, t.cx, t.cy, t.rot), n = GEO.turn(sd.dir, -t.rot);
+      var along = q.x * 12 * n.x + q.y * 12 * n.y, half = Math.abs(n.x) * t.w / 2 + Math.abs(n.y) * t.d / 2;
+      return along > half * 0.75;
+    });
+  }
   function seatCoffee(a, b) { return (a.role === 'seat' && b.role === 'coffee') || (a.role === 'coffee' && b.role === 'seat'); }
   // ok: comfortable from this many inches; tight: still works from here
+  // Each from published designer and planning guidance (see the plan doc)
   var RULES = {
-    walk: { ok: 36, tight: 30 },     // main walkway
-    dining: { ok: 36, tight: 30 },   // around a dining table
-    bed: { ok: 24, tight: 18 }       // beside a bed
+    walk: { ok: 36, tight: 30 },        // main walkway
+    dining: { ok: 36, tight: 30 },      // around a dining table, on a side with chairs
+    diningOpen: { ok: 24, tight: 18 },  // a side of the table with no chairs (against a wall, say)
+    bed: { ok: 24, tight: 18 },         // beside a bed
+    bedFoot: { ok: 30, tight: 24 },     // at the foot of a bed
+    desk: { ok: 36, tight: 30 },        // behind a desk, where the chair rolls out
+    drawers: { ok: 36, tight: 30 }      // in front of a dresser, to open drawers and stand
   };
+  var CONSOLE_PAIR = 12;  // inches: a console table this close behind a seat belongs to it
+  var CONSOLE_OK = 8;     // inches: a few inches behind the sofa back is the norm
+  var TALK = { ok: 8, tight: 10 };          // feet between seats facing each other
+  var TV = { near: 0.8, lo: 1.0, hi: 1.7, far: 2.5 };   // viewing distance as a multiple of the screen size
   // Seat to coffee table, from published designer guidance: 14" to 18" is the
   // usual range, 12" works in a small room, past 20" is a stretch to reach.
   var COFFEE = { min: 12, ok: 14, max: 18, reach: 20 };
   // Judged on whole inches, the number the person sees on the plan
   function status(rule, inch) {
     if (rule === 'coffee') return inch < COFFEE.min ? 'close' : inch < COFFEE.ok ? 'tight' : inch <= COFFEE.max ? 'ok' : inch <= COFFEE.reach ? 'tight' : 'close';
+    if (rule === 'console') return inch <= CONSOLE_OK ? 'ok' : 'tight';
     var r = RULES[rule];
     return inch >= r.ok ? 'ok' : inch >= r.tight ? 'tight' : 'close';
   }
@@ -941,7 +966,7 @@ var SPACE = (function () {
     pieces.forEach(function (pc, i) {
       var skip = function (o, j) {
         if (j === i) return true;
-        if (pc.role === 'dining' && o.role === 'chair') return true;            // chairs pull out
+        if ((pc.role === 'dining' || pc.role === 'desk') && o.role === 'chair') return true;   // chairs pull out
         if (pc.group && o.group === pc.group) return true;                      // a chair and its own table or neighbors
         if (pc.role === 'chair' && pc.group && o.id === pc.group) return true;
         return false;
@@ -957,13 +982,24 @@ var SPACE = (function () {
         var rule = 'walk';
         // A seat and its coffee table are one group, measured from whichever piece finds the gap
         if (other && seatCoffee(pc, other) && inch <= COFFEE_PAIR) rule = 'coffee';
+        else if (other && seatConsole(pc, other) && inch <= CONSOLE_PAIR) rule = 'console';
         else if (pc.role === 'bed' && (sd.name === 'left' || sd.name === 'right')) rule = 'bed';
-        else if (pc.role === 'dining') rule = 'dining';
+        else if (pc.role === 'bed' && sd.name === 'front') rule = 'bedFoot';
+        else if (pc.role === 'dining') rule = chairsOnSide(pc, sd, pieces) ? 'dining' : 'diningOpen';
+        else if (pc.role === 'desk' && sd.name === 'front') rule = 'desk';
+        else if (pc.role === 'dresser' && sd.name === 'front') rule = 'drawers';
+        // A bed set right against a wall on a side nobody uses is on purpose (a kids' room, a daybed)
+        // (Room outlines sit just inside the drawn walls, so up to 6" still counts as against it.)
+        var against = !other && inch <= 6 && (rule === 'bed' || rule === 'bedFoot' || rule === 'diningOpen');
         // A narrow walkway is flagged between two pieces, or between a wall and a piece big enough
         // to make a path (36" or more across, and not a nightstand or side table). Chairs at a table are covered by the dining check.
-        var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || (WALL_PATH[pc.role] && Math.max(pc.w, pc.d) >= 36));
-        var show = rule !== 'walk' ? 'always' : inch < AGAINST ? false : (passage && !(other && grouped(pc, other))) ? 'always' : 'selected';
-        lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, status: status(rule, inch),
+        // Off the ends of a dresser, desk or console, a gap to the wall is a corner, not a path
+        var sideOk = (sd.name !== 'left' && sd.name !== 'right') || SIDE_PATH[pc.role];
+        var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || (WALL_PATH[pc.role] && sideOk && Math.max(pc.w, pc.d) >= 36));
+        var show = against ? false : rule === 'console' ? (status(rule, inch) === 'ok' ? 'selected' : 'always')
+          : rule !== 'walk' ? 'always' : inch < AGAINST ? false : (passage && !(other && grouped(pc, other))) ? 'always' : 'selected';
+        lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, against: against,
+                     status: against ? 'ok' : status(rule, inch),
                      to: { x: best.from.x + sd.dir.x * best.gap, y: best.from.y + sd.dir.y * best.gap },
                      hit: best.hit, show: show });
       });
@@ -979,11 +1015,63 @@ var SPACE = (function () {
         if (!sameGroup && Math.abs(a.gap - b.gap) > 1.5 / 12) return;
         var drop;
         if (sameGroup) drop = pieces[a.piece].role === 'seat' ? b : a;     // keep the seat's line
-        else drop = (a.rule === 'walk' && b.rule !== 'walk') ? a : (b.rule === 'walk' && a.rule !== 'walk') ? b : (ia < ib ? b : a);
+        else if (a.rule === 'walk' && b.rule !== 'walk') drop = a;
+        else if (b.rule === 'walk' && a.rule !== 'walk') drop = b;
+        else drop = (PRIORITY[a.rule] || 9) <= (PRIORITY[b.rule] || 9) ? b : a;   // the more specific check wins
         drop.dup = true;
       });
     });
-    return lines.filter(function (l) { return !l.dup; });
+    lines = lines.filter(function (l) { return !l.dup; });
+    return lines.concat(talkLines(pieces), tvLines(pieces));
+  }
+  var PRIORITY = { coffee: 0, console: 1, drawers: 2, desk: 3, dining: 4, diningOpen: 4, bedFoot: 5, bed: 6 };
+
+  /* ---------- Seats facing each other, and the TV ---------- */
+  // Where someone sits: the middle of a seat's front edge (a sectional's long run), in feet
+  function seatPoint(pc) {
+    var p = { x: 0, y: pc.d / 2 };
+    if (pc.shape === 'L') { var t = Math.min(pc.arm || 38, pc.w / 2, pc.d / 2); p = { x: (pc.flip ? -1 : 1) * t / 2, y: -pc.d / 2 + t }; }
+    return GEO.place([p], pc.cx, pc.cy, pc.rot, 1 / 12)[0];
+  }
+  function front(pc) { return GEO.turn({ x: 0, y: 1 }, pc.rot); }
+  // Does a face b? b sits ahead of a, within 60 degrees of straight on
+  function faces(a, pa, pb) {
+    var d = { x: pb.x - pa.x, y: pb.y - pa.y }, L = Math.hypot(d.x, d.y), f = front(a);
+    return L > 0 && (f.x * d.x + f.y * d.y) / L > 0.5;
+  }
+  // Seats in the same room that face each other: past 8 feet, conversation gets hard
+  function talkLines(pieces) {
+    var out = [];
+    for (var i = 0; i < pieces.length; i++) for (var j = i + 1; j < pieces.length; j++) {
+      var a = pieces[i], b = pieces[j];
+      if (a.role !== 'seat' || b.role !== 'seat' || a.room !== b.room) continue;
+      var pa = seatPoint(a), pb = seatPoint(b);
+      if (!faces(a, pa, pb) || !faces(b, pb, pa)) continue;
+      var ft = Math.hypot(pb.x - pa.x, pb.y - pa.y), st = ft <= TALK.ok ? 'ok' : ft <= TALK.tight ? 'tight' : 'close';
+      out.push({ piece: i, side: 'front', from: pa, to: pb, gap: ft, inch: Math.round(ft * 12), rule: 'talk', status: st,
+                 hit: { type: 'piece', i: j }, show: st === 'ok' ? 'selected' : 'always' });
+    }
+    return out;
+  }
+  // A media console with a TV size set: viewing distance to the main seat facing it
+  function tvLines(pieces) {
+    var out = [];
+    pieces.forEach(function (m, i) {
+      if (m.role !== 'media' || !m.tv) return;
+      var pm = GEO.place([{ x: 0, y: 0 }], m.cx, m.cy, m.rot, 1)[0], best = null;
+      pieces.forEach(function (s, j) {
+        if (s.role !== 'seat' || s.room !== m.room) return;
+        var ps = { x: s.cx, y: s.cy };
+        if (!faces(m, pm, ps) || !faces(s, seatPoint(s), pm)) return;
+        if (!best || s.w * s.d > pieces[best.j].w * pieces[best.j].d) best = { j: j, ps: ps };
+      });
+      if (!best) return;
+      var ft = Math.hypot(best.ps.x - pm.x, best.ps.y - pm.y), ratio = ft * 12 / m.tv;
+      var st = ratio >= TV.lo && ratio <= TV.hi ? 'ok' : ratio >= TV.near && ratio <= TV.far ? 'tight' : 'close';
+      out.push({ piece: i, side: 'front', from: pm, to: best.ps, gap: ft, inch: Math.round(ft * 12), rule: 'tv', status: st, ratio: ratio,
+                 near: ratio < TV.lo, hit: { type: 'piece', i: best.j }, show: 'selected' });
+    });
+    return out;
   }
 
   // One row per check, for the panel and the PDF:
@@ -994,18 +1082,27 @@ var SPACE = (function () {
   var RANK = { ok: 0, tight: 1, close: 2 };
   function report(lines) {
     var rows = [], beds = {}, tables = {};
+    function worse(p, q) { return RANK[p.status] - RANK[q.status] || q.inch - p.inch; }   // > 0 when p is the bigger problem
     lines.forEach(function (l) {
-      if (l.rule === 'coffee') rows.push({ type: 'coffee', a: l.piece, b: l.hit.i, inch: l.inch, status: l.status });
+      var b = l.hit.type === 'piece' ? l.hit.i : -1;
+      if (l.rule === 'coffee') rows.push({ type: 'coffee', a: l.piece, b: b, inch: l.inch, status: l.status });
       else if (l.rule === 'bed') (beds[l.piece] = beds[l.piece] || []).push(l);
-      else if (l.rule === 'dining') { if (!tables[l.piece] || l.inch < tables[l.piece].inch) tables[l.piece] = l; }
-      else if (l.show === 'always') rows.push({ type: 'walk', a: l.piece, b: l.hit.type === 'piece' ? l.hit.i : -1, inch: l.inch, status: l.status });
+      else if (l.rule === 'dining' || l.rule === 'diningOpen') { if (!tables[l.piece] || worse(l, tables[l.piece]) > 0) tables[l.piece] = l; }
+      else if (l.rule === 'bedFoot' && !l.against) rows.push({ type: 'bedFoot', a: l.piece, b: b, inch: l.inch, status: l.status });
+      else if (l.rule === 'desk' || l.rule === 'drawers') rows.push({ type: l.rule, a: l.piece, b: b, inch: l.inch, status: l.status });
+      else if (l.rule === 'console' && l.status !== 'ok') rows.push({ type: 'console', a: l.piece, b: b, inch: l.inch, status: l.status });
+      else if (l.rule === 'talk') rows.push({ type: 'talk', a: l.piece, b: b, inch: l.inch, ft: l.gap, status: l.status });
+      else if (l.rule === 'tv') rows.push({ type: 'tv', a: l.piece, b: b, inch: l.inch, ft: l.gap, ratio: l.ratio, near: l.near, status: l.status });
+      else if (l.rule === 'walk' && l.show === 'always') rows.push({ type: 'walk', a: l.piece, b: b, inch: l.inch, status: l.status });
     });
     Object.keys(beds).forEach(function (k) {
-      var ls = beds[k].sort(function (p, q) { return p.inch - q.inch; });
-      rows.push({ type: 'bed', a: +k, inches: ls.map(function (l) { return l.inch; }), status: ls[0].status });
+      var ls = beds[k].sort(function (p, q) { return (p.against ? 1 : 0) - (q.against ? 1 : 0) || p.inch - q.inch; });
+      var open = ls.filter(function (l) { return !l.against; });
+      rows.push({ type: 'bed', a: +k, sides: ls.map(function (l) { return { inch: l.inch, against: !!l.against }; }),
+                  inches: ls.map(function (l) { return l.inch; }), status: open.length ? open[0].status : 'ok' });
     });
-    Object.keys(tables).forEach(function (k) { var l = tables[k]; rows.push({ type: 'dining', a: +k, inch: l.inch, status: l.status }); });
-    var ORDER = { coffee: 0, dining: 1, bed: 2, walk: 3 };
+    Object.keys(tables).forEach(function (k) { var l = tables[k]; rows.push({ type: 'dining', a: +k, inch: l.inch, open: l.rule === 'diningOpen', status: l.status }); });
+    var ORDER = { coffee: 0, talk: 1, tv: 2, console: 3, dining: 4, desk: 5, drawers: 6, bed: 7, bedFoot: 8, walk: 9 };
     return rows.sort(function (p, q) { return (ORDER[p.type] - ORDER[q.type]) || (RANK[q.status] - RANK[p.status]) || (p.a - q.a); });
   }
 
@@ -1077,7 +1174,7 @@ var SPACE = (function () {
     return out;
   }
 
-  return { RULES: RULES, COFFEE: COFFEE, AGAINST: AGAINST, PASSAGE: PASSAGE, grouped: grouped, status: status, sides: sides, check: check, report: report,
+  return { RULES: RULES, COFFEE: COFFEE, TALK: TALK, TV: TV, AGAINST: AGAINST, PASSAGE: PASSAGE, grouped: grouped, status: status, sides: sides, check: check, report: report,
            conflicts: conflicts, overlap: overlap, intoWall: intoWall };
 })();
 

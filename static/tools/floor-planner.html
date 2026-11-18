@@ -275,7 +275,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=8"></script>
+  <script src="/static/tools/plan-engine.js?v=9"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -867,7 +867,8 @@
     function pieceFt(pc) {
       var f = state.scale.ftPerPx, cx = pc.x / 100 * state.W * f, cy = pc.y / 100 * state.H * f;
       return { id: pc.id, role: pc.role || 'other', group: pc.group || null, shape: pc.shape, flip: pc.flip, arm: pc.arm,
-               w: pc.w, d: pc.d, rot: pc.rot, cx: cx, cy: cy, poly: FURNITURE.shapeAt(pc, cx, cy, 1 / 12) };
+               w: pc.w, d: pc.d, rot: pc.rot, cx: cx, cy: cy, poly: FURNITURE.shapeAt(pc, cx, cy, 1 / 12),
+               tv: pc.tv || null, room: (pieceRoom(pc) || { id: 0 }).id };
     }
     function piecesFt() { return state.scale ? state.pieces.map(pieceFt) : []; }
     function wallsFt() { return state.rooms.filter(function (r) { return r.ftShape; }).map(function (r) { return r.ftShape; }); }
@@ -1128,14 +1129,17 @@
     var SIDE_NAME = { front: 'Front', back: 'Back', left: 'Left side', right: 'Right side' };
     function pieceChecks(k) {
       var rows = [], ORDER = { front: 0, back: 1, left: 2, right: 3 };
-      spacing().filter(function (l) { return (l.piece === k && l.show !== false) || (l.hit.type === 'piece' && l.hit.i === k && l.rule !== 'walk'); })
+      spacing().filter(function (l) { return (l.piece === k && (l.show !== false || l.against)) || (l.hit.type === 'piece' && l.hit.i === k && l.rule !== 'walk'); })
         .sort(function (p, q) { return (p.piece === k ? 0 : 1) - (q.piece === k ? 0 : 1) || ORDER[p.side] - ORDER[q.side]; })
         .forEach(function (l) {
-          var label = l.piece === k
-            ? SIDE_NAME[l.side] + ' to ' + (l.hit.type === 'piece' ? 'the ' + nameOf(l.hit.i).toLowerCase() : 'the wall')
+          var other = l.hit.type === 'piece' ? (l.piece === k ? l.hit.i : l.piece) : -1, on = other > -1 ? 'the ' + nameOf(other).toLowerCase() : 'the wall';
+          var label = l.rule === 'talk' ? 'Conversation with ' + on
+            : l.rule === 'tv' ? 'TV to ' + on
+            : l.piece === k ? SIDE_NAME[l.side] + ' to ' + on
             : 'From the ' + nameOf(l.piece).toLowerCase();
-          rows.push('<div class="space-row"><span class="space-label">' + esc(label) + '</span><span class="space-val">' + inchText(l.inch) +
-            ' <span class="badge ' + BADGE[l.status] + '">' + spaceWord(l.rule === 'walk' ? 'walk' : l.rule, l.status, l.inch) + '</span></span></div>');
+          var val = l.rule === 'talk' || l.rule === 'tv' ? fmtFtIn(l.gap) : l.against ? 'against the wall' : inchText(l.inch);
+          rows.push('<div class="space-row"><span class="space-label">' + esc(label) + '</span><span class="space-val">' + val +
+            ' <span class="badge ' + BADGE[l.status] + '">' + (l.against ? 'On purpose' : spaceWord(l.rule, l.status, l.inch, l.near)) + '</span></span></div>');
         });
       return rows.join('');
     }
@@ -1158,6 +1162,7 @@
           (round ? '<label class="field"><span>Depth, inches</span><input id="pcD" value="' + Math.round(pc.d) + '" inputmode="decimal" autocomplete="off" title="A different depth makes it an oval"></label>'
                  : '<label class="field"><span>Depth, inches</span><input id="pcD" value="' + Math.round(pc.d) + '" inputmode="decimal" autocomplete="off"></label>') +
         '</div>' +
+        (pc.role === 'media' ? '<label class="field"><span>TV screen size, inches (optional)</span><input id="pcTV" value="' + (pc.tv ? Math.round(pc.tv) : '') + '" placeholder="65" inputmode="decimal" autocomplete="off"></label>' : '') +
         '<p class="section-label">Spacing</p>' +
         (checks ? '<div class="space-list">' + checks + '</div>' : '<p class="empty-note">Open floor on every side, at least 8 feet.</p>') +
         '<div class="btn-row" style="margin-top:14px">' +
@@ -1170,7 +1175,11 @@
     function onDetailChange(e) {
       var pc = state.pieces[state.pieceSel], id = e.target.id;
       if (!pc) return;
-      if (id === 'pcName') {
+      if (id === 'pcTV') {
+        var tvv = e.target.value.trim() ? parseFloat(e.target.value) : null;
+        if (tvv != null && !(tvv >= 20 && tvv <= 150)) { e.target.classList.add('bad'); return; }
+        pushUndo(); pc.tv = tvv;
+      } else if (id === 'pcName') {
         var nm = e.target.value.trim().slice(0, 30);
         if (nm && nm !== pc.name) { pushUndo(); pc.name = nm; }
       } else if (id === 'pcW' || id === 'pcD') {
@@ -1305,9 +1314,13 @@
     /* ---------- Spacing list (Furnish mode) ---------- */
     // One readable row per check: { label, value, status (ok, tight, close), word }
     function nameOf(i) { var pc = state.pieces[i]; return pc ? pc.name : 'piece'; }
-    function spaceWord(type, status, inch) {
+    function spaceWord(type, status, inch, near) {
+      if (type === 'talk') return status === 'ok' ? 'Easy to talk' : status === 'tight' ? 'A bit far' : 'Too far to talk';
+      if (type === 'tv') return status === 'ok' ? 'Comfortable' : status === 'tight' ? (near ? 'A bit close' : 'A bit far') : (near ? 'Too close' : 'Too far');
+      if (type === 'console') return status === 'ok' ? 'Set behind it' : 'Gap behind the sofa';
       if (status === 'ok') return 'Comfortable';
       if (type === 'coffee') return status === 'close' ? (inch < SPACE.COFFEE.min ? 'Too close' : 'Too far') : inch > SPACE.COFFEE.max ? 'A bit far' : 'Tight';
+      if (type === 'drawers' || type === 'desk') return status === 'close' ? 'Too tight' : 'Tight';
       return status === 'close' ? 'Too narrow' : 'Tight';
     }
     function inchText(n) { return n < 36 ? n + '"' : fmtFtIn(n / 12); }
@@ -1315,12 +1328,21 @@
       if (!state.scale) return [];
       var inRoom = function (i) { return !room || pieceRoom(state.pieces[i]) === room; };
       var rows = SPACE.report(spacing()).filter(function (r) { return inRoom(r.a); }).map(function (r) {
-        var label, value;
-        if (r.type === 'coffee') { label = nameOf(r.a) + ' to ' + nameOf(r.b).toLowerCase(); value = inchText(r.inch); }
-        else if (r.type === 'bed') { label = 'Beside the ' + nameOf(r.a).toLowerCase(); value = r.inches.map(inchText).join(' and '); }
-        else if (r.type === 'dining') { label = 'Around the ' + nameOf(r.a).toLowerCase(); value = inchText(r.inch) + ' at the tightest side'; }
-        else { label = 'Walkway between the ' + nameOf(r.a).toLowerCase() + ' and ' + (r.b < 0 ? 'the wall' : 'the ' + nameOf(r.b).toLowerCase()); value = inchText(r.inch); }
-        return { label: label, value: value, status: r.status, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0])) };
+        var label, value, A = nameOf(r.a).toLowerCase(), B = r.b > -1 ? nameOf(r.b).toLowerCase() : null;
+        if (r.type === 'coffee') { label = nameOf(r.a) + ' to ' + B; value = inchText(r.inch); }
+        else if (r.type === 'bed') {
+          label = 'Beside the ' + A;
+          value = (r.sides || r.inches.map(function (n) { return { inch: n }; })).map(function (sd) { return sd.against ? 'against the wall' : inchText(sd.inch); }).join(' and ');
+        }
+        else if (r.type === 'bedFoot') { label = 'Foot of the ' + A + ' to ' + (B ? 'the ' + B : 'the wall'); value = inchText(r.inch); }
+        else if (r.type === 'dining') { label = 'Around the ' + A; value = inchText(r.inch) + (r.open ? ' on a side with no chairs' : ' at the tightest side'); }
+        else if (r.type === 'desk') { label = 'Chair space behind the ' + A; value = inchText(r.inch); }
+        else if (r.type === 'drawers') { label = 'In front of the ' + A + ' (drawers)'; value = inchText(r.inch); }
+        else if (r.type === 'console') { label = 'The ' + B + ' behind the ' + A; value = inchText(r.inch); }
+        else if (r.type === 'talk') { label = 'Conversation: the ' + A + ' and the ' + B; value = fmtFtIn(r.ft) + ' apart'; }
+        else if (r.type === 'tv') { var pc = state.pieces[r.a]; label = 'TV viewing distance (' + Math.round(pc.tv) + '" screen)'; value = fmtFtIn(r.ft) + ' from the ' + B; }
+        else { label = 'Walkway between the ' + A + ' and ' + (B ? 'the ' + B : 'the wall'); value = inchText(r.inch); }
+        return { label: label, value: value, status: r.status, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0]), r.near) };
       });
       var pcs = piecesFt(), probs = [];
       conflicts().forEach(function (c) {
@@ -1352,7 +1374,7 @@
       $('checkCount').textContent = issues; $('checkCount').classList.toggle('hidden', !issues);
       $('spaceSub').innerHTML = !state.scale ? 'Spacing is measured to scale, so this plan needs a scale first.'
         : 'Measured square off each piece, so turned pieces are checked too' + (r ? ', in <b>' + esc(r.name) + '</b>.' : '.') +
-          ' Walkways want 36", the space beside a bed 24", around a dining table 36", and 14" to 18" from sofa to coffee table.';
+          ' Guides: walkways 36", sofa to coffee table 14" to 18", beside a bed 24", foot of the bed 30", around a dining table 36", behind a desk and in front of a dresser 36", and facing seats within 8 feet.';
       if (!rows.length) { el.innerHTML = '<p class="rug-empty">' + (state.pieces.length || state.doors.length ? 'Nothing to check here yet. Place seating with a coffee table, a bed, a dining table, or a door.' : 'Place a few pieces and the spacing between them shows up here.') + '</p>'; return; }
       el.innerHTML = rows.map(function (rw) {
         return '<div class="space-row"><span class="space-label">' + esc(rw.label) + '</span>' +
@@ -2374,7 +2396,7 @@
         });
         y += 10;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 101, 96);
-        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight), 24" beside a bed (18" is tight), 36" around a dining table (30" is tight), and 14" to 18" from sofa to coffee table. Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
+        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight); sofa to coffee table 14" to 18"; beside a bed 24" (18" is tight) and 30" at the foot (24" is tight); around a dining table 36" (24" on a side with no chairs, 44" if people walk behind seated guests); behind a desk and in front of a dresser 36" (30" is tight); seats facing each other within 8 feet; a TV about 1 to 1.7 times its screen size away. Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
         doc.text(sn, margin, y + 4);
         y += sn.length * 12 + 18;
       }
@@ -2535,7 +2557,7 @@
         onPieceClick(e); onDoorClick(e);
       });
       fp.addEventListener('change', function (e) { onDoorChange(e); onDetailChange(e); });
-      fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && /^pc[NWD]/.test(e.target.id || '')) e.target.blur(); });
+      fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && /^pc[NWDT]/.test(e.target.id || '')) e.target.blur(); });
       $('floatBar').addEventListener('click', onFloatClick);
       $('undoBtn').addEventListener('click', undo);
       $('doorTool').addEventListener('click', function () { if (state.tool === 'door') endDoorTool(); else { setTab('doors'); startDoorTool(); } });
