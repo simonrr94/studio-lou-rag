@@ -1,0 +1,2770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Floor Planner · Studio Lou</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <script>
+    // The Floor Planner is a full-window page. It also runs inside a full-height
+    // embed (a Framer page), where the same layout applies.
+    var IN_TOOLKIT = false;
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { background: #FAF9F6; font-family: 'DM Sans', sans-serif; color: #433E3C; }
+    .hidden { display: none !important; }
+    button { font-family: 'DM Sans', sans-serif; }
+
+    /* ── APP FRAME: header, toolbar, then the plan and its panel ── */
+    .app { display: flex; flex-direction: column; height: 100%; }
+    .app-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 20px; border-bottom: 1.5px solid #d0c9bc; background: #FAF9F6; flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+    .brand-studio { font-family: 'Crimson Text', serif; font-size: 20px; color: #582b36; white-space: nowrap; }
+    .brand-tool { font-size: 13px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #433E3C; white-space: nowrap; }
+    .head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+    /* ── BUTTONS (toolkit styles) ── */
+    .btn-primary, .btn-secondary {
+      display: inline-block; padding: 13px 32px; font-size: 15px; font-weight: 600; border-radius: 50px;
+      cursor: pointer; text-decoration: none; white-space: nowrap;
+    }
+    .btn-primary { background: #A6BE47; color: #ffffff; border: none; transition: opacity 0.15s; }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-secondary { background: transparent; color: #433E3C; border: 1.5px solid #d0c9bc; transition: border-color 0.15s; }
+    .btn-secondary:hover { border-color: #433E3C; }
+    .btn-secondary:disabled { color: #a39d92; cursor: default; border-color: #e6e0d6; }
+    .btn-sm { padding: 7px 16px; font-size: 13px; }
+    .link-btn { background: none; border: none; font-size: 13px; color: #6b6560; text-decoration: underline; cursor: pointer; padding: 0; }
+    .link-btn:hover { color: #433E3C; }
+
+    /* ── START SCREENS (upload, loading, error) ── */
+    .start { flex: 1; overflow-y: auto; padding: 48px 24px 64px; }
+    .start-inner { max-width: 760px; margin: 0 auto; }
+    .tool-title { font-weight: 500; color: #582B36; font-size: 44px; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 4px; }
+    .tool-desc { font-family: 'Crimson Text', serif; color: #433E3C; font-size: 24px; letter-spacing: -0.04em; line-height: 1.25; padding: 16px 0 28px; }
+    .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #6b6560; margin-bottom: 9px; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .uses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 28px; }
+    .use { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 14px 16px; }
+    .use h3 { font-size: 14px; font-weight: 600; line-height: 1.35; margin-bottom: 3px; }
+    .use h3 span { margin-right: 4px; }
+    .use p { font-size: 12px; line-height: 1.4; color: #6b6560; }
+    .upload-zone {
+      border: 1.5px dashed #b9b0a1; border-radius: 16px; padding: 44px 24px 40px; text-align: center; cursor: pointer;
+      background: #ffffff; transition: border-color 0.15s, background 0.15s;
+    }
+    .upload-zone:hover, .upload-zone.drag { border-color: #582b36; background: #fdf6f7; }
+    .upload-zone input { display: none; }
+    .upload-icon { width: 44px; height: 44px; margin: 0 auto 14px; display: block; }
+    .upload-zone .big { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+    .upload-zone .small { font-size: 13px; color: #6b6560; line-height: 1.5; max-width: 440px; margin: 0 auto 20px; }
+    .loading-wrap { text-align: center; padding: 56px 0 40px; }
+    .spinner { width: 36px; height: 36px; border: 3px solid #d0c9bc; border-top-color: #582b36; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 15px; color: #6b6560; line-height: 1.6; max-width: 420px; margin: 0 auto; }
+    .loading-text strong { display: block; font-size: 17px; color: #433E3C; margin-bottom: 6px; }
+    .error-msg { background: #fdf6f7; border: 1.5px solid #e8c4ca; border-radius: 12px; padding: 18px 20px; font-size: 15px; color: #582b36; margin-bottom: 18px; line-height: 1.5; }
+    .error-msg small { display: block; color: #6b6560; font-size: 13px; margin-top: 2px; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    /* ── WORKSPACE ── */
+    #screen-result.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .toolbar {
+      display: flex; align-items: center; gap: 8px; padding: 8px 20px; border-bottom: 1.5px solid #d0c9bc;
+      background: #f5f0e8; flex-shrink: 0; flex-wrap: wrap;
+    }
+    .modes { display: flex; gap: 6px; }
+    .mode {
+      font-size: 13px; font-weight: 600; color: #433E3C; background: #ffffff; border: 1.5px solid #d0c9bc;
+      border-radius: 50px; padding: 6px 16px; cursor: pointer;
+    }
+    .mode:hover:not(:disabled) { border-color: #582b36; color: #582b36; }
+    .mode.active { background: #582b36; border-color: #582b36; color: #FAF9F6; }
+    .mode:disabled { color: #a39d92; cursor: default; background: rgba(255,255,255,0.6); }
+    .mode small { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-left: 4px; }
+    .tool-spacer { flex: 1; }
+    .room-select {
+      height: 34px; border: 1.5px solid #d0c9bc; border-radius: 10px; background: #ffffff; color: #433E3C;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 0 10px; min-width: 160px;
+    }
+    .room-select:focus { outline: none; border-color: #582b36; }
+    .tool-btn {
+      display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; font-size: 13px; font-weight: 600;
+      color: #433E3C; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; cursor: pointer;
+    }
+    .tool-btn:hover:not(:disabled) { border-color: #433E3C; }
+    .tool-btn.on { background: #582b36; color: #FAF9F6; border-color: #582b36; }
+    .tool-btn:disabled { color: #a39d92; cursor: default; }
+    .tool-btn svg { width: 16px; height: 16px; }
+
+    .work { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+    .stage-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1.5px solid #d0c9bc; }
+    .stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: hidden; }
+    .print { position: relative; background: #ffffff; padding: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 8px 20px rgba(0,0,0,0.10); border-radius: 2px; }
+    canvas { display: block; touch-action: pan-y pinch-zoom; }
+    canvas.editing { touch-action: none; }
+    .tool-msg {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
+      background: #582b36; color: #FAF9F6; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 50px; white-space: nowrap;
+    }
+
+    /* The small toolbar that floats over the selected piece or door */
+    .float-bar {
+      position: absolute; z-index: 5; display: flex; gap: 2px; padding: 3px; background: #ffffff;
+      border: 1.5px solid #d0c9bc; border-radius: 12px; box-shadow: 0 4px 14px rgba(67,62,60,0.18);
+    }
+    .float-bar button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 34px; height: 32px; padding: 0 8px;
+      font-size: 12px; font-weight: 600; color: #433E3C; background: transparent; border: none; border-radius: 9px; cursor: pointer;
+    }
+    .float-bar button:hover { background: #f5f0e8; }
+    .float-bar button.danger { color: #582b36; }
+    .float-bar button svg { width: 17px; height: 17px; }
+
+    /* ── SCALE BAR (under the plan) ── */
+    .scale-bar { flex-shrink: 0; padding: 10px 20px; border-top: 1.5px solid #d0c9bc; background: #ffffff; }
+    .scale-bar.warn { background: #fdf6f7; }
+    .scale-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .scale-msg { font-size: 13px; line-height: 1.5; color: #6b6560; }
+    .scale-msg b { color: #433E3C; font-weight: 600; }
+    .scale-bar.warn .scale-msg b { color: #582b36; }
+    .scale-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+    .scale-ask label { font-size: 13px; font-weight: 600; }
+    .scale-ask input { width: 110px; height: 34px; border: 1.5px solid #d0c9bc; border-radius: 10px; background: #FAF9F6; color: #433E3C; font-family: 'DM Sans', sans-serif; font-size: 15px; padding: 0 10px; }
+    .scale-ask input:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .scale-ask input.bad { border-color: #b3475b; background: #fdf6f7; }
+
+    /* ── PANEL ── */
+    .panel { min-height: 0; overflow-y: auto; background: #FAF9F6; }
+    .pane { padding: 16px 18px 24px; }
+    .ptabs { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1.5px solid #d0c9bc; position: sticky; top: 0; background: #FAF9F6; z-index: 2; }
+    .ptab {
+      flex: 1; font-size: 13px; font-weight: 600; color: #6b6560; background: none; border: none; padding: 9px 4px 10px;
+      border-bottom: 3px solid transparent; margin-bottom: -1.5px; cursor: pointer; white-space: nowrap;
+    }
+    .ptab:hover { color: #433E3C; }
+    .ptab.on { color: #582b36; border-bottom-color: #582b36; }
+    .ptab .count { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; background: #582b36; color: #FAF9F6; font-size: 11px; line-height: 18px; }
+    .pane-sub { font-size: 13px; color: #433E3C; line-height: 1.5; margin-bottom: 12px; }
+    .hint { font-size: 12px; color: #6b6560; margin-top: 16px; line-height: 1.6; }
+    .legend { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; white-space: nowrap; }
+    .swatch { width: 18px; height: 0; border-top: 2px solid #582b36; display: inline-block; }
+    .swatch.dash { border-top-style: dashed; }
+
+    /* Measure: stats and room cards */
+    .stats { display: flex; gap: 22px; margin-bottom: 18px; }
+    .stat b { display: block; font-size: 28px; font-weight: 500; color: #582b36; letter-spacing: -0.04em; line-height: 1; margin-bottom: 5px; }
+    .stat span { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #6b6560; }
+    .rooms-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .rooms-head .eyebrow { margin: 0; }
+    .room-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .room-card { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 10px 12px 12px; cursor: pointer; }
+    .room-card:hover { border-color: #582b36; }
+    .room-card.selected { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
+    .card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .name-input { flex: 1; min-width: 0; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; color: #582b36; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 3px 6px; margin-left: -6px; }
+    .name-input:hover { border-color: #d0c9bc; }
+    .name-input:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .del { width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; border: none; background: transparent; color: #6b6560; font-size: 18px; line-height: 1; cursor: pointer; }
+    .del:hover { background: #fdf6f7; color: #582b36; }
+    .dims { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .dims label { display: block; font-size: 10px; font-weight: 600; color: #6b6560; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+    .dims input { width: 100%; height: 34px; border: 1.5px solid #d0c9bc; border-radius: 10px; background: #FAF9F6; color: #433E3C; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 0 10px; }
+    .dims input:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .dims input.bad { border-color: #b3475b; background: #fdf6f7; }
+    .card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; color: #6b6560; }
+    .badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+    .badge.labeled, .badge.fits, .badge.ok { background: #eef2dc; color: #4f5c1d; }
+    .badge.estimated, .badge.big { background: #f6e6e9; color: #582b36; }
+    .badge.edited { background: #efeae2; color: #433E3C; }
+    .badge.tight { background: #f7ecd2; color: #7a5a12; }
+    .box-note { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #fdf6f7; font-size: 12px; line-height: 1.45; color: #582b36; }
+
+    /* Furnish: catalog */
+    .cats { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cat { font-size: 12px; font-weight: 600; color: #433E3C; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 5px 12px; cursor: pointer; }
+    .cat:hover { border-color: #582b36; }
+    .cat.on { background: #582b36; border-color: #582b36; color: #FAF9F6; }
+    .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .piece-card {
+      text-align: left; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 8px 10px 10px; cursor: pointer;
+      color: #433E3C; transition: border-color 0.15s;
+    }
+    .piece-card:hover { border-color: #582b36; }
+    .piece-card svg { display: block; width: 100%; height: 46px; margin-bottom: 6px; }
+    .piece-card b { display: block; font-size: 13px; font-weight: 600; line-height: 1.3; }
+    .piece-card small { font-size: 12px; color: #6b6560; }
+    .own { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 12px; }
+    .field { display: block; margin-bottom: 10px; }
+    .field span { display: block; font-size: 10px; font-weight: 600; color: #6b6560; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+    .field input, .field select { width: 100%; height: 36px; border: 1.5px solid #d0c9bc; border-radius: 10px; background: #FAF9F6; color: #433E3C; font-family: 'DM Sans', sans-serif; font-size: 14px; padding: 0 10px; }
+    .field input:focus, .field select:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .field input.bad { border-color: #b3475b; background: #fdf6f7; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .empty-note { font-size: 13px; color: #6b6560; line-height: 1.5; padding: 4px 0; }
+
+    /* Details of the selected piece or door */
+    .detail-back { margin-bottom: 12px; }
+    .detail-name { width: 100%; font-family: 'DM Sans', sans-serif; font-size: 20px; font-weight: 600; color: #582b36; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 3px 6px; margin: 0 0 4px -6px; }
+    .detail-name:hover { border-color: #d0c9bc; }
+    .detail-name:focus { outline: none; border-color: #582b36; background: #ffffff; }
+    .detail-meta { font-size: 13px; color: #6b6560; margin-bottom: 14px; line-height: 1.5; }
+    .warn-text { color: #582b36; font-weight: 600; }
+    .section-label { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #6b6560; margin: 16px 0 8px; }
+
+    /* Rugs */
+    .rug-advice { font-size: 13px; line-height: 1.55; color: #6b6560; background: #f5f0e8; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+    .style-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .rug-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .rug-card { text-align: left; color: #433E3C; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 9px 10px 10px; cursor: pointer; }
+    .rug-card:hover { border-color: #582b36; }
+    .rug-card.on { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
+    .rug-card .rug-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
+    .rug-card b { font-size: 14px; font-weight: 600; color: #582b36; }
+    .rug-card .rug-detail { display: block; font-size: 12px; line-height: 1.4; color: #6b6560; }
+    .rug-card .best { display: inline-block; margin-top: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4f5c1d; }
+    .rug-placed { margin-top: 12px; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 10px 12px; }
+    .rug-placed p { font-size: 13px; line-height: 1.5; margin-bottom: 8px; }
+    .rug-empty { font-size: 13px; color: #6b6560; line-height: 1.5; }
+    .rug-empty.small { margin-bottom: 10px; }
+    .chip { font-size: 12px; font-weight: 600; color: #433E3C; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 5px 12px; cursor: pointer; }
+    .chip:hover { border-color: #582b36; }
+    .chip.on { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
+
+    /* Checks */
+    .space-list { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; overflow: hidden; }
+    .space-list .rug-empty { padding: 12px 14px; }
+    .space-row { padding: 9px 12px; font-size: 13px; line-height: 1.45; }
+    .space-row + .space-row { border-top: 1px solid #f0ebe3; }
+    .space-label { display: block; color: #433E3C; }
+    .space-val { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #6b6560; margin-top: 2px; }
+
+    /* ── PHONE AND NARROW SCREENS: plan on top, panel below, page scrolls ── */
+    @media (max-width: 820px) {
+      html, body { height: auto; }
+      .app { height: auto; min-height: 100%; }
+      .app-head { padding: 10px 12px; }
+      .brand-studio { font-size: 17px; }
+      .toolbar { padding: 8px 12px; }
+      .tool-spacer { display: none; }
+      .room-select { min-width: 0; flex: 1 1 100%; order: 2; }
+      .toolbar .tool-btn { order: 3; }
+      .work { display: block; }
+      .stage-col { border-right: none; }
+      .stage { height: 58vh; min-height: 300px; padding: 10px; }
+      .scale-bar { padding: 10px 12px; }
+      .scale-row { flex-direction: column; align-items: flex-start; }
+      .panel { overflow: visible; border-top: 1.5px solid #d0c9bc; }
+      .start { padding: 28px 16px 48px; }
+      .tool-title { font-size: 34px; }
+      .tool-desc { font-size: 20px; }
+      .uses { grid-template-columns: 1fr; }
+      .head-actions .btn-secondary.optional { display: none; }
+      .head-actions { flex-wrap: nowrap; }
+      .head-actions .btn-sm { padding: 7px 12px; }
+      .brand { flex-direction: column; gap: 0; }
+      .mode:disabled { display: none; }
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+  <script src="/static/tools/plan-engine.js?v=7"></script>
+  <script>
+    var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
+    var MAX_SEND = 1600;      // longest side of the image sent to the model
+    var MAX_CANVAS = 2400;    // longest side of the on-screen / exported canvas
+    var TIMEOUT_MS = 100000;  // Render free tier can take ~60s to wake up
+
+    var PROMPT = [
+      'You are reading a residential floor plan image. Identify every distinct interior space, including labeled rooms AND unlabeled spaces such as closets, hallways, pantries, laundry, nooks, foyers, and powder rooms.',
+      '',
+      'Return ONLY a JSON object. No prose, no markdown, no code fences. Use exactly this shape:',
+      '{"unit":"ft","rooms":[{"name":"Living Room","label":"Living Room","width_ft":14.5,"length_ft":12,"area_sqft":174,"source":"labeled","bbox":{"x":10,"y":20,"w":30,"h":25}}]}',
+      '',
+      'Rules:',
+      '- width_ft is the HORIZONTAL dimension of the space as it appears in the image. length_ft is the VERTICAL dimension. Use decimal feet (12\'6" = 12.5). If the plan is metric, convert to feet.',
+      '- source is "labeled" only when dimensions for that space are printed on the plan. Otherwise estimate them from the scale implied by labeled rooms and set source to "estimated".',
+      '- area_sqft is the square footage printed on the plan for that space (for example "Bedroom 101 sq ft"), copied exactly as printed. If the plan is metric, convert square meters to square feet. Use null when no area is printed for that space. Never calculate it from width and length.',
+      '- bbox traces the interior walls of the space as percentages of the FULL image (0 to 100). x,y is the top left corner; w,h are width and height. Be precise: the box should sit just inside the walls.',
+      '- For L-shaped spaces, box the largest rectangular portion.',
+      '- label is the room name exactly as it is printed on the plan (for example "Vaulted Sleeping" or "Kitchen"). Use "" if the space has no printed name.',
+      '- Name unlabeled spaces by function (Closet, Hallway, Pantry, Laundry). Number duplicates (Bedroom 2, Closet 2).',
+      '- Skip exterior areas unless they are a labeled patio, deck, porch, or balcony. Skip stairs and garage only if they have no label.'
+    ].join('\n');
+
+    var RETRY_SUFFIX = '\n\nIMPORTANT: Your previous reply could not be parsed. Reply with the raw JSON object only, starting with { and ending with }.';
+
+    var state = {
+      img: null, W: 0, H: 0,
+      rooms: [], selected: -1,
+      sendB64: '', sendType: 'image/jpeg',
+      drag: null, nextId: 1,
+      walls: null,   // SNAP's wall map and found words, kept for Furnish and 3D
+      scale: null,   // { ftPerPx, source: 'auto' | 'manual', rooms, line }
+      tool: null,    // 'scale' while the person is drawing a scale line
+      scaleLine: null,
+      mode: 'measure',  // 'measure' or 'furnish'
+      rugCheck: null,   // { room, key, result }: the rug sizes checked for the selected room
+      pieces: [],       // furniture placed in Furnish
+      pieceSel: -1,     // index of the selected piece, or -1
+      doors: [],        // doors marked in Furnish
+      doorSel: -1,      // index of the selected door, or -1
+      ptab: 'add',      // the Furnish panel tab: add, rugs, doors, checks
+      cat: 'Living',    // the catalog category shown in Add
+      ptSel: -1         // Measure: the corner tapped on the selected room's shape, which shows a remove (x) button
+    };
+
+    /* ---------- Geometry in feet ---------- */
+    // Every room gets its box in feet once there is a scale. The box is the
+    // truth for placing things; rooms whose box and plan dimensions disagree
+    // by more than 10% are flagged on their card.
+    function syncGeometry() {
+      var f = state.scale ? state.scale.ftPerPx : null;
+      state.rooms.forEach(function (r) {
+        r.ftBox = f ? PLAN.boxFt(r.bbox, f, state.W, state.H) : null;
+        r.ftShape = f ? PLAN.shapeFt(pts(r), f, state.W, state.H) : null;
+        r.shapeArea = r.shape && r.ftShape ? PLAN.polyArea(r.ftShape) : null;
+        // A drawn shape is checked against the printed area instead of the box
+        r.mismatch = r.shape ? null : PLAN.mismatch(r, r.ftBox);
+      });
+    }
+
+    /* ---------- Room shapes ---------- */
+    // Corners in percent of the image: the drawn shape, or the box's four corners
+    function pts(r) { return r.shape || PLAN.rectPoints(r.bbox); }
+    function ptsPx(r) { return pts(r).map(function (q) { return { x: q.x / 100 * state.W, y: q.y / 100 * state.H }; }); }
+    // Store a new set of corners. Four corners lined up with the image become a plain box again.
+    function setShape(r, list) {
+      r.bbox = PLAN.bounds(list);
+      r.shape = PLAN.isRect(list) ? null : list;
+    }
+    function tracePath(ctx, list) {
+      ctx.beginPath();
+      list.forEach(function (q, k) { if (k) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+      ctx.closePath();
+    }
+    function removePoint(i, k) {
+      var r = state.rooms[i];
+      if (!r || !r.shape || r.shape.length <= 3) return;
+      pushUndo(state.drag && state.drag.snap);
+      var list = r.shape.slice(); list.splice(k, 1);
+      setShape(r, list);
+      state.drag = null; state.ptSel = -1;
+      renderAll();
+    }
+
+    /* ---------- Measurement helpers (live in plan-engine.js) ---------- */
+    var fmtFtIn = PLAN.fmtFtIn, parseFtIn = PLAN.parseFtIn, area = PLAN.area, fmtArea = PLAN.fmtArea;
+
+    /* ---------- Model response handling ---------- */
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function num(v) { var n = parseFloat(v); return isNaN(n) ? null : n; }
+
+    function normalizeRoom(raw, unit) {
+      if (!raw || !raw.bbox) return null;
+      var b = raw.bbox;
+      var x = num(b.x), y = num(b.y), w = num(b.w != null ? b.w : b.width), h = num(b.h != null ? b.h : b.height);
+      if (x == null || y == null || !w || !h) return null;
+      if (x <= 1 && y <= 1 && w <= 1 && h <= 1) { x *= 100; y *= 100; w *= 100; h *= 100; } // fractions
+      x = clamp(x, 0, 99); y = clamp(y, 0, 99);
+      w = clamp(w, 1, 100 - x); h = clamp(h, 1, 100 - y);
+
+      function dim(v) { return (typeof v === 'string' && /['"’”]|\d\s+\d/.test(v)) ? parseFtIn(v) : num(v); }
+      var width = dim(raw.width_ft != null ? raw.width_ft : raw.width);
+      var length = dim(raw.length_ft != null ? raw.length_ft : raw.length);
+      if (unit && /^m/i.test(unit)) { if (width) width *= 3.28084; if (length) length *= 3.28084; }
+      var printedArea = num(raw.area_sqft);
+      if (!printedArea || printedArea <= 0) printedArea = null;
+
+      return {
+        id: state.nextId++,
+        name: String(raw.name || 'Room').slice(0, 40),
+        label: raw.label ? String(raw.label).slice(0, 60) : '',
+        width: width, length: length,
+        printedArea: printedArea,
+        source: raw.source === 'labeled' ? 'labeled' : 'estimated',
+        bbox: { x: x, y: y, w: w, h: h }
+      };
+    }
+
+    function parseResponse(text) {
+      var t = String(text).replace(/```(?:json)?/gi, '');
+      var s = t.indexOf('{'), e = t.lastIndexOf('}');
+      if (s < 0 || e <= s) throw new Error('No JSON in response');
+      var obj = JSON.parse(t.slice(s, e + 1));
+      var list = Array.isArray(obj) ? obj : obj.rooms;
+      if (!list || !list.length) throw new Error('No rooms in response');
+      var rooms = list.map(function (r) { return normalizeRoom(r, obj.unit); }).filter(Boolean);
+      if (!rooms.length) throw new Error('No usable rooms');
+      return rooms;
+    }
+
+    function callVision(prompt) {
+      var ctrl = new AbortController();
+      var timer = setTimeout(function () { ctrl.abort(); }, TIMEOUT_MS);
+      return fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: state.sendB64, media_type: state.sendType, prompt: prompt }),
+        signal: ctrl.signal
+      }).then(function (r) {
+        clearTimeout(timer);
+        if (!r.ok) throw new Error('server:' + r.status);
+        return r.json();
+      }).then(function (d) {
+        var t = d && d.content && d.content[0] && d.content[0].text;
+        if (!t) throw new Error('Empty response');
+        return t;
+      }, function (err) {
+        clearTimeout(timer);
+        throw err;
+      });
+    }
+
+    function extract() {
+      showStatus('loading', 'Reading your floor plan...', 'Measuring every room, closet, and hallway. Usually 15 to 40 seconds, though the first run of the day can take up to a minute.');
+      var vision = callVision(PROMPT)
+        .then(parseResponse)
+        .catch(function (err) {
+          if (err.name === 'AbortError' || /^server:|Failed to fetch/.test(err.message)) throw err;
+          showStatus('loading', 'Tidying up the results', 'The first answer came back messy, asking once more.');
+          return callVision(PROMPT + RETRY_SUFFIX).then(parseResponse);
+        });
+      var analysis = (state.analysis || Promise.resolve(null)).catch(function () { return null; });
+      return Promise.all([vision, analysis])
+        .then(function (res) {
+          var rooms = res[0], an = res[1];
+          state.scale = null;
+          if (an && an.a) {
+            state.walls = { map: an.a, words: an.words };
+            try {
+              var words = an.words.map(function (wd) { return { text: wd.text, x: wd.x, y: wd.y }; });
+              state.snapInfo = SNAP.place(rooms, an.a, words);
+              var f = PLAN.scaleFromAnalysis(state.snapInfo.ppf, an.a.w, state.W);
+              if (f) state.scale = { ftPerPx: f, source: 'auto', rooms: state.snapInfo.ppfRooms, from: state.snapInfo.ppfFrom };
+            } catch (e) { if (window.console) console.warn('Snapping skipped:', e); }
+          }
+          return rooms;
+        })
+        .then(function (rooms) {
+          state.rooms = rooms;
+          state.selected = -1;
+          showScreen('result');
+          renderAll();
+          trackUsage('floor-plan-parser');
+        })
+        .catch(function (err) {
+          var msg = 'Something went wrong reading this plan.';
+          if (err.name === 'AbortError') msg = 'The server took too long to respond.';
+          else if (/^server:/.test(err.message)) msg = 'The server returned an error (' + err.message.split(':')[1] + ').';
+          else if (/Failed to fetch/.test(err.message)) msg = 'Could not reach the server.';
+          else msg = 'The model did not return usable room data.';
+          showStatus('error', msg, 'Try again, or use a clearer image of the plan.', true);
+        });
+    }
+
+    /* ---------- Image loading ---------- */
+    function handleFile(file) {
+      if (!file) return;
+      if (/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name)) {
+        showStatus('error', 'PDF support is coming soon.', 'For now, save the page as a PNG or JPG and upload that.');
+        return;
+      }
+      if (!/^image\//.test(file.type)) {
+        showStatus('error', 'That file type is not supported.', 'Upload a PNG, JPG, or WEBP image of the plan.');
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () { prepareImage(img); };
+        img.onerror = function () {
+          showStatus('error', 'This image could not be opened.', 'iPhone HEIC photos need to be exported as JPG first.');
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function prepareImage(img) {
+      // Display canvas
+      var s = Math.min(1, MAX_CANVAS / Math.max(img.naturalWidth, img.naturalHeight));
+      state.W = Math.round(img.naturalWidth * s);
+      state.H = Math.round(img.naturalHeight * s);
+      state.img = img;
+      var c = $('planCanvas');
+      c.width = state.W; c.height = state.H;
+
+      // Downscaled copy for the model
+      var s2 = Math.min(1, MAX_SEND / Math.max(img.naturalWidth, img.naturalHeight));
+      var tmp = document.createElement('canvas');
+      tmp.width = Math.round(img.naturalWidth * s2);
+      tmp.height = Math.round(img.naturalHeight * s2);
+      var tctx = tmp.getContext('2d');
+      tctx.fillStyle = '#ffffff';
+      tctx.fillRect(0, 0, tmp.width, tmp.height);
+      tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+      state.sendType = 'image/jpeg';
+      state.sendB64 = tmp.toDataURL('image/jpeg', 0.9).split(',')[1];
+
+      state.rooms = []; state.selected = -1;
+      state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null; endScaleTool();
+      state.pieces = []; state.pieceSel = -1; state.doors = []; state.doorSel = -1;
+      UNDO = []; $('undoBtn').disabled = true;
+      setMode('measure');
+      // Find walls and printed room names while the model reads the plan
+      state.analysis = new Promise(function (resolve) {
+        setTimeout(function () {
+          try {
+            var a = SNAP.analyze(img);
+            SNAP.ocr(a.canvas).then(function (words) { resolve({ a: a, words: words }); });
+          } catch (e) { resolve(null); }
+        }, 30);
+      });
+      extract();
+    }
+
+    /* ---------- Drawing ---------- */
+    function px(r) {
+      return { x: r.bbox.x / 100 * state.W, y: r.bbox.y / 100 * state.H, w: r.bbox.w / 100 * state.W, h: r.bbox.h / 100 * state.H };
+    }
+    function scale() { return Math.min(state.W, state.H) / 900; }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+    }
+
+    // Size the plan to fit the stage beside the panel, keeping its proportions
+    function fitCanvas() {
+      var st = $('stage'), c = $('planCanvas');
+      if (!state.W || !st || !st.clientWidth) return;
+      var cs = getComputedStyle(st);
+      var pw = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 16;
+      var ph = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 16;
+      var k = Math.min(pw / state.W, ph / state.H);
+      if (!(k > 0)) return;
+      var w = Math.floor(state.W * k) + 'px', h = Math.floor(state.H * k) + 'px';
+      if (c.style.width !== w) c.style.width = w;
+      if (c.style.height !== h) c.style.height = h;
+    }
+    function draw(forExport) {
+      if (!forExport) fitCanvas();
+      var c = $('planCanvas'), ctx = c.getContext('2d'), s = scale();
+      syncGeometry();
+      ctx.clearRect(0, 0, state.W, state.H);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, state.W, state.H);
+      ctx.drawImage(state.img, 0, 0, state.W, state.H);
+
+      // Boxes first, labels on top so they never get covered
+      state.rooms.forEach(function (r, i) {
+        var sel = !forExport && i === state.selected;
+        ctx.save();
+        tracePath(ctx, ptsPx(r));
+        ctx.fillStyle = sel ? 'rgba(166,190,71,0.20)' : 'rgba(88,43,54,0.07)';
+        ctx.fill();
+        ctx.lineWidth = (sel ? 3.5 : 2.2) * s;
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = sel ? '#7f9433' : '#582b36';
+        ctx.setLineDash(r.source === 'estimated' ? [9 * s, 6 * s] : []);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      if (state.scale) { drawRugs(ctx, forExport); drawPieces(ctx, forExport); drawDoors(ctx, forExport); }
+
+      state.rooms.forEach(function (r, i) {
+        var b = px(r), sel = !forExport && i === state.selected;
+        // In Furnish the panel names the selected room, so its tag steps aside for the spacing lines
+        if (sel && state.mode === 'furnish' && rugOK(r)) return;
+        var dims = (r.width && r.length) ? fmtFtIn(r.width) + ' x ' + fmtFtIn(r.length) : '';
+        var ratio = displayRatio();
+        var nameSize = Math.max(15 * s, 13 * ratio), dimSize = Math.max(13 * s, 11.5 * ratio);
+        ctx.save();
+        ctx.font = '600 ' + nameSize + 'px "DM Sans", sans-serif';
+        var nw = ctx.measureText(r.name).width;
+        ctx.font = '500 ' + dimSize + 'px "DM Sans", sans-serif';
+        var dw = dims ? ctx.measureText(dims).width : 0;
+        var padX = 8 * s + 2, padY = 6 * s + 2, gap = dims ? 3 * s + 1 : 0;
+        var cw = Math.max(nw, dw) + padX * 2;
+        var ch = nameSize + (dims ? dimSize + gap : 0) + padY * 2;
+        // Tuck the label into the room's top left corner so it does not cover the plan's own text.
+        // Rooms too small to hold it get a centered label instead.
+        var inset = 5 * ratio, cx, cy;
+        if (cw + inset * 2 <= b.w && ch + inset * 2 <= b.h) {
+          cx = b.x + inset; cy = b.y + inset;
+          // A drawn shape may not reach the box's top left corner: try the other corners
+          if (r.shape) {
+            var poly = ptsPx(r), spots = [[b.x + inset, b.y + inset], [b.x + b.w - inset - cw, b.y + inset],
+              [b.x + inset, b.y + b.h - inset - ch], [b.x + b.w - inset - cw, b.y + b.h - inset - ch]];
+            var fit = spots.filter(function (sp) {
+              return [[0, 0], [cw, 0], [0, ch], [cw, ch]].every(function (o) { return PLAN.pointInPoly({ x: sp[0] + o[0], y: sp[1] + o[1] }, poly); });
+            })[0];
+            if (fit) { cx = fit[0]; cy = fit[1]; } else { cx = b.x + b.w / 2 - cw / 2; cy = b.y + b.h / 2 - ch / 2; }
+          }
+        }
+        else { cx = b.x + b.w / 2 - cw / 2; cy = b.y + b.h / 2 - ch / 2; }
+        cx = clamp(cx, 2, state.W - cw - 2); cy = clamp(cy, 2, state.H - ch - 2);
+
+        ctx.shadowColor = 'rgba(67,62,60,0.18)'; ctx.shadowBlur = 6 * s; ctx.shadowOffsetY = 1.5 * s;
+        ctx.fillStyle = sel ? '#582b36' : 'rgba(255,255,255,0.94)';
+        roundRect(ctx, cx, cy, cw, ch, Math.min(8 * s + 2, ch / 2));
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillStyle = sel ? '#FAF9F6' : '#582b36';
+        ctx.font = '600 ' + nameSize + 'px "DM Sans", sans-serif';
+        ctx.fillText(r.name, cx + cw / 2, cy + padY);
+        if (dims) {
+          ctx.fillStyle = sel ? '#e9e1d4' : '#433E3C';
+          ctx.font = '500 ' + dimSize + 'px "DM Sans", sans-serif';
+          ctx.fillText(dims, cx + cw / 2, cy + padY + nameSize + gap);
+        }
+        ctx.restore();
+      });
+
+      // Spacing lines: the selected room's rug on screen, every rug in exports; then
+      // the furniture checks, plus every side of the selected piece while it's picked
+      if (state.scale) {
+        if (forExport) state.rooms.forEach(function (r) { drawGaps(ctx, r); });
+        else if (state.mode === 'furnish' && state.selected > -1) drawGaps(ctx, state.rooms[state.selected]);
+        if (forExport || state.mode === 'furnish') {
+          var selPc = forExport ? -1 : state.pieceSel;
+          spacing().forEach(function (l) {
+            if (l.show === 'always' || (l.show === 'selected' && l.piece === selPc)) drawGapLine(ctx, l.from, l.to, SPACE_COL[l.status], fmtGap(l.gap));
+          });
+        }
+      }
+
+      // Corner handles on the selected room, and a + in the middle of each side to add a corner
+      if (!forExport && state.mode === 'measure' && state.selected > -1 && state.rooms[state.selected]) {
+        var hs = handleSize(), ratio2 = displayRatio();
+        ctx.save();
+        mids(state.rooms[state.selected]).forEach(function (m) {
+          ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.strokeStyle = '#582b36'; ctx.lineWidth = 1.5 * ratio2;
+          ctx.beginPath(); ctx.arc(m.x, m.y, hs * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.lineWidth = 1.8 * ratio2; ctx.beginPath();
+          ctx.moveTo(m.x - hs * 0.15, m.y); ctx.lineTo(m.x + hs * 0.15, m.y);
+          ctx.moveTo(m.x, m.y - hs * 0.15); ctx.lineTo(m.x, m.y + hs * 0.15);
+          ctx.stroke();
+        });
+        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 2.5 * s;
+        ptsPx(state.rooms[state.selected]).forEach(function (p, k) {
+          ctx.fillStyle = k === state.ptSel ? '#7f9433' : '#ffffff';
+          ctx.beginPath(); ctx.arc(p.x, p.y, hs * 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        });
+        ctx.restore();
+        // The remove button beside a tapped corner
+        var xb = removeBtn();
+        if (xb) {
+          ctx.save();
+          ctx.fillStyle = '#582b36'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * ratio2;
+          ctx.beginPath(); ctx.arc(xb.x, xb.y, xb.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          var t = xb.r * 0.42;
+          ctx.lineWidth = 2.2 * ratio2; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(xb.x - t, xb.y - t); ctx.lineTo(xb.x + t, xb.y + t); ctx.moveTo(xb.x + t, xb.y - t); ctx.lineTo(xb.x - t, xb.y + t); ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      if (!forExport) {
+        if (state.tool === 'scale' && state.scaleLine) drawScaleLine(ctx, state.scaleLine.p1, state.scaleLine.p2);
+        else if (state.scale) drawRuler(ctx);
+        placeFloat();
+      }
+    }
+
+    // The line being drawn to set the scale, with end ticks
+    function drawScaleLine(ctx, p1, p2) {
+      var ratio = displayRatio(), ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      var tx = Math.cos(ang + Math.PI / 2) * 8 * ratio, ty = Math.sin(ang + Math.PI / 2) * 8 * ratio;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 6 * ratio;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.strokeStyle = '#582b36'; ctx.lineWidth = 2.5 * ratio;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+      [p1, p2].forEach(function (p) { ctx.moveTo(p.x - tx, p.y - ty); ctx.lineTo(p.x + tx, p.y + ty); });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // A small ruler in the bottom left corner, so the scale can be checked by eye
+    // against the plan's own dimension lines. Shown on screen only.
+    function drawRuler(ctx) {
+      var ratio = displayRatio(), f = state.scale.ftPerPx;
+      var feet = [1, 2, 5, 10, 20, 50].filter(function (n) { return n / f <= state.W * 0.3; }).pop();
+      if (!feet) return;
+      var len = feet / f, pad = 10 * ratio, x = pad + 8 * ratio, y = state.H - pad - 10 * ratio;
+      var label = feet + ' ft';
+      ctx.save();
+      ctx.font = '600 ' + (11 * ratio) + 'px "DM Sans", sans-serif';
+      var lw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      roundRect(ctx, pad, y - 22 * ratio, len + lw + 30 * ratio, 30 * ratio, 6 * ratio);
+      ctx.fill();
+      ctx.strokeStyle = '#582b36'; ctx.lineWidth = 2 * ratio;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 6 * ratio); ctx.lineTo(x, y); ctx.lineTo(x + len, y); ctx.lineTo(x + len, y - 6 * ratio);
+      ctx.stroke();
+      ctx.fillStyle = '#582b36'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(label, x + len + 8 * ratio, y);
+      ctx.restore();
+    }
+
+    // Handle size in canvas pixels, tuned so it is ~22 CSS px on screen
+    function handleSize() { return 22 * displayRatio(); }
+    // Canvas pixels per on-screen pixel, so labels and handles stay readable at any size
+    function displayRatio() {
+      var w = $('planCanvas').clientWidth;
+      return w ? state.W / w : 1;
+    }
+
+    /* ---------- Rugs (Furnish mode) ----------
+       A placed rug lives on its room: r.rug = { size: '8x10', x, y, rot }.
+       The center is in percent of the image, so the rug stays on the same
+       spot of the plan if the scale is corrected; the size is in feet. */
+    function rugOK(r) { return r && r.rug && RUG.get(r.rug.size) && r.ftShape && state.scale; }
+    function rugCenterFt(r) {
+      var f = state.scale.ftPerPx;
+      return { x: r.rug.x / 100 * state.W * f, y: r.rug.y / 100 * state.H * f };
+    }
+    function rugPx(r) {
+      var s = RUG.get(r.rug.size), fp = RUG.footprint(s, r.rug.rot), f = state.scale.ftPerPx;
+      var cx = r.rug.x / 100 * state.W, cy = r.rug.y / 100 * state.H, w = fp.w / f, h = fp.h / f;
+      return { x: cx - w / 2, y: cy - h / 2, w: w, h: h, cx: cx, cy: cy, round: !!fp.round, label: s.label };
+    }
+    // Floor left at the closest wall (feet, negative when the rug runs past the walls) and one spacing line per side
+    function rugInfo(r) {
+      var s = RUG.get(r.rug.size), c = rugCenterFt(r);
+      return { clearance: RUG.clearanceAt(r.ftShape, s, r.rug.rot, c.x, c.y), gaps: RUG.gaps(r.ftShape, s, r.rug.rot, c.x, c.y) };
+    }
+    function gapColor(g) { var st = RUG.status(g); return st === 'fits' ? '#7f9433' : st === 'tight' ? '#b07d14' : '#582b36'; }
+    function fmtGap(ft) { return ft < 3 ? Math.max(0, Math.round(ft * 12)) + '"' : fmtFtIn(ft); }
+    function hitRug(p) {
+      // The selected room's rug wins, then any other rug
+      var order = state.rooms.map(function (r, i) { return i; });
+      if (state.selected > -1) { order.splice(state.selected, 1); order.unshift(state.selected); }
+      for (var n = 0; n < order.length; n++) {
+        var r = state.rooms[order[n]];
+        if (!rugOK(r)) continue;
+        var q = rugPx(r);
+        var inside = q.round ? Math.hypot(p.x - q.cx, p.y - q.cy) <= q.w / 2 : (p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h);
+        if (inside) return order[n];
+      }
+      return -1;
+    }
+
+    function drawRugs(ctx, forExport) {
+      var ratio = displayRatio();
+      state.rooms.forEach(function (r, i) {
+        if (!rugOK(r)) return;
+        var q = rugPx(r), sel = !forExport && state.mode === 'furnish' && i === state.selected;
+        var bad = RUG.status(rugInfo(r).clearance) === 'big';
+        function shape(inset) {
+          ctx.beginPath();
+          if (q.round) ctx.arc(q.cx, q.cy, Math.max(1, q.w / 2 - inset), 0, Math.PI * 2);
+          else ctx.rect(q.x + inset, q.y + inset, Math.max(1, q.w - inset * 2), Math.max(1, q.h - inset * 2));
+        }
+        ctx.save();
+        shape(0);
+        ctx.fillStyle = bad ? 'rgba(88,43,54,0.22)' : 'rgba(232,201,122,0.45)';
+        ctx.fill();
+        ctx.lineWidth = (sel ? 2.6 : 1.6) * ratio; ctx.strokeStyle = '#582b36'; ctx.stroke();
+        // A dashed inner border so it reads as a rug, not a room
+        shape(5 * ratio);
+        ctx.setLineDash([4 * ratio, 3 * ratio]); ctx.lineWidth = 1 * ratio; ctx.strokeStyle = 'rgba(88,43,54,0.55)'; ctx.stroke();
+        ctx.setLineDash([]);
+        // Size tag in a corner of the rug (the top of a round one), where furniture rarely sits
+        var fs = 11.5 * ratio;
+        ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
+        var tw = ctx.measureText(q.label).width, pw = tw + 12 * ratio, ph = fs + 8 * ratio;
+        var lx = q.round ? q.cx : q.x + 9 * ratio + pw / 2, ly = q.round ? q.y + 9 * ratio + ph / 2 : q.y + 9 * ratio + ph / 2;
+        if (pw + 18 * ratio > q.w || ph + 18 * ratio > q.h) { lx = q.cx; ly = q.cy; }
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        roundRect(ctx, lx - pw / 2, ly - ph / 2, pw, ph, ph / 2); ctx.fill();
+        ctx.fillStyle = '#582b36'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(q.label, lx, ly + 0.5 * ratio);
+        ctx.restore();
+      });
+    }
+
+    // Spacing lines from each side of the rug to the nearest wall, colored by how much floor is left
+    function drawGaps(ctx, r) {
+      if (!rugOK(r)) return;
+      rugInfo(r).gaps.forEach(function (g) { drawGapLine(ctx, g.from, g.to, gapColor(g.gap), fmtGap(g.gap)); });
+    }
+    // One spacing line between two points in feet, with end ticks and its measurement
+    var SPACE_COL = { ok: '#7f9433', tight: '#b07d14', close: '#582b36' };
+    function drawGapLine(ctx, from, to, col, label) {
+      var f = state.scale.ftPerPx, ratio = displayRatio();
+      var a = { x: from.x / f, y: from.y / f }, b = { x: to.x / f, y: to.y / f };
+      var len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 1) return;
+      var nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len, t = 5 * ratio;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 4.5 * ratio;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 2 * ratio;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      [a, b].forEach(function (p) { ctx.moveTo(p.x - nx * t, p.y - ny * t); ctx.lineTo(p.x + nx * t, p.y + ny * t); });
+      ctx.stroke();
+      var fs = 11 * ratio;
+      ctx.font = '700 ' + fs + 'px "DM Sans", sans-serif';
+      var pw = ctx.measureText(label).width + 10 * ratio, ph = fs + 7 * ratio;
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      // Short lines: set the label beside the line instead of on it
+      if (len < Math.max(pw, ph) + 6 * ratio) { mx += nx * (pw / 2 + 8 * ratio); my += ny * (ph / 2 + 8 * ratio); }
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = col; ctx.lineWidth = 1.2 * ratio;
+      roundRect(ctx, mx - pw / 2, my - ph / 2, pw, ph, ph / 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, mx, my + 0.5 * ratio);
+      ctx.restore();
+    }
+
+    /* ---------- Furniture (Furnish mode) ----------
+       Pieces belong to the plan, not to a room, so they can sit anywhere
+       (open plans, doorways). Each is { id, type, name, kind, w, d, h, x, y, rot }:
+       size in inches, center in percent of the image, rot in degrees clockwise. */
+    function pieceOK(pc) { return pc && state.scale; }
+    // Center in canvas px, size in canvas px, and k: canvas px per inch
+    function piecePx(pc) {
+      var f = state.scale.ftPerPx, k = 1 / 12 / f;
+      return { cx: pc.x / 100 * state.W, cy: pc.y / 100 * state.H, w: pc.w * k, d: pc.d * k, k: k };
+    }
+    // Drawing order: chairs first, so a table covers the part of a chair pushed in under it,
+    // the way it looks from above. Everything else keeps the order it was added in.
+    function drawOrder() {
+      var chairs = [], rest = [];
+      state.pieces.forEach(function (pc, k) { (pc.role === 'chair' ? chairs : rest).push(k); });
+      return chairs.concat(rest);
+    }
+    function hitPiece(p) {
+      if (!state.scale) return -1;
+      var order = drawOrder();
+      for (var n = order.length - 1; n >= 0; n--) {   // topmost first
+        var k = order[n], q = piecePx(state.pieces[k]);
+        if (FURNITURE.contains(p, q.cx, q.cy, state.pieces[k], q.k)) return k;
+      }
+      return -1;
+    }
+    function pieceSize(pc) {
+      if (pc.shape === 'round') return Math.round(pc.w) === Math.round(pc.d) ? FURNITURE.fmtIn(pc.w) + ' round' : FURNITURE.fmtIn(pc.w) + ' x ' + FURNITURE.fmtIn(pc.d) + ' oval';
+      return FURNITURE.fmtIn(pc.w) + ' x ' + FURNITURE.fmtIn(pc.d);
+    }
+    // A piece in feet, the way the engine's spacing, rug and door checks take it
+    function pieceFt(pc) {
+      var f = state.scale.ftPerPx, cx = pc.x / 100 * state.W * f, cy = pc.y / 100 * state.H * f;
+      return { id: pc.id, role: pc.role || 'other', group: pc.group || null, shape: pc.shape, flip: pc.flip, arm: pc.arm,
+               w: pc.w, d: pc.d, rot: pc.rot, cx: cx, cy: cy, poly: FURNITURE.shapeAt(pc, cx, cy, 1 / 12) };
+    }
+    function piecesFt() { return state.scale ? state.pieces.map(pieceFt) : []; }
+    function wallsFt() { return state.rooms.filter(function (r) { return r.ftShape; }).map(function (r) { return r.ftShape; }); }
+    // The pieces standing in a room (their middle inside its outline), in feet
+    function groupFor(r) {
+      if (!state.scale || !r) return [];
+      return state.pieces.filter(function (pc) { return pieceRoom(pc) === r; }).map(pieceFt);
+    }
+    // Pieces that run into a wall or into each other (see SPACE.conflicts in plan-engine.js).
+    // Walls come from the plan's wall lines, so this needs the wall map from the analysis step.
+    function wallTestFt() {
+      if (!state.scale || !state.walls || !state.walls.map) return null;
+      var f = state.scale.ftPerPx;
+      return function (p) { return PLAN.wallAt(state.walls, p.x / f, p.y / f, state.W); };
+    }
+    function conflicts() { return state.scale && state.pieces.length ? SPACE.conflicts(piecesFt(), wallTestFt()) : []; }
+    function conflictText(c, who) {
+      var other = who === c.a ? c.b : c.a;
+      if (c.type === 'wall') return 'runs ' + c.inch + '" into a wall';
+      return 'overlaps the ' + nameOf(other).toLowerCase() + ' by ' + c.inch + '"';
+    }
+    // Every spacing line on the plan (see SPACE in plan-engine.js)
+    function spacing() { return state.scale && state.pieces.length ? SPACE.check(piecesFt(), wallsFt()) : []; }
+    // Smallest room whose outline holds the piece's center, for the PDF list
+    function pieceRoom(pc) {
+      var p = { x: pc.x / 100 * state.W, y: pc.y / 100 * state.H }, best = null, bestA = Infinity;
+      state.rooms.forEach(function (r) {
+        if (!PLAN.pointInPoly(p, ptsPx(r))) return;
+        var b = px(r), a = b.w * b.h;
+        if (a < bestA) { bestA = a; best = r; }
+      });
+      return best;
+    }
+
+    function drawPieces(ctx, forExport) {
+      var ratio = displayRatio(), bad = {};
+      conflicts().forEach(function (c) { bad[c.a] = 1; if (c.type === 'overlap') bad[c.b] = 1; });
+      drawOrder().forEach(function (k) {
+        var pc = state.pieces[k], q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && k === state.pieceSel;
+        var loc = FURNITURE.outline(pc).map(function (p) { return { x: p.x * q.k, y: p.y * q.k }; });
+        ctx.save();
+        ctx.translate(q.cx, q.cy);
+        ctx.rotate(pc.rot * Math.PI / 180);
+        ctx.shadowColor = 'rgba(67,62,60,0.22)'; ctx.shadowBlur = 4 * ratio; ctx.shadowOffsetY = 1 * ratio;
+        ctx.fillStyle = bad[k] ? '#f6e6e9' : '#f5f0e8';
+        tracePath(ctx, loc); ctx.fill();
+        ctx.shadowColor = 'transparent';
+        // The back of seating and the headboard of a bed, so you can tell which way it faces
+        if (pc.kind === 'seat' || pc.kind === 'bed') {
+          ctx.save();
+          tracePath(ctx, loc); ctx.clip();
+          var band = Math.min(q.d * (pc.kind === 'bed' ? 0.08 : 0.24), 8 * q.k);
+          ctx.fillStyle = '#d0c9bc';
+          ctx.fillRect(-q.w / 2, -q.d / 2, q.w, band);
+          if (pc.shape === 'L') ctx.fillRect(pc.flip ? q.w / 2 - band : -q.w / 2, -q.d / 2, band, q.d);   // back of the return
+          ctx.restore();
+          if (pc.kind === 'bed') { // two pillows
+            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#d0c9bc'; ctx.lineWidth = 1 * ratio;
+            var pw = q.w * 0.4, ph = q.d * 0.12, py = -q.d / 2 + band + q.d * 0.03;
+            [-q.w / 4, q.w / 4].forEach(function (x) { roundRect(ctx, x - pw / 2, py, pw, ph, ph / 3); ctx.fill(); ctx.stroke(); });
+          }
+        }
+        tracePath(ctx, loc);
+        ctx.lineJoin = 'round';
+        // A piece in a wall or on another piece gets a burgundy outline (green while selected, burgundy dashes over it)
+        ctx.lineWidth = (sel || bad[k] ? 3 : 1.6) * ratio; ctx.strokeStyle = sel ? '#7f9433' : bad[k] ? '#582b36' : '#433E3C'; ctx.stroke();
+        if (sel && bad[k]) { ctx.setLineDash([6 * ratio, 5 * ratio]); ctx.strokeStyle = '#582b36'; ctx.stroke(); ctx.setLineDash([]); }
+        // Name and size, kept upright. A sectional's label sits on its long back run.
+        var lx = 0, ly = pc.kind === 'bed' ? q.d * 0.12 : 0, room = q.w - 6 * ratio, depth = q.d;
+        if (pc.shape === 'L') { var arm = Math.min(pc.arm || 38, pc.w / 2, pc.d / 2) * q.k; ly = -q.d / 2 + arm / 2; depth = arm; }
+        if (pc.shape === 'round') room = q.w * 0.8;
+        var turned = pc.rot % 360 > 90 && pc.rot % 360 <= 270;
+        ctx.translate(lx, ly);
+        if (turned) ctx.rotate(Math.PI);
+        var fs = 10.5 * ratio, size = pieceSize(pc);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
+        var nw = ctx.measureText(pc.name).width;
+        ctx.font = '500 ' + (fs * 0.9) + 'px "DM Sans", sans-serif';
+        var sw = ctx.measureText(size).width;
+        var twoLines = depth > fs * 2.6;
+        if (nw <= room || sel) {
+          ctx.fillStyle = '#433E3C';
+          ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
+          ctx.fillText(pc.name, 0, -(twoLines && sw <= room ? fs * 0.55 : 0));
+          if (twoLines && sw <= room) {
+            ctx.fillStyle = '#6b6560'; ctx.font = '500 ' + (fs * 0.9) + 'px "DM Sans", sans-serif';
+            ctx.fillText(size, 0, fs * 0.6);
+          }
+        }
+        ctx.restore();
+      });
+    }
+
+    // Where a new piece lands: the open spot nearest the middle of the room,
+    // clear of the other pieces by a couple of inches and inside the room's outline.
+    // Falls back to the middle of the room when nothing is clear.
+    function openSpot(spec, r) {
+      var f = state.scale.ftPerPx, w = spec.w / 12 / f, d = spec.d / 12 / f, gap = 2 / 12 / f;
+      var b = r ? px(r) : { x: 0, y: 0, w: state.W, h: state.H }, poly = r ? ptsPx(r) : null;
+      var mid = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      var boxes = state.pieces.map(function (pc) {
+        var q = piecePx(pc), bb = FURNITURE.bounds(pc, q.cx, q.cy, q.k);
+        return { x0: bb.x, x1: bb.x + bb.w, y0: bb.y, y1: bb.y + bb.h };
+      });
+      var step = Math.max(3 / 12 / f, Math.min(b.w, b.h) / 30), spots = [];
+      for (var x = b.x + w / 2; x <= b.x + b.w - w / 2 + 0.01; x += step)
+        for (var y = b.y + d / 2; y <= b.y + b.h - d / 2 + 0.01; y += step) spots.push({ x: x, y: y });
+      spots.sort(function (p, q) { return Math.hypot(p.x - mid.x, p.y - mid.y) - Math.hypot(q.x - mid.x, q.y - mid.y); });
+      for (var i = 0; i < spots.length; i++) {
+        var c = spots[i], x0 = c.x - w / 2, x1 = c.x + w / 2, y0 = c.y - d / 2, y1 = c.y + d / 2;
+        if (poly && ![[x0, y0], [x1, y0], [x1, y1], [x0, y1]].every(function (k) { return PLAN.pointInPoly({ x: k[0], y: k[1] }, poly); })) continue;
+        var clear = boxes.every(function (o) { return x1 + gap <= o.x0 || x0 - gap >= o.x1 || y1 + gap <= o.y0 || y0 - gap >= o.y1; });
+        if (clear) return { x: c.x / state.W * 100, y: c.y / state.H * 100 };
+      }
+      return { x: mid.x / state.W * 100, y: mid.y / state.H * 100 };
+    }
+    function makePiece(spec, x, y, rot, group) {
+      return { id: state.nextId++, type: spec.id || 'custom', name: spec.name, kind: spec.kind || 'other', role: spec.role || 'other',
+               shape: spec.shape || 'rect', arm: spec.arm || null, flip: false, group: group || null,
+               w: spec.w, d: spec.d, h: spec.h || null, x: x, y: y, rot: rot || 0 };
+    }
+    // A dining table brings its chairs: they land around it, pushed in, and move and turn with it
+    function addPiece(spec) {
+      if (!state.scale) return;
+      pushUndo();
+      var seats = FURNITURE.chairLayout(spec), chair = FURNITURE.get('chair');
+      var room = { w: spec.w, d: spec.d };
+      seats.forEach(function (c) {
+        var bb = PLAN.bounds(GEO.place(FURNITURE.outline(chair), c.x, c.y, c.rot, 1));
+        room.w = Math.max(room.w, 2 * Math.max(Math.abs(bb.x), Math.abs(bb.x + bb.w)));
+        room.d = Math.max(room.d, 2 * Math.max(Math.abs(bb.y), Math.abs(bb.y + bb.h)));
+      });
+      var at = openSpot(room, state.rooms[state.selected]);
+      var table = makePiece(spec, at.x, at.y, 0);
+      state.pieces.push(table);
+      var k = 1 / 12 / state.scale.ftPerPx;
+      seats.forEach(function (c) {
+        state.pieces.push(makePiece(chair, at.x + c.x * k / state.W * 100, at.y + c.y * k / state.H * 100, c.rot, table.id));
+      });
+      state.pieceSel = state.pieces.indexOf(table);
+      state.doorSel = -1;
+      renderPieceBar(); renderSpacing(); draw();
+    }
+    // The chairs that came with a table
+    function chairsOf(pc) { return pc && pc.role === 'dining' ? state.pieces.filter(function (o) { return o.group === pc.id; }) : []; }
+    function addCustom() {
+      var nameEl = $('customName'), wEl = $('customW'), dEl = $('customD'), round = $('customShape').value === 'round';
+      var w = FURNITURE.parseInches(wEl.value), d = FURNITURE.parseInches(dEl.value), ok = true;
+      if (round && !dEl.value.trim()) d = w;   // round: the width is the diameter unless a depth makes it an oval
+      [[wEl, w], [dEl, d]].forEach(function (pair) {
+        var bad = !pair[1] || pair[1] < 4 || pair[1] > 240;
+        pair[0].classList.toggle('bad', bad); if (bad) ok = false;
+      });
+      if (!ok) return;
+      addPiece({ name: (nameEl.value.trim() || 'My piece').slice(0, 30), w: w, d: d, kind: 'other', role: 'other', shape: round ? 'round' : 'rect' });
+      nameEl.value = ''; wEl.value = ''; dEl.value = '';
+    }
+    // Removing a table takes its chairs with it
+    function removePiece() {
+      var pc = state.pieces[state.pieceSel];
+      if (!pc) return;
+      pushUndo();
+      var gone = [pc].concat(chairsOf(pc));
+      state.pieces = state.pieces.filter(function (o) { return gone.indexOf(o) < 0; });
+      state.pieceSel = -1;
+      renderPieceBar(); renderSpacing(); draw();
+    }
+    // Turning a table turns its chairs around it too
+    function turnPiece(deg) {
+      var pc = state.pieces[state.pieceSel];
+      if (!pc) return;
+      pushUndo();
+      pc.rot = ((pc.rot + deg) % 360 + 360) % 360;
+      var cx = pc.x / 100 * state.W, cy = pc.y / 100 * state.H;
+      chairsOf(pc).forEach(function (c) {
+        var p = GEO.place([{ x: c.x / 100 * state.W - cx, y: c.y / 100 * state.H - cy }], cx, cy, deg, 1)[0];
+        c.x = p.x / state.W * 100; c.y = p.y / state.H * 100;
+        c.rot = ((c.rot + deg) % 360 + 360) % 360;
+      });
+      renderPieceBar(); renderSpacing(); draw();
+    }
+    function mirrorPiece() {
+      var pc = state.pieces[state.pieceSel];
+      if (!pc || pc.shape !== 'L') return;
+      pushUndo();
+      pc.flip = !pc.flip;
+      renderPieceBar(); renderSpacing(); draw();
+    }
+
+    /* ---------- Catalog (Furnish, Add tab) ---------- */
+    var CATS = FURNITURE.CATALOG.map(function (g) { return g.group; }).concat(['Your own']);
+    // The catalog category that suits a room, from its name
+    function catFor(r) {
+      if (!r) return null;
+      if (/office|study/i.test(r.name)) return 'Office';
+      var t = RUG.roomType(r.name);
+      return t === 'bedroom' ? 'Bedroom' : t === 'dining' ? 'Dining' : t === 'living' ? 'Living' : null;
+    }
+    // A small top-down drawing of a catalog piece (with its chairs), as SVG
+    function pieceIcon(it) {
+      var parts = [{ spec: it, x: 0, y: 0, rot: 0 }], chair = FURNITURE.get('chair'), all = [];
+      FURNITURE.chairLayout(it).forEach(function (c) { parts.push({ spec: chair, x: c.x, y: c.y, rot: c.rot }); });
+      parts.forEach(function (p) { p.pts = GEO.place(FURNITURE.outline(p.spec), p.x, p.y, p.rot, 1); all = all.concat(p.pts); });
+      var b = PLAN.bounds(all), pad = Math.max(b.w, b.h) * 0.06, sw = (Math.max(b.w, b.h) / 55).toFixed(2);
+      function poly(pts, fill, stroke) {
+        return '<polygon points="' + pts.map(function (q) { return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ') + '" fill="' + fill + '"' +
+          (stroke ? ' stroke="#433E3C" stroke-width="' + sw + '" stroke-linejoin="round"' : '') + '/>';
+      }
+      var out = '<svg viewBox="' + (b.x - pad).toFixed(1) + ' ' + (b.y - pad).toFixed(1) + ' ' + (b.w + 2 * pad).toFixed(1) + ' ' + (b.h + 2 * pad).toFixed(1) + '" aria-hidden="true">';
+      parts.slice(1).concat(parts.slice(0, 1)).forEach(function (p) {   // chairs first, the table on top
+        var sp = p.spec;
+        out += poly(p.pts, '#f5f0e8', false);
+        if (sp.kind === 'seat' || sp.kind === 'bed') {
+          var band = Math.min(sp.d * (sp.kind === 'bed' ? 0.08 : 0.24), 8), w = sp.w, d = sp.d;
+          out += poly(GEO.place([{ x: -w / 2, y: -d / 2 }, { x: w / 2, y: -d / 2 }, { x: w / 2, y: -d / 2 + band }, { x: -w / 2, y: -d / 2 + band }], p.x, p.y, p.rot, 1), '#d0c9bc', false);
+          if (sp.shape === 'L') out += poly(GEO.place([{ x: -w / 2, y: -d / 2 }, { x: -w / 2 + band, y: -d / 2 }, { x: -w / 2 + band, y: d / 2 }, { x: -w / 2, y: d / 2 }], p.x, p.y, p.rot, 1), '#d0c9bc', false);
+        }
+        out += poly(p.pts, 'none', true);
+      });
+      return out + '</svg>';
+    }
+    function renderCatalog() {
+      var cat = CATS.indexOf(state.cat) > -1 ? state.cat : 'Living';
+      $('catTabs').innerHTML = CATS.map(function (c) { return '<button class="cat' + (c === cat ? ' on' : '') + '" data-cat="' + c + '">' + c + '</button>'; }).join('');
+      var g = FURNITURE.CATALOG.filter(function (x) { return x.group === cat; })[0];
+      $('pieceChips').classList.toggle('hidden', !g);
+      $('ownForm').classList.toggle('hidden', !!g);
+      if (g) $('pieceChips').innerHTML = g.items.map(function (it) {
+        var n = FURNITURE.chairLayout(it).length;
+        return '<button class="piece-card" data-piece="' + it.id + '">' + pieceIcon(it) + '<b>' + it.name + '</b><small>' + pieceSize(it) + (n ? ', ' + n + ' chairs' : '') + '</small></button>';
+      }).join('');
+    }
+
+    /* ---------- The Furnish panel: tabs, or the selected piece or door ---------- */
+    function showPane() {
+      var detail = state.pieceSel > -1 || state.doorSel > -1;
+      ['add', 'rugs', 'doors', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', detail || state.ptab !== t); });
+      $('pane-detail').classList.toggle('hidden', !detail);
+      var tabs = document.querySelectorAll('.ptab');
+      for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('on', !detail && tabs[i].getAttribute('data-ptab') === state.ptab);
+    }
+    function setTab(t) {
+      state.ptab = t; state.pieceSel = -1; state.doorSel = -1;
+      if (state.tool === 'door') endDoorTool();
+      renderPieceBar(); renderDoorBar();
+      if (t === 'rugs') renderFurnish();
+      if (t === 'checks') renderSpacing();
+      if (t === 'doors') renderDoorList();
+      draw();
+    }
+    function deselect() {
+      state.pieceSel = -1; state.doorSel = -1;
+      renderPieceBar(); renderDoorBar(); draw();
+    }
+
+    // Every side of one piece, plus the room checks other pieces make against it
+    var SIDE_NAME = { front: 'Front', back: 'Back', left: 'Left side', right: 'Right side' };
+    function pieceChecks(k) {
+      var rows = [], ORDER = { front: 0, back: 1, left: 2, right: 3 };
+      spacing().filter(function (l) { return (l.piece === k && l.show !== false) || (l.hit.type === 'piece' && l.hit.i === k && l.rule !== 'walk'); })
+        .sort(function (p, q) { return (p.piece === k ? 0 : 1) - (q.piece === k ? 0 : 1) || ORDER[p.side] - ORDER[q.side]; })
+        .forEach(function (l) {
+          var label = l.piece === k
+            ? SIDE_NAME[l.side] + ' to ' + (l.hit.type === 'piece' ? 'the ' + nameOf(l.hit.i).toLowerCase() : 'the wall')
+            : 'From the ' + nameOf(l.piece).toLowerCase();
+          rows.push('<div class="space-row"><span class="space-label">' + esc(label) + '</span><span class="space-val">' + inchText(l.inch) +
+            ' <span class="badge ' + BADGE[l.status] + '">' + spaceWord(l.rule === 'walk' ? 'walk' : l.rule, l.status, l.inch) + '</span></span></div>');
+        });
+      return rows.join('');
+    }
+    // Details of the selected piece, in the panel
+    function renderPieceBar() {
+      var bar = $('pieceBar'), pc = state.pieces[state.pieceSel], r = state.rooms[state.selected];
+      $('pieceSub').innerHTML = !state.scale ? 'Furniture is drawn to scale, so this plan needs a scale first. Use <b>Set the scale</b> under the plan.'
+        : r ? 'Tap a piece to add it to <b>' + esc(r.name) + '</b> at its real size.'
+        : 'Pick a room, then tap a piece to add it at its real size.';
+      if (!pc) { bar.innerHTML = ''; showPane(); placeFloat(); return; }
+      var k = state.pieceSel, nCh = chairsOf(pc).length, rm = pieceRoom(pc);
+      var probs = conflicts().filter(function (c) { return c.a === k || c.b === k; }).map(function (c) { return conflictText(c, k); });
+      var checks = pieceChecks(k), round = pc.shape === 'round' && Math.round(pc.w) === Math.round(pc.d);
+      bar.innerHTML = '<input class="detail-name" id="pcName" value="' + esc(pc.name) + '" maxlength="30" aria-label="Piece name">' +
+        '<p class="detail-meta">' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (pc.rot ? ', turned ' + pc.rot + '&deg;' : '') +
+          (rm ? ', in ' + esc(rm.name) : '') + '. Drag it on the plan to move it' + (nCh ? '; the chairs come along.' : '.') +
+          (probs.length ? ' <span class="warn-text">It ' + esc(probs.join(' and ')) + '.</span>' : '') + '</p>' +
+        '<div class="field-row">' +
+          '<label class="field"><span>' + (round ? 'Diameter' : 'Width') + ', inches</span><input id="pcW" value="' + Math.round(pc.w) + '" inputmode="decimal" autocomplete="off"></label>' +
+          (round ? '<label class="field"><span>Depth, inches</span><input id="pcD" value="' + Math.round(pc.d) + '" inputmode="decimal" autocomplete="off" title="A different depth makes it an oval"></label>'
+                 : '<label class="field"><span>Depth, inches</span><input id="pcD" value="' + Math.round(pc.d) + '" inputmode="decimal" autocomplete="off"></label>') +
+        '</div>' +
+        '<p class="section-label">Spacing</p>' +
+        (checks ? '<div class="space-list">' + checks + '</div>' : '<p class="empty-note">Open floor on every side, at least 8 feet.</p>') +
+        '<div class="btn-row" style="margin-top:14px">' +
+          '<button class="btn-secondary btn-sm" data-pact="dup">Duplicate</button>' +
+          '<button class="btn-secondary btn-sm" data-pact="remove">' + (nCh ? 'Remove with chairs' : 'Remove') + '</button>' +
+        '</div>';
+      showPane(); placeFloat();
+    }
+    // Size or name typed into the details
+    function onDetailChange(e) {
+      var pc = state.pieces[state.pieceSel], id = e.target.id;
+      if (!pc) return;
+      if (id === 'pcName') {
+        var nm = e.target.value.trim().slice(0, 30);
+        if (nm && nm !== pc.name) { pushUndo(); pc.name = nm; }
+      } else if (id === 'pcW' || id === 'pcD') {
+        var v = FURNITURE.parseInches(e.target.value);
+        if (!v || v < 4 || v > 360) { e.target.classList.add('bad'); return; }
+        pushUndo();
+        if (id === 'pcW' && pc.shape === 'round' && Math.round(pc.w) === Math.round(pc.d)) { pc.w = v; pc.d = v; }   // a circle stays a circle
+        else if (id === 'pcW') pc.w = v; else pc.d = v;
+        if (pc.role === 'dining') relayoutChairs(pc);
+      } else return;
+      renderPieceBar(); renderSpacing(); draw();
+    }
+    // A resized table sets its chairs out again around its new edge
+    function relayoutChairs(t) {
+      var spec = FURNITURE.get(t.type);
+      if (!spec || !spec.chairs) return;
+      state.pieces = state.pieces.filter(function (o) { return o.group !== t.id; });
+      var k = 1 / 12 / state.scale.ftPerPx, cx = t.x / 100 * state.W, cy = t.y / 100 * state.H, chair = FURNITURE.get('chair');
+      FURNITURE.chairLayout({ w: t.w, d: t.d, shape: t.shape, chairs: spec.chairs }).forEach(function (c) {
+        var p = GEO.place([{ x: c.x * k, y: c.y * k }], cx, cy, t.rot, 1)[0];
+        state.pieces.push(makePiece(chair, p.x / state.W * 100, p.y / state.H * 100, (c.rot + t.rot) % 360, t.id));
+      });
+      state.pieceSel = state.pieces.indexOf(t);
+    }
+    // A copy 12" down and to the right; a table brings copies of its chairs
+    function duplicatePiece() {
+      var pc = state.pieces[state.pieceSel];
+      if (!pc) return;
+      pushUndo();
+      var off = 1 / state.scale.ftPerPx, dx = off / state.W * 100, dy = off / state.H * 100, kids = chairsOf(pc);
+      var copy = JSON.parse(JSON.stringify(pc));
+      copy.id = state.nextId++; copy.x += dx; copy.y += dy;
+      state.pieces.push(copy);
+      kids.forEach(function (c) {
+        var cc = JSON.parse(JSON.stringify(c));
+        cc.id = state.nextId++; cc.group = copy.id; cc.x += dx; cc.y += dy;
+        state.pieces.push(cc);
+      });
+      state.pieceSel = state.pieces.indexOf(copy);
+      renderPieceBar(); renderSpacing(); draw();
+    }
+
+    /* ---------- The toolbar that floats over the selected piece or door ---------- */
+    var ICON = {
+      left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v6h6"/><path d="M5 10a8 8 0 1 1 1.7 7.4"/></svg>',
+      right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4v6h-6"/><path d="M19 10a8 8 0 1 0-1.7 7.4"/></svg>',
+      copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>'
+    };
+    function placeFloat() {
+      var fb = $('floatBar'), c = $('planCanvas');
+      if (!fb) return;
+      var pc = state.pieces[state.pieceSel], dr = state.doors[state.doorSel];
+      if (state.mode !== 'furnish' || !state.scale || (!pc && !dr) || state.tool || (state.drag && state.drag.moved)) { fb.classList.add('hidden'); return; }
+      var bb, key;
+      if (pc) { var q = piecePx(pc); bb = FURNITURE.bounds(pc, q.cx, q.cy, q.k); key = 'p' + pc.id + pc.shape; }
+      else { bb = PLAN.bounds(doorGeomPx(dr).sector); key = 'd' + dr.id; }
+      if (fb.getAttribute('data-key') !== key) {
+        fb.innerHTML = pc
+          ? '<button data-fact="rotL" title="Turn left 15&deg;" aria-label="Turn left 15 degrees">' + ICON.left + '</button>' +
+            '<button data-fact="rotR" title="Turn right 15&deg;" aria-label="Turn right 15 degrees">' + ICON.right + '</button>' +
+            '<button data-fact="turn90" title="Turn 90&deg;">90&deg;</button>' +
+            (pc.shape === 'L' ? '<button data-fact="mirror" title="Put the chaise on the other side">Flip</button>' : '') +
+            '<button data-fact="dup" title="Duplicate" aria-label="Duplicate">' + ICON.copy + '</button>' +
+            '<button data-fact="remove" class="danger" title="Remove" aria-label="Remove">' + ICON.trash + '</button>'
+          : '<button data-fact="swing">Flip swing</button><button data-fact="hinge">Flip hinge</button>' +
+            '<button data-fact="dremove" class="danger" title="Remove door" aria-label="Remove door">' + ICON.trash + '</button>';
+        fb.setAttribute('data-key', key);
+      }
+      fb.classList.remove('hidden');
+      var sx = c.clientWidth / state.W, cr = c.getBoundingClientRect(), sr = $('stage').getBoundingClientRect();
+      var ox = cr.left - sr.left, oy = cr.top - sr.top;
+      var left = ox + (bb.x + bb.w / 2) * sx - fb.offsetWidth / 2, top = oy + bb.y * sx - fb.offsetHeight - 10;
+      if (top < 4) top = oy + (bb.y + bb.h) * sx + 10;
+      fb.style.left = clamp(left, 4, sr.width - fb.offsetWidth - 4) + 'px';
+      fb.style.top = clamp(top, 4, sr.height - fb.offsetHeight - 4) + 'px';
+    }
+    function onFloatClick(e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      var a = b.getAttribute('data-fact'), d = state.doors[state.doorSel];
+      if (a === 'rotL') turnPiece(-15);
+      else if (a === 'rotR') turnPiece(15);
+      else if (a === 'turn90') turnPiece(90);
+      else if (a === 'mirror') mirrorPiece();
+      else if (a === 'dup') duplicatePiece();
+      else if (a === 'remove') removePiece();
+      else if (a === 'dremove') removeDoor();
+      else if (d && (a === 'swing' || a === 'hinge')) {
+        pushUndo();
+        if (a === 'swing') { d.out = !d.out; d.nx = -d.nx; d.ny = -d.ny; } else d.hinge = -d.hinge;
+        renderDoorBar(); renderSpacing(); draw();
+      }
+    }
+
+    /* ---------- Undo ----------
+       A snapshot of everything the person can change, taken just before each change. */
+    var UNDO = [];
+    function snap() { return JSON.stringify({ rooms: state.rooms, pieces: state.pieces, doors: state.doors, scale: state.scale }); }
+    function pushUndo(s) {
+      UNDO.push(s || snap());
+      if (UNDO.length > 60) UNDO.shift();
+      if ($('undoBtn')) $('undoBtn').disabled = false;
+    }
+    function undo() {
+      var s = UNDO.pop();
+      if ($('undoBtn')) $('undoBtn').disabled = !UNDO.length;
+      if (!s) return;
+      var o = JSON.parse(s);
+      state.rooms = o.rooms; state.pieces = o.pieces; state.doors = o.doors; state.scale = o.scale;
+      state.pieceSel = -1; state.doorSel = -1; state.ptSel = -1; state.rugCheck = null; state.drag = null;
+      if (state.selected >= state.rooms.length) state.selected = -1;
+      renderAll(); renderPieceBar(); renderDoorBar();
+    }
+
+    function onPieceClick(e) {
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      var id = btn.getAttribute('data-piece'), act = btn.getAttribute('data-pact'), cat = btn.getAttribute('data-cat'), tab = btn.getAttribute('data-ptab');
+      if (tab) { setTab(tab); return; }
+      if (cat) { state.cat = cat; renderCatalog(); return; }
+      if (btn.getAttribute('data-door') != null) { state.doorSel = +btn.getAttribute('data-door'); state.pieceSel = -1; renderPieceBar(); renderDoorBar(); draw(); return; }
+      if (act === 'done') { deselect(); return; }
+      if (act === 'dup') { duplicatePiece(); return; }
+      if (id) addPiece(FURNITURE.get(id));
+      else if (act === 'turn15') turnPiece(15);
+      else if (act === 'turn90') turnPiece(90);
+      else if (act === 'mirror') mirrorPiece();
+      else if (act === 'remove') removePiece();
+    }
+
+    /* ---------- Spacing list (Furnish mode) ---------- */
+    // One readable row per check: { label, value, status (ok, tight, close), word }
+    function nameOf(i) { var pc = state.pieces[i]; return pc ? pc.name : 'piece'; }
+    function spaceWord(type, status, inch) {
+      if (status === 'ok') return 'Comfortable';
+      if (type === 'coffee') return status === 'close' ? 'Too close' : inch > 20 ? 'A bit far' : 'Tight';
+      return status === 'close' ? 'Too narrow' : 'Tight';
+    }
+    function inchText(n) { return n < 36 ? n + '"' : fmtFtIn(n / 12); }
+    function spaceRows(room) {
+      if (!state.scale) return [];
+      var inRoom = function (i) { return !room || pieceRoom(state.pieces[i]) === room; };
+      var rows = SPACE.report(spacing()).filter(function (r) { return inRoom(r.a); }).map(function (r) {
+        var label, value;
+        if (r.type === 'coffee') { label = nameOf(r.a) + ' to ' + nameOf(r.b).toLowerCase(); value = inchText(r.inch); }
+        else if (r.type === 'bed') { label = 'Beside the ' + nameOf(r.a).toLowerCase(); value = r.inches.map(inchText).join(' and '); }
+        else if (r.type === 'dining') { label = 'Around the ' + nameOf(r.a).toLowerCase(); value = inchText(r.inch) + ' at the tightest side'; }
+        else { label = 'Walkway between the ' + nameOf(r.a).toLowerCase() + ' and ' + (r.b < 0 ? 'the wall' : 'the ' + nameOf(r.b).toLowerCase()); value = inchText(r.inch); }
+        return { label: label, value: value, status: r.status, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0])) };
+      });
+      var pcs = piecesFt(), probs = [];
+      conflicts().forEach(function (c) {
+        if (!inRoom(c.a) && !(c.type === 'overlap' && inRoom(c.b))) return;
+        probs.push(c.type === 'wall'
+          ? { label: 'The ' + nameOf(c.a).toLowerCase() + ' runs into a wall', value: c.inch + '"', status: 'close', word: 'Into the wall' }
+          : { label: 'The ' + nameOf(c.a).toLowerCase() + ' overlaps the ' + nameOf(c.b).toLowerCase(), value: c.inch + '"', status: 'close', word: 'Overlapping' });
+      });
+      rows = probs.concat(rows);
+      state.doors.forEach(function (d, k) {
+        if (room && d.room !== room.id) return;
+        var chk = DOOR.check(doorFt(d), pcs), hit = chk.hits.length > 0;
+        rows.push({ label: 'Door ' + (k + 1) + ' swing', status: hit ? 'close' : 'ok', word: hit ? 'Door hits' : 'Door clears',
+                    value: hit ? 'Hits the ' + listNames(chk.hits) : chk.nearest && chk.nearest.gap < 2 ? 'Clears by ' + fmtGap(chk.nearest.gap) : 'Clears' });
+      });
+      return rows;
+    }
+    function listNames(idx) {
+      var names = [];
+      idx.forEach(function (i) { var n = nameOf(i).toLowerCase(); if (names.indexOf(n) < 0) names.push(n); });
+      return names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+    }
+    var BADGE = { ok: 'fits', tight: 'tight', close: 'big' };
+    function renderSpacing() {
+      var el = $('spaceList');
+      if (!el) return;
+      var r = state.rooms[state.selected], rows = spaceRows(r);
+      var issues = spaceRows(null).filter(function (rw) { return rw.status !== 'ok'; }).length;
+      $('checkCount').textContent = issues; $('checkCount').classList.toggle('hidden', !issues);
+      $('spaceSub').innerHTML = !state.scale ? 'Spacing is measured to scale, so this plan needs a scale first.'
+        : 'Measured square off each piece, so turned pieces are checked too' + (r ? ', in <b>' + esc(r.name) + '</b>.' : '.') +
+          ' Walkways want 36", the space beside a bed 24", around a dining table 36", and 16" to 18" from sofa to coffee table.';
+      if (!rows.length) { el.innerHTML = '<p class="rug-empty">' + (state.pieces.length || state.doors.length ? 'Nothing to check here yet. Place seating with a coffee table, a bed, a dining table, or a door.' : 'Place a few pieces and the spacing between them shows up here.') + '</p>'; return; }
+      el.innerHTML = rows.map(function (rw) {
+        return '<div class="space-row"><span class="space-label">' + esc(rw.label) + '</span>' +
+          '<span class="space-val">' + esc(rw.value) + ' <span class="badge ' + BADGE[rw.status] + '">' + rw.word + '</span></span></div>';
+      }).join('');
+    }
+
+    /* ---------- Doors (Furnish mode) ----------
+       A door sits on a room's outline: { id, x, y (middle of the opening, percent of
+       the image), ux, uy (along the wall), nx, ny (the way it swings, on-screen
+       direction), out (true when it swings away from the room it was marked on),
+       w (inches), hinge (+1 or -1), room (that room's id) }. */
+    function doorFt(d) {
+      var f = state.scale.ftPerPx;
+      return { cx: d.x / 100 * state.W * f, cy: d.y / 100 * state.H * f, ux: d.ux, uy: d.uy, nx: d.nx, ny: d.ny, w: d.w, hinge: d.hinge };
+    }
+    function doorGeomPx(d) {
+      var g = DOOR.geom(doorFt(d)), f = state.scale.ftPerPx;
+      function q(p) { return { x: p.x / f, y: p.y / f }; }
+      return { hinge: q(g.hinge), latch: q(g.latch), open: q(g.open), arc: g.arc.map(q), sector: g.sector.map(q) };
+    }
+    // Nearest point on any room's outline within reach of the tap, with the wall's
+    // direction and the direction into that room
+    function snapToWall(p) {
+      var reach = 28 * displayRatio(), best = null;
+      state.rooms.forEach(function (r) {
+        var list = ptsPx(r);
+        list.forEach(function (a, k) {
+          var b = list[(k + 1) % list.length], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+          if (L < 1) return;
+          var t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / (L * L), 0, 1), q = { x: a.x + t * dx, y: a.y + t * dy };
+          var dist = Math.hypot(p.x - q.x, p.y - q.y);
+          if (dist <= reach && (!best || dist < best.dist)) best = { dist: dist, a: a, L: L, t: t, q: q, room: r, u: { x: dx / L, y: dy / L } };
+        });
+      });
+      if (!best) return null;
+      var n = { x: -best.u.y, y: best.u.x }, step = 3 * displayRatio();
+      if (!PLAN.pointInPoly({ x: best.q.x + n.x * step, y: best.q.y + n.y * step }, ptsPx(best.room))) n = { x: -n.x, y: -n.y };
+      best.n = n;
+      return best;
+    }
+    // Middle of the opening, kept far enough from the ends of the wall for the door to fit
+    function doorSpot(sn, wIn) {
+      var half = wIn / 12 / state.scale.ftPerPx / 2, along = sn.t * sn.L;
+      along = sn.L > half * 2 ? clamp(along, half, sn.L - half) : sn.L / 2;
+      return { x: sn.a.x + sn.u.x * along, y: sn.a.y + sn.u.y * along };
+    }
+    function setDoorOn(d, sn) {
+      var c = doorSpot(sn, d.w), u = sn.u;
+      if (d.ux != null && u.x * d.ux + u.y * d.uy < 0) u = { x: -u.x, y: -u.y };   // keep the hinge on the same end
+      d.x = c.x / state.W * 100; d.y = c.y / state.H * 100;
+      d.ux = u.x; d.uy = u.y;
+      d.nx = d.out ? -sn.n.x : sn.n.x; d.ny = d.out ? -sn.n.y : sn.n.y;
+      d.room = sn.room.id;
+    }
+    function startDoorTool() {
+      if (!state.scale) return;
+      state.tool = 'door';
+      state.pieceSel = -1; state.doorSel = -1;
+      $('doorBtn').textContent = 'Cancel';
+      $('doorTool').classList.add('on');
+      $('doorHint').textContent = '';
+      $('toolMsg').textContent = 'Tap a wall where the door is. Esc cancels.';
+      $('toolMsg').classList.remove('hidden');
+      $('planCanvas').classList.add('editing');
+      renderPieceBar(); renderDoorBar(); draw();
+    }
+    function endDoorTool() {
+      if (state.tool === 'door') state.tool = null;
+      if (!$('doorBtn')) return;
+      $('doorBtn').textContent = 'Mark a door';
+      $('doorTool').classList.remove('on');
+      $('toolMsg').classList.add('hidden');
+      $('doorHint').textContent = '';
+    }
+    function placeDoorAt(p) {
+      var sn = snapToWall(p);
+      if (!sn) { $('toolMsg').textContent = 'Tap right on a wall of a room (the outline drawn on the plan).'; return; }
+      pushUndo();
+      var d = { id: state.nextId++, w: 32, hinge: 1, out: false };
+      setDoorOn(d, sn);
+      state.doors.push(d);
+      state.doorSel = state.doors.length - 1; state.pieceSel = -1;
+      endDoorTool(); renderPieceBar(); renderDoorBar(); renderSpacing(); renderDoorList(); draw();
+    }
+    // The doors marked so far, in the Doors tab
+    function renderDoorList() {
+      var el = $('doorList');
+      if (!el) return;
+      if (!state.doors.length) { el.innerHTML = ''; return; }
+      var pcs = piecesFt();
+      el.innerHTML = '<p class="section-label">On this plan</p><div class="space-list">' + state.doors.map(function (d, k) {
+        var hit = state.scale && DOOR.check(doorFt(d), pcs).hits.length > 0, rm = state.rooms.filter(function (r) { return r.id === d.room; })[0];
+        return '<div class="space-row" style="cursor:pointer" data-door="' + k + '"><span class="space-label">Door ' + (k + 1) + (rm ? ', ' + esc(rm.name) : '') + '</span>' +
+          '<span class="space-val">' + d.w + '" wide <span class="badge ' + (hit ? 'big' : 'ok') + '">' + (hit ? 'Door hits' : 'Door clears') + '</span></span></div>';
+      }).join('') + '</div>';
+    }
+    function moveDoor(d, p) { var sn = snapToWall(p); if (sn) setDoorOn(d, sn); }
+    function hitDoor(p) {
+      if (!state.scale) return -1;
+      for (var k = state.doors.length - 1; k >= 0; k--) {
+        var g = doorGeomPx(state.doors[k]);
+        if (PLAN.pointInPoly(p, g.sector) || GEO.segDist(p, g.hinge, g.latch) <= 10 * displayRatio()) return k;
+      }
+      return -1;
+    }
+    function drawDoors(ctx, forExport) {
+      if (!state.doors.length) return;
+      var ratio = displayRatio(), pcs = piecesFt();
+      state.doors.forEach(function (d, k) {
+        var g = doorGeomPx(d), sel = !forExport && state.mode === 'furnish' && k === state.doorSel;
+        var hit = DOOR.check(doorFt(d), pcs).hits.length > 0, col = hit ? '#582b36' : '#7f9433';
+        ctx.save();
+        tracePath(ctx, g.sector);
+        ctx.fillStyle = hit ? 'rgba(88,43,54,0.16)' : 'rgba(166,190,71,0.16)'; ctx.fill();
+        if (sel) { ctx.lineWidth = 1.5 * ratio; ctx.strokeStyle = col; ctx.stroke(); }
+        ctx.setLineDash([5 * ratio, 4 * ratio]); ctx.lineWidth = 1.4 * ratio; ctx.strokeStyle = col;
+        ctx.beginPath();
+        g.arc.forEach(function (q, i) { if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+        ctx.stroke(); ctx.setLineDash([]);
+        ctx.lineCap = 'round'; ctx.lineWidth = (sel ? 3.5 : 2.5) * ratio;
+        ctx.beginPath(); ctx.moveTo(g.hinge.x, g.hinge.y); ctx.lineTo(g.open.x, g.open.y); ctx.stroke();
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(g.hinge.x, g.hinge.y, (sel ? 4 : 3) * ratio, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      });
+    }
+    function renderDoorBar() {
+      var bar = $('doorBar'), d = state.doors[state.doorSel];
+      if (!bar) return;
+      if (!d || !state.scale) { bar.classList.add('hidden'); bar.innerHTML = ''; showPane(); placeFloat(); return; }
+      var chk = DOOR.check(doorFt(d), piecesFt());
+      var msg = chk.hits.length ? 'It hits the <b>' + esc(listNames(chk.hits)) + '</b> as it opens.'
+        : 'It clears every piece' + (chk.nearest && chk.nearest.gap < 2 ? ' (closest is the ' + esc(nameOf(chk.nearest.i).toLowerCase()) + ', ' + fmtGap(chk.nearest.gap) + ' away)' : '') + '.';
+      bar.classList.remove('hidden');
+      bar.innerHTML = '<p class="detail-name" style="border:none">Door ' + (state.doorSel + 1) + '</p><p class="detail-meta">' + d.w + '" wide. ' + msg + ' Drag it along the walls to move it.</p>' +
+        '<div class="btn-row">' +
+          '<select class="room-select door-w" style="min-width:0" data-dact="width" aria-label="Door width">' + DOOR.WIDTHS.map(function (w) {
+            return '<option value="' + w + '"' + (w === d.w ? ' selected' : '') + '>' + w + '" wide</option>';
+          }).join('') + '</select>' +
+          '<button class="btn-secondary btn-sm" data-dact="swing">Flip swing</button>' +
+          '<button class="btn-secondary btn-sm" data-dact="hinge">Flip hinge</button>' +
+          '<button class="btn-secondary btn-sm" data-dact="remove">Remove</button>' +
+        '</div>';
+      showPane(); placeFloat();
+    }
+    function removeDoor() {
+      if (state.doorSel < 0) return;
+      pushUndo();
+      state.doors.splice(state.doorSel, 1);
+      state.doorSel = -1;
+      renderDoorBar(); renderSpacing(); renderDoorList(); draw();
+    }
+    function onDoorClick(e) {
+      var btn = e.target.closest('button');
+      if (e.target.id === 'doorBtn') { if (state.tool === 'door') endDoorTool(); else startDoorTool(); return; }
+      var d = state.doors[state.doorSel];
+      if (!btn || !d) return;
+      var act = btn.getAttribute('data-dact');
+      if (act === 'remove') { removeDoor(); return; }
+      if (act !== 'swing' && act !== 'hinge') return;
+      pushUndo();
+      if (act === 'swing') { d.out = !d.out; d.nx = -d.nx; d.ny = -d.ny; }
+      else d.hinge = -d.hinge;
+      renderDoorBar(); renderSpacing(); draw();
+    }
+    function onDoorChange(e) {
+      var d = state.doors[state.doorSel];
+      if (!d || e.target.getAttribute('data-dact') !== 'width') return;
+      pushUndo();
+      d.w = +e.target.value;
+      // Keep the wider door on its wall
+      var sn = snapToWall({ x: d.x / 100 * state.W, y: d.y / 100 * state.H });
+      if (sn) setDoorOn(d, sn);
+      renderDoorBar(); renderSpacing(); draw();
+    }
+
+    /* ---------- Furnish panel ---------- */
+    var RUG_ADVICE = {
+      living: 'In a living room, leave 12" to 18" of floor between the rug and the walls.',
+      bedroom: 'Under a bed, the rug should run 18" to 24" past each side. A queen usually takes an 8\' x 10\' and a king a 9\' x 12\', set under the lower two thirds of the bed.',
+      dining: 'Under a dining table, the rug should reach at least 24" past the table on every side so the chairs stay on it when pulled out.',
+      other: 'Leave at least 12" of floor between the rug and the walls.'
+    };
+    var STATUS_TEXT = { fits: 'Fits', tight: 'Tight', big: 'Too big' };
+    var STYLE_ADVICE = {
+      allOn: 'All legs on: the rug holds the whole seating group, with about 6" of rug past the legs.',
+      frontLegs: 'Front legs on: the front legs of the sofa and chairs sit at least 6" onto the rug, and the coffee table sits fully on it.',
+      floating: 'Floating: the rug sits under the coffee table only, and the seating stays off it.',
+      bed: 'Under the bed: the rug runs 18" to 24" past each side and past the foot, under the lower two thirds of the bed so the nightstands stay off it.',
+      dining: 'Under the table: the rug reaches at least 24" past the table on every side so the chairs stay on it when pulled out.'
+    };
+
+    // The rug style picked for a room, if the room's furniture allows it
+    function rugStyle(r, group) {
+      var st = r.rugStyle || 'walls';
+      return RUGSTYLE.available(group || groupFor(r)).indexOf(st) > -1 ? st : 'walls';
+    }
+    // Every size checked against the selected room. Rechecked only when the room's
+    // outline, the scale, the style or the furniture that style looks at changes.
+    function rugCheckFor(r) {
+      var group = groupFor(r), style = rugStyle(r, group);
+      var key = JSON.stringify(r.ftShape) + style + JSON.stringify(RUGSTYLE.relevant(style, group).map(function (p) { return [p.cx, p.cy, p.rot, p.w, p.d, p.flip]; }));
+      if (!state.rugCheck || state.rugCheck.room !== r || state.rugCheck.key !== key) {
+        state.rugCheck = { room: r, key: key, style: style, result: RUGSTYLE.check(r.ftShape, style, group) };
+      }
+      return state.rugCheck.result;
+    }
+    function rugDetail(c) {
+      if (c < 0) return 'Larger than the room';
+      if (RUG.status(c) === 'big') return 'Only ' + fmtGap(c) + ' of floor at the closest wall';
+      return 'Leaves ' + fmtGap(c) + ' at the closest wall';
+    }
+    // What holds a size back for a style (the measurement RUGSTYLE reports as worst)
+    function styleDetail(t) {
+      var v = t.val, g = fmtGap(Math.max(0, v));
+      switch (t.name) {
+        case 'allOn': return v < 0 ? 'Too small to hold every leg' : 'Legs only ' + g + ' from the edge';
+        case 'front': return v < 0 ? "Doesn't reach the front legs" : 'Front legs only ' + g + ' on';
+        case 'coffee': return v < 0 ? 'The coffee table hangs off it' : 'Coffee table only ' + g + ' from the edge';
+        case 'seatOff': return v < 0 ? 'Runs under the seating' : 'Nearly touches the seating';
+        case 'bedSide': return v < 0 ? 'Narrower than the bed' : 'Only ' + g + ' past the sides of the bed';
+        case 'bedFoot': return v < 0 ? "Doesn't reach the foot of the bed" : 'Only ' + g + ' past the foot';
+        case 'bedHead': return 'Runs up under the nightstands';
+        case 'dining': return v < 0 ? 'Smaller than the table' : 'Only ' + g + ' past the table';
+      }
+      return '';
+    }
+    // A size held back by the furniture is usually too small to reach it, not too big
+    function statusWord(it, style) {
+      var w = it.spot && it.spot.worst;
+      if (it.status === 'big' && style !== 'walls' && w && w.name !== 'seatOff' && w.name !== 'bedHead') return 'Too small';
+      return STATUS_TEXT[it.status];
+    }
+    // Card text for one size: the style's limit if it has one, otherwise the walls
+    function sizeDetail(it, style) {
+      var sp = it.spot;
+      if (!sp) return 'Larger than the room';
+      if (style !== 'walls' && sp.worst) return styleDetail(sp.worst);
+      if (style !== 'walls' && sp.clearance < 0) return 'Would run into the walls to reach the furniture';
+      return rugDetail(sp.clearance);
+    }
+
+    function renderFurnish() {
+      if (!$('furnishPanel')) return;
+      renderPieceBar();
+      var r = state.rooms[state.selected];
+      renderRoomPick();
+      var body = $('rugBody');
+      if (!state.scale) {
+        $('rugSub').textContent = 'See which standard rug sizes fit each room, drawn to scale.';
+        body.innerHTML = '<p class="rug-empty">Rugs are drawn to scale, so this plan needs a scale first. Use <b>Set the scale</b> below the plan.</p>';
+        return;
+      }
+      if (!r || !r.ftShape) {
+        $('rugSub').textContent = 'See which standard rug sizes fit each room, drawn to scale.';
+        body.innerHTML = '<p class="rug-empty">Pick a room on the plan or from the list.</p>';
+        return;
+      }
+      var group = groupFor(r), style = rugStyle(r, group), avail = RUGSTYLE.available(group);
+      var res = rugCheckFor(r), type = RUG.roomType(r.name);
+      var bestLabel = res && res.best ? RUG.get(res.best).label : null;
+      $('rugSub').innerHTML = style === 'walls'
+        ? (bestLabel ? 'The largest rug that fits <b>' + esc(r.name) + '</b> comfortably is <b>' + bestLabel + '</b>.'
+                     : 'None of the standard sizes leave 12" of floor in <b>' + esc(r.name) + '</b>.')
+        : (bestLabel ? 'The largest rug that works <b>' + RUGSTYLE.NAMES[style].toLowerCase() + '</b> in <b>' + esc(r.name) + '</b> is <b>' + bestLabel + '</b>.'
+                     : 'None of the standard sizes work <b>' + RUGSTYLE.NAMES[style].toLowerCase() + '</b> with the furniture as it sits in <b>' + esc(r.name) + '</b>.');
+      var styles = avail.length > 1
+        ? '<div class="piece-group style-row"><span class="piece-group-name">Rug style</span>' + avail.map(function (st) {
+            return '<button class="piece-chip' + (st === style ? ' on' : '') + '" data-style="' + st + '">' + RUGSTYLE.NAMES[st] + '</button>';
+          }).join('') + '</div>'
+        : '<p class="rug-empty small">Place seating, a bed, or a dining table in this room to check rug styles like front legs on.</p>';
+      var cards = res.list.map(function (it) {
+        var on = r.rug && r.rug.size === it.size.id;
+        return '<button class="rug-card' + (on ? ' on' : '') + '" data-rug="' + it.size.id + '">' +
+          '<span class="rug-top"><b>' + it.size.label + '</b><span class="badge ' + it.status + '">' + statusWord(it, style) + '</span></span>' +
+          '<span class="rug-detail">' + sizeDetail(it, style) + '</span>' +
+          (it.size.id === res.best ? '<span class="best">Best fit</span>' : '') +
+        '</button>';
+      }).join('');
+      var placed = '';
+      if (rugOK(r)) {
+        var s = RUG.get(r.rug.size);
+        placed = '<div class="rug-placed"><p id="rugPlacedMsg">' + placedMsg(r) + '</p>' +
+          '<div class="btn-row">' +
+            (s.d ? '' : '<button class="btn-secondary btn-sm" data-act="turn">Turn</button>') +
+            '<button class="btn-secondary btn-sm" data-act="center">Center it</button>' +
+            '<button class="btn-secondary btn-sm" data-act="remove">Remove</button>' +
+          '</div></div>';
+      }
+      body.innerHTML = styles + '<p class="rug-advice">' + (style === 'walls' ? RUG_ADVICE[type] : STYLE_ADVICE[style] + ' Rugs still keep 12" of floor at the walls.') +
+        ' Tap a size to lay it on the plan, then drag it into place.</p>' +
+        '<div class="rug-grid">' + cards + '</div>' + placed;
+    }
+
+    // Put a rug in the selected room at the spot that leaves the most floor
+    function placeRug(id) {
+      var r = state.rooms[state.selected];
+      if (!r || !state.scale || !r.ftShape) return;
+      var res = rugCheckFor(r), it = res.list.filter(function (x) { return x.size.id === id; })[0];
+      if (!it || !it.spot) return;
+      var f = state.scale.ftPerPx;
+      pushUndo();
+      r.rug = { size: id, rot: it.spot.rot, x: it.spot.cx / f / state.W * 100, y: it.spot.cy / f / state.H * 100, style: state.rugCheck.style };
+      renderFurnish(); draw();
+    }
+    function onFurnishClick(e) {
+      var r = state.rooms[state.selected], btn = e.target.closest('button');
+      if (!btn || !r) return;
+      if (btn.getAttribute('data-rug')) { placeRug(btn.getAttribute('data-rug')); return; }
+      if (btn.getAttribute('data-style')) { r.rugStyle = btn.getAttribute('data-style'); renderFurnish(); draw(); return; }
+      var act = btn.getAttribute('data-act');
+      if (!r.rug) return;
+      if (act === 'turn') { pushUndo(); r.rug.rot = r.rug.rot === 90 ? 0 : 90; renderFurnish(); draw(); }
+      else if (act === 'center') placeRug(r.rug.size);
+      else if (act === 'remove') { pushUndo(); r.rug = null; renderFurnish(); draw(); }
+    }
+    // The rug where it sits now, judged on the walls and on the room's rug style
+    function rugJudge(r) {
+      var group = groupFor(r), style = rugStyle(r, group), c = rugCenterFt(r);
+      return { style: style, j: RUGSTYLE.judge(r.ftShape, style, RUG.get(r.rug.size), r.rug.rot, c.x, c.y, group) };
+    }
+    function placedMsg(r) {
+      var info = rugInfo(r), s = RUG.get(r.rug.size);
+      var msg = 'Your <b>' + s.label + '</b> rug ' + (info.clearance < 0 ? 'runs past the walls. Drag it back inside the room, or tap <b>Center it</b>.'
+        : 'leaves <b>' + fmtGap(info.clearance) + '</b> of floor at the closest wall (' + STATUS_TEXT[RUG.status(info.clearance)].toLowerCase() + ').');
+      var rj = rugJudge(r);
+      if (rj.style !== 'walls' && info.clearance >= 0) {
+        msg += rj.j.worst ? ' ' + RUGSTYLE.NAMES[rj.style] + ': ' + styleDetail(rj.j.worst).toLowerCase() + '.'
+          : ' ' + RUGSTYLE.NAMES[rj.style] + ' works here.';
+      }
+      return msg;
+    }
+    // Updates just the sentence under the sizes while a rug is dragged
+    function updatePlacedMsg() {
+      var r = state.rooms[state.selected], el = $('rugPlacedMsg');
+      if (!el || !rugOK(r)) return;
+      el.innerHTML = placedMsg(r);
+    }
+
+    /* ---------- Modes ---------- */
+    function setMode(m) {
+      if (state.tool === 'scale') endScaleTool();
+      if (state.tool === 'door') endDoorTool();
+      state.mode = m; state.drag = null;
+      var tabs = document.querySelectorAll('.mode');
+      for (var i = 0; i < tabs.length; i++) {
+        var on = tabs[i].getAttribute('data-mode') === m;
+        tabs[i].classList.toggle('active', on);
+        tabs[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+      $('measurePanel').classList.toggle('hidden', m !== 'measure');
+      $('furnishPanel').classList.toggle('hidden', m !== 'furnish');
+      $('doorTool').classList.toggle('hidden', m !== 'furnish');
+      if (m === 'furnish') { renderCatalog(); showPane(); }
+      if (!state.img || !state.rooms.length) return;
+      // Coming into Furnish with nothing selected: start on the first living space, if there is one
+      if (m === 'furnish' && state.selected < 0) {
+        var pick = -1;
+        state.rooms.forEach(function (r, k) { if (pick < 0 && RUG.roomType(r.name) === 'living') pick = k; });
+        if (pick > -1) state.selected = pick;
+      }
+      select(state.selected, false);
+    }
+
+    /* ---------- Canvas interaction ---------- */
+    // offsetX/Y are measured in the canvas's own (untilted) space, so clicks stay
+    // accurate even though the graph paper is rotated slightly.
+    function toCanvas(e) {
+      var c = $('planCanvas');
+      return { x: e.offsetX * state.W / c.clientWidth, y: e.offsetY * state.H / c.clientHeight };
+    }
+    // Middle of each side, where the + handles sit (canvas px)
+    function mids(r) {
+      var list = ptsPx(r);
+      return list.map(function (a, k) { var b = list[(k + 1) % list.length]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, k: k }; });
+    }
+    // { type: 'pt', k } for a corner (plus its compass name while the room is still a box),
+    // { type: 'mid', k } for the + on side k
+    var RECT_KEYS = ['nw', 'ne', 'se', 'sw'];
+    // Where the remove (x) button sits for the tapped corner: up and to the right of it,
+    // or flipped inward when that would fall off the plan. Null when there is nothing to remove.
+    function removeBtn() {
+      var r = state.rooms[state.selected];
+      if (state.mode !== 'measure' || !r || !r.shape || r.shape.length <= 3 || state.ptSel < 0 || state.ptSel >= r.shape.length) return null;
+      var p = ptsPx(r)[state.ptSel], hs = handleSize(), off = hs * 1.1;
+      var x = p.x + off, y = p.y - off;
+      if (x + hs > state.W) x = p.x - off;
+      if (y - hs < 0) y = p.y + off;
+      return { x: x, y: y, r: hs * 0.48 };
+    }
+    function hitHandle(p) {
+      if (state.selected < 0) return null;
+      var r = state.rooms[state.selected], hs = handleSize(), hit = null;
+      ptsPx(r).forEach(function (c, k) {
+        if (!hit && Math.abs(p.x - c.x) <= hs * 0.7 && Math.abs(p.y - c.y) <= hs * 0.7) hit = { type: 'pt', k: k, corner: r.shape ? null : RECT_KEYS[k] };
+      });
+      if (hit) return hit;
+      mids(r).forEach(function (m) {
+        if (!hit && Math.abs(p.x - m.x) <= hs * 0.55 && Math.abs(p.y - m.y) <= hs * 0.55) hit = { type: 'mid', k: m.k };
+      });
+      return hit;
+    }
+    function hitRoom(p) {
+      var best = -1, bestArea = Infinity;
+      state.rooms.forEach(function (r, i) {
+        var b = px(r);
+        var inside = r.shape ? PLAN.pointInPoly(p, ptsPx(r)) : (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h);
+        if (inside) {
+          var a = b.w * b.h; // prefer the smallest box so closets inside rooms stay clickable
+          if (a < bestArea) { bestArea = a; best = i; }
+        }
+      });
+      return best;
+    }
+
+    function onDown(e) {
+      if (!state.img) return;
+      if (state.tool === 'scale') {
+        var q = toCanvas(e);
+        state.scaleLine = { p1: q, p2: q, drawing: true };
+        $('scaleAsk').classList.add('hidden');
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        draw();
+        return;
+      }
+      if (state.tool === 'door') { placeDoorAt(toCanvas(e)); e.preventDefault(); return; }
+      if (state.mode === 'furnish') { furnishDown(e); return; }
+      var p = toCanvas(e), xb = removeBtn();
+      if (xb && Math.hypot(p.x - xb.x, p.y - xb.y) <= xb.r * 1.3) { removePoint(state.selected, state.ptSel); e.preventDefault(); return; }
+      var h = hitHandle(p), added = false;
+      if (h && h.type === 'pt' && h.corner) { state.ptSel = -1; startDrag(e, 'resize', h.corner, p); return; }
+      if (h && h.type === 'mid') {
+        added = true;
+        // Add a corner in the middle of this side and start dragging it
+        var pre = snap(), r0 = state.rooms[state.selected], list = pts(r0).map(function (q) { return { x: q.x, y: q.y }; });
+        var a = list[h.k], b = list[(h.k + 1) % list.length];
+        list.splice(h.k + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        r0.shape = list; r0.bbox = PLAN.bounds(list);
+        h = { type: 'pt', k: h.k + 1 };
+      }
+      if (h && h.type === 'pt') {
+        startDrag(e, 'point', null, p);
+        state.drag.k = h.k; state.drag.added = added;
+        if (added) state.drag.snap = pre;   // undo goes back to before the corner was added
+        // Long press on a touch screen removes the corner
+        if (e.pointerType === 'touch') {
+          var room = state.selected, k = h.k;
+          state.drag.press = setTimeout(function () { removePoint(room, k); }, 600);
+        }
+        draw();
+        return;
+      }
+      state.ptSel = -1;
+      var i = hitRoom(p);
+      select(i, false); // stay on the plan: jumping to the card would move the corners out of view
+      if (i > -1) startDrag(e, 'move', null, p);
+    }
+    // Furnish: grab a rug to move it, or tap a room to pick it
+    function furnishDown(e) {
+      var p = toCanvas(e), pk = hitPiece(p);
+      if (pk > -1) {
+        state.pieceSel = pk; state.doorSel = -1;
+        var pc = state.pieces[pk];
+        state.drag = { mode: 'piece', start: p, snap: snap(), orig: { x: pc.x, y: pc.y },
+                       chairs: chairsOf(pc).map(function (c) { return { c: c, x: c.x, y: c.y }; }) };
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        renderPieceBar(); renderDoorBar(); draw();
+        return;
+      }
+      if (state.pieceSel > -1) { state.pieceSel = -1; renderPieceBar(); }
+      var dk = hitDoor(p);
+      if (dk > -1) {
+        state.doorSel = dk;
+        state.drag = { mode: 'door', start: p, moved: false, snap: snap() };
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        renderDoorBar(); draw();
+        return;
+      }
+      if (state.doorSel > -1) { state.doorSel = -1; renderDoorBar(); }
+      var i = hitRug(p);
+      if (i > -1) {
+        if (i !== state.selected) select(i, false);
+        var r = state.rooms[i];
+        state.drag = { mode: 'rug', start: p, snap: snap(), orig: { x: r.rug.x, y: r.rug.y } };
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        return;
+      }
+      select(hitRoom(p), false);
+    }
+    function startDrag(e, mode, corner, p) {
+      var r = state.rooms[state.selected];
+      state.drag = { mode: mode, corner: corner, start: p, snap: snap(), orig: { x: r.bbox.x, y: r.bbox.y, w: r.bbox.w, h: r.bbox.h },
+                     origPts: r.shape ? r.shape.map(function (q) { return { x: q.x, y: q.y }; }) : null };
+      try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    }
+    function onMove(e) {
+      if (!state.img) return;
+      var p = toCanvas(e), c = $('planCanvas');
+      if (state.tool === 'scale') {
+        c.style.cursor = 'crosshair';
+        if (state.scaleLine && state.scaleLine.drawing) {
+          // Hold Shift for a perfectly straight line along a wall
+          if (e.shiftKey) {
+            var a = state.scaleLine.p1;
+            p = Math.abs(p.x - a.x) > Math.abs(p.y - a.y) ? { x: p.x, y: a.y } : { x: a.x, y: p.y };
+          }
+          state.scaleLine.p2 = p;
+          draw();
+        }
+        return;
+      }
+      if (state.mode === 'furnish') {
+        if (state.drag && state.drag.mode === 'piece') {
+          var pp = state.pieces[state.pieceSel], pd = state.drag;
+          if (!pd.moved && Math.hypot(p.x - pd.start.x, p.y - pd.start.y) < 3 * displayRatio()) return;
+          pd.moved = true;
+          pp.x = clamp(pd.orig.x + (p.x - pd.start.x) / state.W * 100, 0, 100);
+          pp.y = clamp(pd.orig.y + (p.y - pd.start.y) / state.H * 100, 0, 100);
+          var mx = pp.x - pd.orig.x, my = pp.y - pd.orig.y;
+          pd.chairs.forEach(function (o) { o.c.x = o.x + mx; o.c.y = o.y + my; });
+          draw();
+        } else if (state.drag && state.drag.mode === 'door') {
+          if (!state.drag.moved && Math.hypot(p.x - state.drag.start.x, p.y - state.drag.start.y) < 4 * displayRatio()) return;
+          state.drag.moved = true;
+          moveDoor(state.doors[state.doorSel], p);
+          draw();
+        } else if (state.drag && state.drag.mode === 'rug') {
+          var rr = state.rooms[state.selected], dd = state.drag;
+          dd.moved = true;
+          rr.rug.x = clamp(dd.orig.x + (p.x - dd.start.x) / state.W * 100, 0, 100);
+          rr.rug.y = clamp(dd.orig.y + (p.y - dd.start.y) / state.H * 100, 0, 100);
+          draw(); updatePlacedMsg();
+        } else {
+          c.style.cursor = state.tool === 'door' ? 'crosshair' : hitPiece(p) > -1 || hitDoor(p) > -1 || hitRug(p) > -1 ? 'move' : hitRoom(p) > -1 ? 'pointer' : 'default';
+        }
+        return;
+      }
+      if (!state.drag) {
+        var h = hitHandle(p);
+        c.style.cursor = !h ? (hitRoom(p) > -1 ? 'move' : 'default') : h.type === 'mid' ? 'copy' :
+          !h.corner ? 'grab' : (h.corner === 'nw' || h.corner === 'se' ? 'nwse-resize' : 'nesw-resize');
+        return;
+      }
+      var d = state.drag, r = state.rooms[state.selected], o = d.orig;
+      var dx = (p.x - d.start.x) / state.W * 100, dy = (p.y - d.start.y) / state.H * 100;
+      var MIN = 1.5;
+      if (d.press && Math.hypot(p.x - d.start.x, p.y - d.start.y) > 8 * displayRatio()) { clearTimeout(d.press); d.press = null; }
+      // A tap is not a drag: nothing moves until the pointer has really moved
+      if (!d.moved) { if (Math.hypot(p.x - d.start.x, p.y - d.start.y) < 4 * displayRatio()) return; d.moved = true; }
+      if (d.mode === 'move') {
+        r.bbox.x = clamp(o.x + dx, 0, 100 - o.w);
+        r.bbox.y = clamp(o.y + dy, 0, 100 - o.h);
+        if (d.origPts) {
+          var mx = r.bbox.x - o.x, my = r.bbox.y - o.y;
+          r.shape = d.origPts.map(function (q) { return { x: q.x + mx, y: q.y + my }; });
+        }
+      } else if (d.mode === 'point') {
+        var list = r.shape, n = list.length, k = d.k;
+        var q = { x: clamp(p.x / state.W * 100, 0, 100), y: clamp(p.y / state.H * 100, 0, 100) };
+        // Magnet: line the corner up with its neighbors so walls stay straight
+        var tx = 10 * displayRatio() / state.W * 100, ty = 10 * displayRatio() / state.H * 100;
+        [list[(k + n - 1) % n], list[(k + 1) % n]].forEach(function (nb) {
+          if (Math.abs(q.x - nb.x) < tx) q.x = nb.x;
+          if (Math.abs(q.y - nb.y) < ty) q.y = nb.y;
+        });
+        list[k] = q;
+        r.bbox = PLAN.bounds(list);
+      } else {
+        var x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+        if (d.corner.indexOf('w') > -1) x1 = clamp(o.x + dx, 0, x2 - MIN);
+        if (d.corner.indexOf('e') > -1) x2 = clamp(x2 + dx, x1 + MIN, 100);
+        if (d.corner.indexOf('n') > -1) y1 = clamp(o.y + dy, 0, y2 - MIN);
+        if (d.corner.indexOf('s') > -1) y2 = clamp(y2 + dy, y1 + MIN, 100);
+        r.bbox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+      }
+      draw();
+    }
+    function onUp(e) {
+      if (state.tool === 'scale' && state.scaleLine && state.scaleLine.drawing) {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        var l = state.scaleLine;
+        l.drawing = false;
+        // Ignore taps: the line has to be long enough to measure from
+        if (Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y) < 20 * displayRatio()) { state.scaleLine = null; draw(); return; }
+        $('scaleAsk').classList.remove('hidden');
+        var inp = $('scaleLen');
+        inp.value = ''; inp.classList.remove('bad');
+        try { inp.focus({ preventScroll: true }); } catch (err) { inp.focus(); }
+        return;
+      }
+      if (state.drag && (state.drag.mode === 'piece' || state.drag.mode === 'door')) {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        if (state.drag.moved) pushUndo(state.drag.snap);
+        state.drag = null;
+        renderSpacing(); renderDoorBar(); renderPieceBar();
+        if (state.mode === 'furnish' && state.rooms[state.selected] && state.rooms[state.selected].rug) renderFurnish();
+        return;
+      }
+      if (state.drag && state.drag.mode === 'rug') {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        if (state.drag.moved) pushUndo(state.drag.snap);
+        state.drag = null;
+        renderFurnish();
+        return;
+      }
+      if (state.drag) {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        if (state.drag.press) clearTimeout(state.drag.press);
+        var r = state.rooms[state.selected], dr = state.drag;
+        if (dr.moved) pushUndo(dr.snap);
+        if (dr.mode === 'point' && !dr.moved && r && r.shape) {
+          if (dr.added) { r.shape.splice(dr.k, 1); state.ptSel = -1; }   // tapped a + by accident: no new corner
+          else state.ptSel = state.ptSel === dr.k ? -1 : dr.k;            // tapped a corner: show (or hide) its remove button
+        } else if (dr.mode === 'point') state.ptSel = dr.k;                // just dragged: keep it ready to remove
+        if (r && r.shape) setShape(r, r.shape);
+        if (!r || !r.shape) state.ptSel = -1;
+        state.drag = null;
+        renderAll(); // a moved, resized or reshaped room can change its area and notes
+      }
+    }
+    // Double-click a corner to remove it
+    function onDblClick(e) {
+      if (state.tool || state.mode !== 'measure' || state.selected < 0) return;
+      var h = hitHandle(toCanvas(e));
+      if (h && h.type === 'pt' && state.rooms[state.selected].shape) removePoint(state.selected, h.k);
+    }
+
+    /* ---------- Setting the scale ---------- */
+    function startScaleTool() {
+      if (!state.img) return;
+      if (state.tool === 'door') endDoorTool();
+      select(-1);
+      state.tool = 'scale'; state.scaleLine = null;
+      $('planCanvas').classList.add('editing');
+      $('scaleAsk').classList.add('hidden');
+      renderScaleBar();
+      draw();
+      var pr = document.querySelector('.print');
+      if (pr && pr.scrollIntoView) pr.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    function endScaleTool() {
+      state.tool = null; state.scaleLine = null;
+      if (!$('planCanvas')) return;
+      $('planCanvas').classList.remove('editing');
+      $('planCanvas').style.cursor = 'default';
+      $('scaleAsk').classList.add('hidden');
+      renderScaleBar();
+      if (state.img && state.rooms.length) draw();
+    }
+    function saveScale() {
+      var l = state.scaleLine, inp = $('scaleLen');
+      var feet = parseFtIn(inp.value);
+      if (!l || !feet || feet <= 0) { inp.classList.add('bad'); inp.focus(); return; }
+      pushUndo();
+      state.scale = { ftPerPx: PLAN.scaleFromLine(l.p1, l.p2, feet), source: 'manual',
+                      line: { p1: l.p1, p2: l.p2, feet: feet } };
+      endScaleTool();
+      renderAll();
+    }
+
+    function renderScaleBar() {
+      var bar = $('scaleBar'), msg = $('scaleMsg'), btn = $('scaleBtn'), sc = state.scale;
+      if (!bar) return;
+      bar.classList.toggle('warn', !sc && state.tool !== 'scale');
+      if (state.tool === 'scale') {
+        msg.innerHTML = '<b>Set the scale.</b> Drag along a wall or dimension line whose length you know. Hold Shift to keep the line straight.';
+        btn.textContent = 'Cancel'; btn.className = 'btn-secondary btn-sm';
+      } else if (!sc) {
+        msg.innerHTML = '<b>No scale found on this plan.</b> Set it once by tracing one wall you know the length of, so furniture and lights can be drawn to size.';
+        btn.textContent = 'Set the scale'; btn.className = 'btn-primary btn-sm';
+      } else if (sc.source === 'manual') {
+        msg.innerHTML = '<b>Scale set by you</b> from a ' + esc(fmtFtIn(sc.line.feet)) + ' line. Use the ruler on the plan to check it.';
+        btn.textContent = 'Set it again'; btn.className = 'btn-secondary btn-sm';
+      } else {
+        msg.innerHTML = '<b>Scale found</b> from ' + (sc.from === 'area' ? 'the printed square footage of ' : '') + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + ' on the plan. Compare the ruler on the plan with a printed dimension to check it.';
+        btn.textContent = 'Check scale'; btn.className = 'btn-secondary btn-sm';
+      }
+    }
+
+    // The room picker in the toolbar
+    function renderRoomPick() {
+      $('rugRoom').innerHTML = '<option value="-1">Pick a room</option>' + state.rooms.map(function (rm, i) {
+        return '<option value="' + i + '"' + (i === state.selected ? ' selected' : '') + '>' + esc(rm.name) + '</option>';
+      }).join('');
+    }
+    function select(i, scrollCard) {
+      if (i !== state.selected) {
+        state.ptSel = -1;
+        var cf = catFor(state.rooms[i]);
+        if (cf && cf !== state.cat) { state.cat = cf; renderCatalog(); }   // show the pieces that suit the room
+      }
+      state.selected = i;
+      $('planCanvas').classList.toggle('editing', i > -1);
+      var cards = document.querySelectorAll('.room-card');
+      for (var k = 0; k < cards.length; k++) cards[k].classList.toggle('selected', +cards[k].getAttribute('data-i') === i);
+      if (scrollCard && i > -1 && cards[i] && cards[i].scrollIntoView) {
+        var rect = cards[i].getBoundingClientRect();
+        if (rect.top > window.innerHeight || rect.bottom < 0) cards[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+      renderRoomPick();
+      if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderPieceBar(); }
+      draw();
+    }
+
+    /* ---------- Room cards ---------- */
+    function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+    function badgeFor(r) {
+      if (r.source === 'labeled') return '<span class="badge labeled">From plan</span>';
+      if (r.source === 'edited') return '<span class="badge edited">Edited</span>';
+      return '<span class="badge estimated">Estimated</span>';
+    }
+
+    function renderCards() {
+      var html = state.rooms.map(function (r, i) {
+        return '<div class="room-card' + (i === state.selected ? ' selected' : '') + '" data-i="' + i + '">' +
+          '<div class="card-top">' +
+            '<input class="name-input" data-f="name" value="' + esc(r.name) + '" aria-label="Room name">' +
+            '<button class="del" data-act="del" title="Remove room" aria-label="Remove room">&times;</button>' +
+          '</div>' +
+          '<div class="dims">' +
+            '<div><label>Width</label><input data-f="width" value="' + esc(fmtFtIn(r.width)) + '" placeholder="12\'6&quot;"></div>' +
+            '<div><label>Length</label><input data-f="length" value="' + esc(fmtFtIn(r.length)) + '" placeholder="10\'"></div>' +
+          '</div>' +
+          '<div class="card-foot"><span class="area">' + areaText(r) + '</span>' + badgeFor(r) + '</div>' +
+          noteFor(r) +
+        '</div>';
+      }).join('');
+      $('roomGrid').innerHTML = html;
+    }
+
+    function areaText(r) {
+      if (!area(r)) return 'Add dimensions';
+      var fromShape = r.shape && r.shapeArea && !r.dimsEdited && !r.printedArea;
+      return fmtArea(area(r)) + (fromShape ? ' (from shape)' : '');
+    }
+
+    // Shown when the plan's printed area and its dimensions disagree, or when the
+    // room's box on the plan and its dimensions disagree, by more than 10%
+    function noteFor(r) {
+      var ac = PLAN.areaConflict(r);
+      if (ac) return '<div class="box-note">The plan prints ' + fmtArea(ac.printed) + ', so that is used. ' + esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) +
+        ' gives ' + fmtArea(ac.dims) + '. The dimension lines may measure outside the walls or only part of the room.</div>';
+      var sc = PLAN.shapeConflict(r);
+      if (sc) return '<div class="box-note">The shape you drew measures ' + fmtArea(sc.shape) + ', but the plan prints ' + fmtArea(sc.printed) +
+        '. Check the corners or the scale.</div>';
+      if (!r.mismatch) return '<div class="box-note hidden"></div>';
+      return '<div class="box-note">The box on the plan measures ' + esc(fmtFtIn(r.mismatch.w)) + ' x ' + esc(fmtFtIn(r.mismatch.h)) +
+        '. Adjust the box or the size, or check the scale.</div>';
+    }
+
+    function renderStats() {
+      var total = 0, est = 0;
+      state.rooms.forEach(function (r) { total += area(r); if (r.source === 'estimated') est++; });
+      $('statRooms').textContent = state.rooms.length;
+      $('statArea').textContent = Math.round(total).toLocaleString();
+      $('statEst').textContent = est;
+    }
+
+    function renderAll() { syncGeometry(); renderCards(); renderStats(); renderScaleBar(); renderRoomPick(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderDoorBar(); renderDoorList(); } draw(); }
+
+    function cardIndex(el) {
+      var card = el.closest('.room-card');
+      return card ? +card.getAttribute('data-i') : -1;
+    }
+
+    function onGridInput(e) {
+      var el = e.target, i = cardIndex(el), r = state.rooms[i];
+      if (!r) return;
+      var f = el.getAttribute('data-f');
+      if (f === 'name') {
+        r.name = el.value.slice(0, 40) || 'Room';
+        draw();
+      } else if (f === 'width' || f === 'length') {
+        var v = parseFtIn(el.value);
+        el.classList.toggle('bad', el.value.trim() !== '' && v == null);
+        if (v != null && v > 0) {
+          r[f] = v;
+          r.dimsEdited = true; // the area now follows the typed dimensions
+          if (r.source === 'estimated') r.source = 'edited';
+          var card = el.closest('.room-card');
+          card.querySelector('.area').textContent = areaText(r);
+          card.querySelector('.badge').outerHTML = badgeFor(r);
+          renderStats(); draw();
+          card.querySelector('.box-note').outerHTML = noteFor(r);
+        }
+      }
+    }
+    function onGridChange(e) {
+      // Normalize what was typed (e.g. "12 6" becomes 12'6") once the field is left
+      var el = e.target, i = cardIndex(el), r = state.rooms[i], f = el.getAttribute('data-f');
+      if (state.editSnap) { pushUndo(state.editSnap); state.editSnap = null; }   // one undo step per edited field
+      if (r && (f === 'width' || f === 'length') && !el.classList.contains('bad')) el.value = fmtFtIn(r[f]);
+    }
+    function onGridClick(e) {
+      var i = cardIndex(e.target);
+      if (i < 0) return;
+      if (e.target.getAttribute('data-act') === 'del') {
+        pushUndo();
+        state.rooms.splice(i, 1);
+        state.selected = -1;
+        renderAll();
+        return;
+      }
+      if (state.selected !== i) select(i, false);
+    }
+
+    function addRoom() {
+      pushUndo();
+      var n = state.rooms.length + 1;
+      state.rooms.push({ id: state.nextId++, name: 'Room ' + n, width: null, length: null, source: 'edited', bbox: { x: 40, y: 40, w: 20, h: 20 } });
+      state.selected = state.rooms.length - 1;
+      renderAll();
+      select(state.selected, false);
+      var inputs = document.querySelectorAll('.room-card .name-input');
+      var last = inputs[inputs.length - 1];
+      if (last) { last.focus(); last.select(); }
+    }
+
+    /* ---------- Export ---------- */
+    function exportPNG() {
+      draw(true);
+      $('planCanvas').toBlob(function (blob) {
+        download(blob, 'floor-plan-annotated.png');
+        draw();
+      }, 'image/png');
+    }
+    // Loads the Studio Lou logo from the server as image data for the PDF (skipped quietly if it can't load)
+    var LOGO_URL = 'https://studio-lou-rag.onrender.com/static/logo.png';
+    function loadLogo() {
+      return new Promise(function (resolve) {
+        var im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = function () {
+          try {
+            var c = document.createElement('canvas');
+            c.width = im.naturalWidth; c.height = im.naturalHeight;
+            c.getContext('2d').drawImage(im, 0, 0);
+            resolve(c.toDataURL('image/png'));
+          } catch (e) { resolve(null); }
+        };
+        im.onerror = function () { resolve(null); };
+        im.src = LOGO_URL;
+      });
+    }
+
+    function exportPDF() {
+      var btn = $('pdfBtn');
+      btn.disabled = true;
+      loadLogo().then(function (logo) {
+        try { buildPDF(logo); } finally { btn.disabled = false; }
+      });
+    }
+
+    function buildPDF(logo) {
+      if (!window.jspdf) { alert('The PDF maker did not load. Refresh the page and try again.'); return; }
+      var doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' });
+      var margin = 56, pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+      var contentW = pageW - margin * 2, y = margin;
+      function checkPage(need) { if (y + (need || 60) > pageH - margin) { doc.addPage(); y = margin; } }
+      function ascii(t) { return String(t).replace(/[\u2018\u2019\u2032]/g, "'").replace(/[\u201c\u201d\u2033]/g, '"').replace(/[^\x20-\xFF]/g, ''); }
+
+      var total = 0, est = 0;
+      state.rooms.forEach(function (r) { total += area(r); if (r.source === 'estimated') est++; });
+
+      // Header
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(67, 62, 60);
+      doc.text('Floor Plan Summary', margin, y + 6);
+      if (logo) doc.addImage(logo, 'PNG', pageW - margin - 54, margin - 18, 54, 54);
+      y += 28;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(107, 101, 96);
+      var date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      doc.text(state.rooms.length + ' spaces  \u00b7  ' + Math.round(total).toLocaleString() + ' total sq ft  \u00b7  ' + date, margin, y);
+      y += 22;
+
+      // Annotated plan
+      draw(true);
+      var img = $('planCanvas').toDataURL('image/jpeg', 0.92);
+      draw();
+      var maxH = 380, iw = contentW, ih = iw * state.H / state.W;
+      if (ih > maxH) { ih = maxH; iw = ih * state.W / state.H; }
+      var ix = margin + (contentW - iw) / 2;
+      doc.addImage(img, 'JPEG', ix, y, iw, ih);
+      doc.setDrawColor(208, 201, 188); doc.setLineWidth(1); doc.rect(ix, y, iw, ih);
+      y += ih + 26;
+
+      // Room table
+      checkPage(70);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+      doc.text('Rooms', margin, y);
+      y += 12;
+      var cols = [margin + 8, margin + 230, margin + 310, margin + 400, pageW - margin - 8];
+      doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 22, 'F');
+      doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+      doc.text('ROOM', cols[0], y + 14);
+      doc.text('WIDTH', cols[1], y + 14);
+      doc.text('LENGTH', cols[2], y + 14);
+      doc.text('SQ FT', cols[3], y + 14);
+      doc.text('SOURCE', cols[4], y + 14, { align: 'right' });
+      y += 22;
+      state.rooms.forEach(function (r, i) {
+        checkPage(22);
+        doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
+        doc.rect(margin, y, contentW, 20, 'F');
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+        doc.text(ascii(r.name).slice(0, 34), cols[0], y + 13);
+        doc.text(fmtFtIn(r.width) || '-', cols[1], y + 13);
+        doc.text(fmtFtIn(r.length) || '-', cols[2], y + 13);
+        doc.text(area(r) ? Math.round(area(r)).toLocaleString() : '-', cols[3], y + 13);
+        var src = r.source === 'labeled' ? 'From plan' : r.source === 'edited' ? 'Edited' : 'Estimated';
+        if (r.source === 'estimated') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
+        doc.text(src, cols[4], y + 13, { align: 'right' });
+        y += 20;
+      });
+      doc.setDrawColor(67, 62, 60); doc.setLineWidth(1); doc.line(margin, y, margin + contentW, y);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+      doc.text('Total', cols[0], y + 15);
+      doc.text(Math.round(total).toLocaleString(), cols[3], y + 15);
+      y += 34;
+
+      // Furniture placed in Furnish
+      if (state.scale && state.pieces.length) {
+        y += 8;
+        checkPage(90);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+        doc.text('Furniture', margin, y);
+        y += 12;
+        var fc = [margin + 8, margin + 230, pageW - margin - 8];
+        doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 22, 'F');
+        doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+        doc.text('PIECE', fc[0], y + 14);
+        doc.text('SIZE (W X D)', fc[1], y + 14);
+        doc.text('ROOM', fc[2], y + 14, { align: 'right' });
+        y += 22;
+        // Chairs that came with a table are listed with it
+        state.pieces.filter(function (pc) { return !(pc.group && state.pieces.some(function (o) { return o.id === pc.group; })); }).forEach(function (pc, i) {
+          checkPage(22);
+          var rm = pieceRoom(pc), nCh = chairsOf(pc).length;
+          doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
+          doc.rect(margin, y, contentW, 20, 'F');
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+          doc.text(ascii(pc.name + (nCh ? ' with ' + nCh + ' chairs' : '')).slice(0, 40), fc[0], y + 13);
+          doc.text(ascii(pieceSize(pc)), fc[1], y + 13);
+          doc.setTextColor(107, 101, 96);
+          doc.text(rm ? ascii(rm.name).slice(0, 30) : '-', fc[2], y + 13, { align: 'right' });
+          y += 20;
+        });
+        y += 10;
+      }
+
+      // Rugs placed in Furnish
+      var rugRooms = state.rooms.filter(rugOK);
+      if (rugRooms.length) {
+        y += 8;
+        checkPage(90);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+        doc.text('Rugs', margin, y);
+        y += 12;
+        var rc = [margin + 8, margin + 200, margin + 300, pageW - margin - 8];
+        doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 22, 'F');
+        doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+        doc.text('ROOM', rc[0], y + 14);
+        doc.text('RUG', rc[1], y + 14);
+        doc.text('FLOOR AT CLOSEST WALL', rc[2], y + 14);
+        doc.text('FIT', rc[3], y + 14, { align: 'right' });
+        y += 22;
+        rugRooms.forEach(function (r, i) {
+          checkPage(22);
+          var info = rugInfo(r), st = RUG.status(info.clearance);
+          doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
+          doc.rect(margin, y, contentW, 20, 'F');
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+          doc.text(ascii(r.name).slice(0, 30), rc[0], y + 13);
+          var rjs = rugJudge(r).style;
+          doc.text(ascii(RUG.get(r.rug.size).label + (rjs !== 'walls' ? ', ' + RUGSTYLE.NAMES[rjs].toLowerCase() : '')), rc[1], y + 13);
+          doc.text(info.clearance < 0 ? 'Runs past the walls' : ascii(fmtGap(info.clearance)), rc[2], y + 13);
+          if (st === 'big') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
+          doc.text(STATUS_TEXT[st], rc[3], y + 13, { align: 'right' });
+          y += 20;
+        });
+        y += 10;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 101, 96);
+        var rn = doc.splitTextToSize('Rug sizes are checked against the room outlines on this plan, so they are only as accurate as the plan and its scale. Measure the room before ordering.', contentW);
+        doc.text(rn, margin, y + 4);
+        y += rn.length * 12 + 18;
+      }
+
+      // Spacing checks between pieces, and door swings
+      var sRows = spaceRows(null);
+      if (sRows.length) {
+        y += 8;
+        checkPage(90);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+        doc.text('Spacing checks', margin, y);
+        y += 12;
+        var sc = [margin + 8, margin + 290, pageW - margin - 8];
+        doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 22, 'F');
+        doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+        doc.text('CHECK', sc[0], y + 14);
+        doc.text('MEASURED', sc[1], y + 14);
+        doc.text('RESULT', sc[2], y + 14, { align: 'right' });
+        y += 22;
+        sRows.forEach(function (rw, i) {
+          checkPage(22);
+          doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
+          doc.rect(margin, y, contentW, 20, 'F');
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+          doc.text(ascii(rw.label).slice(0, 52), sc[0], y + 13);
+          doc.text(ascii(rw.value).slice(0, 30), sc[1], y + 13);
+          if (rw.status === 'close') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
+          doc.text(rw.word, sc[2], y + 13, { align: 'right' });
+          y += 20;
+        });
+        y += 10;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 101, 96);
+        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight), 24" beside a bed (18" is tight), 36" around a dining table (30" is tight), and 16" to 18" from sofa to coffee table. Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
+        doc.text(sn, margin, y + 4);
+        y += sn.length * 12 + 18;
+      }
+
+      // Practical note when anything was estimated
+      if (est) {
+        checkPage(60);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+        var note = doc.splitTextToSize(est + (est === 1 ? ' room was' : ' rooms were') + ' estimated because the plan did not print its dimensions. Measure ' + (est === 1 ? 'it' : 'those') + ' in person before ordering flooring, rugs, or furniture.', contentW - 28);
+        var nh = note.length * 14 + 34;
+        doc.setFillColor(245, 240, 232); doc.roundedRect(margin, y, contentW, nh, 6, 6, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(88, 43, 54);
+        doc.text('BEFORE YOU BUY', margin + 14, y + 16);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+        doc.text(note, margin + 14, y + 31);
+        y += nh + 18;
+      }
+
+      // Footer on every page
+      var pages = doc.internal.getNumberOfPages();
+      for (var pg = 1; pg <= pages; pg++) {
+        doc.setPage(pg);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(107, 101, 96);
+        doc.text('Made with the Studio Lou Floor Plan Parser  \u00b7  studiolouinteriors.com', pageW / 2, pageH - 30, { align: 'center' });
+      }
+      doc.save('floor-plan-summary.pdf');
+    }
+    function exportJSON() {
+      var data = {
+        unit: 'ft',
+        total_sqft: Math.round(state.rooms.reduce(function (t, r) { return t + area(r); }, 0)),
+        scale: state.scale ? { ft_per_px: +state.scale.ftPerPx.toFixed(6), source: state.scale.source, canvas_px: [state.W, state.H] } : null,
+        furniture: state.scale ? state.pieces.map(function (pc) {
+          var f = state.scale.ftPerPx, rm = pieceRoom(pc);
+          var tbl = pc.group ? state.pieces.filter(function (o) { return o.id === pc.group; })[0] : null;
+          return { id: pc.id, name: pc.name, type: pc.type, role: pc.role || 'other', shape: pc.shape || 'rect', mirrored: !!pc.flip,
+                   width_in: pc.w, depth_in: pc.d, height_in: pc.h, turned_deg: pc.rot,
+                   center_ft: [+(pc.x / 100 * state.W * f).toFixed(2), +(pc.y / 100 * state.H * f).toFixed(2)], room: rm ? rm.name : null,
+                   with_table: tbl ? tbl.id : null };
+        }) : [],
+        doors: state.scale ? state.doors.map(function (d, k) {
+          var df = doorFt(d), chk = DOOR.check(df, piecesFt());
+          return { name: 'Door ' + (k + 1), width_in: d.w, center_ft: [+df.cx.toFixed(2), +df.cy.toFixed(2)],
+                   along_wall: [+d.ux.toFixed(3), +d.uy.toFixed(3)], swings_toward: [+d.nx.toFixed(3), +d.ny.toFixed(3)], hinge_end: d.hinge,
+                   hits: chk.hits.map(function (i) { return state.pieces[i].name; }) };
+        }) : [],
+        spacing: spaceRows(null).map(function (rw) { return { check: rw.label, measured: rw.value, result: rw.word, status: rw.status }; }),
+        rooms: state.rooms.map(function (r) {
+          return {
+            name: r.name, width: fmtFtIn(r.width), length: fmtFtIn(r.length),
+            width_ft: r.width ? +r.width.toFixed(3) : null, length_ft: r.length ? +r.length.toFixed(3) : null,
+            area_sqft: Math.round(area(r)), printed_area_sqft: r.printedArea && !r.dimsEdited ? r.printedArea : null, source: r.source,
+            bbox_pct: { x: +r.bbox.x.toFixed(2), y: +r.bbox.y.toFixed(2), w: +r.bbox.w.toFixed(2), h: +r.bbox.h.toFixed(2) },
+            box_ft: r.ftBox ? { x: +r.ftBox.x.toFixed(2), y: +r.ftBox.y.toFixed(2), w: +r.ftBox.w.toFixed(2), h: +r.ftBox.h.toFixed(2) } : null,
+            box_mismatch: !!r.mismatch,
+            shape_pct: r.shape ? r.shape.map(function (q) { return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) : null,
+            shape_ft: r.shape && r.ftShape ? r.ftShape.map(function (q) { return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) : null,
+            rug: rugOK(r) ? (function () {
+              var info = rugInfo(r), c = rugCenterFt(r);
+              var rj = rugJudge(r);
+              return { size: r.rug.size, label: RUG.get(r.rug.size).label, turned: r.rug.rot === 90, style: RUGSTYLE.NAMES[rj.style], style_result: rj.j.status,
+                       center_ft: [+c.x.toFixed(2), +c.y.toFixed(2)], floor_at_closest_wall_in: Math.round(info.clearance * 12) };
+            })() : null
+          };
+        })
+      };
+      download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'floor-plan-data.json');
+    }
+    function download(blob, name) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    }
+
+    /* ---------- Status ---------- */
+    function showScreen(id) {
+      var s = document.querySelectorAll('.screen');
+      for (var i = 0; i < s.length; i++) s[i].classList.toggle('active', s[i].id === 'screen-' + id);
+      $('headActions').classList.toggle('hidden', id !== 'result');
+    }
+    function showStatus(kind, msg, sub, retry) {
+      if (kind === 'loading') {
+        $('loadMain').textContent = msg;
+        $('loadSub').textContent = sub || '';
+        showScreen('loading');
+      } else {
+        $('errMain').textContent = msg;
+        $('errSub').textContent = sub || '';
+        $('retryBtn').classList.toggle('hidden', !retry);
+        showScreen('error');
+      }
+    }
+    function hideStatus() {}
+
+    function reset() {
+      state.img = null; state.rooms = []; state.selected = -1; state.sendB64 = '';
+      state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
+      state.pieces = []; state.pieceSel = -1; state.doors = []; state.doorSel = -1;
+      UNDO = []; $('undoBtn').disabled = true;
+      endScaleTool(); endDoorTool();
+      setMode('measure');
+      $('fileInput').value = '';
+      showScreen('upload');
+    }
+
+    function $(id) { return document.getElementById(id); }
+
+    // Logs a completed run to the toolkit usage sheet, same as the other tools
+    function trackUsage(toolName) {
+      try {
+        fetch('https://script.google.com/macros/s/AKfycby7swq2KZ582RO4syV_yqmy3UupmpQPHg4vZMMvppXqHHSV9FY_-cFUs2KFhKnQuQeQ/exec', {
+          method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: toolName, referrer: document.referrer || '' })
+        }).catch(function () {});
+      } catch (e) {}
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      var dz = $('dropZone'), fi = $('fileInput'), c = $('planCanvas'), grid = $('roomGrid');
+      dz.addEventListener('click', function () { fi.click(); });
+      fi.addEventListener('change', function () { handleFile(fi.files[0]); });
+      dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('drag'); });
+      dz.addEventListener('dragleave', function () { dz.classList.remove('drag'); });
+      dz.addEventListener('drop', function (e) {
+        e.preventDefault(); dz.classList.remove('drag');
+        handleFile(e.dataTransfer.files[0]);
+      });
+
+      c.addEventListener('pointerdown', onDown);
+      c.addEventListener('pointermove', onMove);
+      c.addEventListener('pointerup', onUp);
+      c.addEventListener('pointercancel', onUp);
+      c.addEventListener('dblclick', onDblClick);
+
+      grid.addEventListener('input', onGridInput);
+      grid.addEventListener('change', onGridChange);
+      grid.addEventListener('click', onGridClick);
+
+      $('addBtn').addEventListener('click', addRoom);
+      $('pngBtn').addEventListener('click', exportPNG);
+      $('jsonBtn').addEventListener('click', exportJSON);
+      $('pdfBtn').addEventListener('click', exportPDF);
+      if (IN_TOOLKIT) $('jsonBtn').classList.add('hidden'); // data file is for the standalone demo only
+      $('resetBtn').addEventListener('click', reset);
+      $('retryBtn').addEventListener('click', extract);
+      $('newBtn').addEventListener('click', reset);
+
+      var modeBtns = document.querySelectorAll('.mode');
+      for (var mb = 0; mb < modeBtns.length; mb++) modeBtns[mb].addEventListener('click', function () { if (!this.disabled) setMode(this.getAttribute('data-mode')); });
+      $('rugRoom').addEventListener('change', function () { select(+this.value, false); });
+      $('rugBody').addEventListener('click', onFurnishClick);
+      renderCatalog();
+      var fp = $('furnishPanel');
+      fp.addEventListener('click', function (e) {
+        var row = e.target.closest('[data-door]');
+        if (row && !e.target.closest('button')) { state.doorSel = +row.getAttribute('data-door'); state.pieceSel = -1; renderPieceBar(); renderDoorBar(); draw(); return; }
+        onPieceClick(e); onDoorClick(e);
+      });
+      fp.addEventListener('change', function (e) { onDoorChange(e); onDetailChange(e); });
+      fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && /^pc[NWD]/.test(e.target.id || '')) e.target.blur(); });
+      $('floatBar').addEventListener('click', onFloatClick);
+      $('undoBtn').addEventListener('click', undo);
+      $('doorTool').addEventListener('click', function () { if (state.tool === 'door') endDoorTool(); else { setTab('doors'); startDoorTool(); } });
+      grid.addEventListener('focusin', function (e) { if (e.target.tagName === 'INPUT') state.editSnap = snap(); });
+      $('customAdd').addEventListener('click', addCustom);
+      ['customName', 'customW', 'customD'].forEach(function (id) {
+        $(id).addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } });
+        $(id).addEventListener('input', function () { this.classList.remove('bad'); });
+      });
+
+      $('scaleBtn').addEventListener('click', function () { if (state.tool === 'scale') endScaleTool(); else startScaleTool(); });
+      $('scaleSave').addEventListener('click', saveScale);
+      $('scaleRedo').addEventListener('click', function () { state.scaleLine = null; $('scaleAsk').classList.add('hidden'); draw(); });
+      $('scaleLen').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); saveScale(); }
+        if (e.key === 'Escape') endScaleTool();
+      });
+      $('scaleLen').addEventListener('input', function () { this.classList.remove('bad'); });
+
+      document.addEventListener('keydown', function (e) {
+        var typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+        if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && !typing) { undo(); e.preventDefault(); return; }
+        if (state.mode === 'furnish' && state.pieceSel > -1 && !typing && (e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) { turnPiece(e.shiftKey ? -15 : 15); e.preventDefault(); return; }
+        if (state.tool === 'scale') { if (e.key === 'Escape' && !/INPUT/.test(document.activeElement.tagName)) endScaleTool(); return; }
+        if (state.tool === 'door') { if (e.key === 'Escape') endDoorTool(); return; }
+        if (state.mode === 'furnish' && state.doorSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+          if (e.key === 'Delete' || e.key === 'Backspace') { removeDoor(); e.preventDefault(); }
+          if (e.key === 'Escape') deselect();
+          return;
+        }
+        if (state.mode === 'furnish' && state.pieceSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+          if (e.key === 'Delete' || e.key === 'Backspace') { removePiece(); e.preventDefault(); }
+          if (e.key === 'Escape') deselect();
+          return;
+        }
+        if (state.selected < 0 || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+        // A tapped corner takes Delete and Escape before the room does
+        if (state.mode === 'measure' && removeBtn()) {
+          if (e.key === 'Delete' || e.key === 'Backspace') { removePoint(state.selected, state.ptSel); e.preventDefault(); return; }
+          if (e.key === 'Escape') { state.ptSel = -1; draw(); return; }
+        }
+        if (e.key === 'Escape') select(-1);
+        if (state.mode === 'furnish') {
+          // In Furnish, Delete removes the room's rug, never the room
+          var fr = state.rooms[state.selected];
+          if ((e.key === 'Delete' || e.key === 'Backspace') && fr && fr.rug) { pushUndo(); fr.rug = null; renderFurnish(); draw(); e.preventDefault(); }
+          return;
+        }
+        if (e.key === 'Delete' || e.key === 'Backspace') { pushUndo(); state.rooms.splice(state.selected, 1); state.selected = -1; renderAll(); e.preventDefault(); }
+      });
+
+      // Redraw once DM Sans is ready so canvas labels use it
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (state.img && state.rooms.length) draw(); });
+      window.addEventListener('resize', function () { if (state.img) draw(); });
+    });
+  </script>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div class="brand"><span class="brand-studio">Studio Lou</span><span class="brand-tool">Floor Planner</span></div>
+    <div class="head-actions hidden" id="headActions">
+      <button class="btn-primary btn-sm" id="pdfBtn">Download PDF</button>
+      <button class="btn-secondary btn-sm optional" id="pngBtn">PNG</button>
+      <button class="btn-secondary btn-sm optional" id="jsonBtn">JSON</button>
+      <button class="btn-secondary btn-sm" id="resetBtn">New plan</button>
+    </div>
+  </header>
+
+  <!-- ── SCREEN: UPLOAD ── -->
+  <div class="screen start active" id="screen-upload">
+    <div class="start-inner">
+      <h1 class="tool-title">Floor Planner</h1>
+      <p class="tool-desc">Upload a floor plan and get every room measured, then try furniture and rugs at their real size before anything ships.</p>
+      <p class="eyebrow">Use it to</p>
+      <div class="uses">
+        <div class="use"><h3><span>A.</span>Check the fit before you buy</h3><p>Know whether the sofa, rug, or dining table works for the room before anything ships.</p></div>
+        <div class="use"><h3><span>B.</span>Start a project from a listing</h3><p>Turn a real estate floor plan into measured rooms you can plan, quote, and design around.</p></div>
+        <div class="use"><h3><span>C.</span>Price flooring and paint</h3><p>Get square footage room by room and for the whole home, editable down to the inch.</p></div>
+      </div>
+      <div class="upload-zone" id="dropZone">
+        <input type="file" id="fileInput" accept="image/*">
+        <svg class="upload-icon" viewBox="0 0 44 44" fill="none" stroke="#582b36" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+          <rect x="5" y="8" width="34" height="28" rx="2"/><path d="M5 22h13v14M18 22V8M18 15h21M28 15v8"/>
+        </svg>
+        <p class="big">Drop your floor plan here</p>
+        <p class="small">Architectural drawings and listing plans read best. Phone photos work too if the plan is flat and well lit. PNG, JPG, or WEBP.</p>
+        <span class="btn-primary">Choose a file</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SCREEN: LOADING ── -->
+  <div class="screen start" id="screen-loading">
+    <div class="start-inner"><div class="loading-wrap">
+      <div class="spinner"></div>
+      <p class="loading-text"><strong id="loadMain">Reading your floor plan...</strong><span id="loadSub"></span></p>
+    </div></div>
+  </div>
+
+  <!-- ── SCREEN: ERROR ── -->
+  <div class="screen start" id="screen-error">
+    <div class="start-inner">
+      <div class="error-msg"><span id="errMain"></span><small id="errSub"></small></div>
+      <div class="btn-row">
+        <button class="btn-primary" id="retryBtn">Try again</button>
+        <button class="btn-secondary" id="newBtn">Upload a different plan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SCREEN: WORKSPACE ── -->
+  <div class="screen" id="screen-result">
+    <div class="toolbar">
+      <div class="modes" role="tablist" aria-label="What to do with this plan">
+        <button class="mode active" role="tab" aria-selected="true" data-mode="measure">Measure</button>
+        <button class="mode" role="tab" aria-selected="false" data-mode="furnish">Furnish</button>
+        <button class="mode" role="tab" aria-selected="false" data-mode="light" disabled>Light <small>Soon</small></button>
+        <button class="mode" role="tab" aria-selected="false" data-mode="3d" disabled>3D <small>Soon</small></button>
+      </div>
+      <span class="tool-spacer"></span>
+      <select class="room-select" id="rugRoom" aria-label="Room"></select>
+      <button class="tool-btn hidden" id="doorTool" title="Mark a door on a wall">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V4M4 4a16 16 0 0 1 16 16M4 20h16"/></svg>Add a door
+      </button>
+      <button class="tool-btn" id="undoBtn" title="Undo (Ctrl or Cmd + Z)" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo
+      </button>
+    </div>
+
+    <div class="work">
+      <div class="stage-col">
+        <div class="stage" id="stage">
+          <div class="tool-msg hidden" id="toolMsg"></div>
+          <div class="print" id="print"><canvas id="planCanvas"></canvas></div>
+          <div class="float-bar hidden" id="floatBar"></div>
+        </div>
+        <div class="scale-bar" id="scaleBar">
+          <div class="scale-row">
+            <p class="scale-msg" id="scaleMsg"></p>
+            <button class="btn-secondary btn-sm" id="scaleBtn">Check scale</button>
+          </div>
+          <div class="scale-ask hidden" id="scaleAsk">
+            <label for="scaleLen">How long is that line?</label>
+            <input id="scaleLen" placeholder="12'6&quot;" autocomplete="off" inputmode="text">
+            <button class="btn-primary btn-sm" id="scaleSave">Save scale</button>
+            <button class="link-btn" id="scaleRedo">Draw it again</button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="panel" id="panel">
+        <!-- Measure -->
+        <div id="measurePanel" class="pane">
+          <div class="stats">
+            <div class="stat"><b id="statRooms">0</b><span>Spaces</span></div>
+            <div class="stat"><b id="statArea">0</b><span>Total sq ft</span></div>
+            <div class="stat"><b id="statEst">0</b><span>Estimated</span></div>
+          </div>
+          <div class="rooms-head">
+            <p class="eyebrow">Rooms</p>
+            <button class="btn-secondary btn-sm" id="addBtn">+ Add a room</button>
+          </div>
+          <div class="room-grid" id="roomGrid"></div>
+          <p class="hint">
+            <span class="legend"><span class="swatch"></span>From the plan</span>
+            <span class="legend"><span class="swatch dash"></span>Estimated</span><br>
+            Click a room to select it, drag to move it, drag a corner to resize. For rooms that aren't rectangles, drag a + on a side to add a corner. To remove a corner, tap it and then the &times; beside it. With no corner picked, Delete removes the room.
+          </p>
+        </div>
+
+        <!-- Furnish -->
+        <div id="furnishPanel" class="hidden">
+          <div class="ptabs" role="tablist" aria-label="Furnish">
+            <button class="ptab on" data-ptab="add">Add</button>
+            <button class="ptab" data-ptab="rugs">Rugs</button>
+            <button class="ptab" data-ptab="doors">Doors</button>
+            <button class="ptab" data-ptab="checks">Checks<span class="count hidden" id="checkCount"></span></button>
+          </div>
+
+          <div class="pane" id="pane-add">
+            <p class="pane-sub" id="pieceSub"></p>
+            <div class="cats" id="catTabs"></div>
+            <div class="cat-grid" id="pieceChips"></div>
+            <div class="own hidden" id="ownForm">
+              <label class="field"><span>Name</span><input id="customName" placeholder="Vintage credenza" maxlength="30" autocomplete="off"></label>
+              <label class="field"><span>Shape</span><select id="customShape"><option value="rect">Rectangle</option><option value="round">Round or oval</option></select></label>
+              <div class="field-row">
+                <label class="field"><span>Width, inches</span><input id="customW" placeholder="72" autocomplete="off" inputmode="decimal"></label>
+                <label class="field"><span>Depth, inches</span><input id="customD" placeholder="18" autocomplete="off" inputmode="decimal"></label>
+              </div>
+              <button class="btn-primary btn-sm" id="customAdd">Add to the plan</button>
+              <p class="hint" style="margin-top:10px">Use the listed size of the exact piece you're shopping for. For round pieces the width is the diameter; add a depth to make it an oval.</p>
+            </div>
+          </div>
+
+          <div class="pane hidden" id="pane-rugs">
+            <p class="pane-sub" id="rugSub"></p>
+            <div id="rugBody"></div>
+            <p class="hint">Rugs want 12" of floor at the walls (6" is tight). Sizes are checked against the room outline, so fix the outline in Measure first if it's off.</p>
+          </div>
+
+          <div class="pane hidden" id="pane-doors">
+            <p class="pane-sub">Mark the doors that open into a room and the planner shows where they swing, so you can see whether furniture is in the way.</p>
+            <button class="btn-primary btn-sm" id="doorBtn">Mark a door</button>
+            <p class="hint" id="doorHint"></p>
+            <div id="doorList"></div>
+          </div>
+
+          <div class="pane hidden" id="pane-checks">
+            <p class="pane-sub" id="spaceSub"></p>
+            <div class="space-list" id="spaceList"></div>
+            <p class="hint">
+              <span class="legend"><span class="swatch" style="border-top-color:#7f9433"></span>Comfortable</span>
+              <span class="legend"><span class="swatch" style="border-top-color:#b07d14"></span>Tight</span>
+              <span class="legend"><span class="swatch"></span>Doesn't work</span><br>
+              Lines on the plan show these checks and any walkway under 36". Select a piece to see every side of it. A piece outlined in burgundy runs into a wall or another piece.
+            </p>
+          </div>
+
+          <div class="pane hidden" id="pane-detail">
+            <button class="link-btn detail-back" data-pact="done">&larr; Back</button>
+            <div id="pieceBar"></div>
+            <div id="doorBar"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -662,6 +662,10 @@ def renovation_budget_estimator():
 def floor_plan_parser():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "floor-plan-parser.html")
 
+@app.route("/tools/floor-planner")
+def floor_planner():
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "floor-planner.html")
+
 @app.route("/tools/shop-the-room")
 def shop_the_room():
     return send_from_directory(os.path.join(os.path.dirname(__file__), "static", "tools"), "shop-the-room.html")
