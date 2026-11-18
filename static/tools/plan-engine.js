@@ -698,9 +698,11 @@ var GEO = (function () {
          pillows), 'table' (plain)
    role  what it is for, which decides its spacing checks and rug styles:
          seat, coffee, side, storage, bed, nightstand, dining, chair, desk
-   shape 'rect' (default), 'round', or 'L' (a sectional: back along the
-         top, the return down the left side, arm deep; flip mirrors it)
-   chairs  dining tables only: [chairs per long side, chairs per end]
+   shape 'rect' (default), 'round' (an oval when w and d differ), or 'L'
+         (a sectional: back along the top, the return down the left side,
+         arm deep; flip mirrors it)
+   chairs  dining tables only: [chairs per long side, chairs per end], or
+           { around: n } for n chairs spaced evenly around a round table
    ===================================================================== */
 var FURNITURE = (function () {
   var CATALOG = [
@@ -710,7 +712,10 @@ var FURNITURE = (function () {
       { id: 'sectional', name: 'Sectional', w: 112, d: 84, h: 34, kind: 'seat', role: 'seat', shape: 'L', arm: 38 },
       { id: 'armchair', name: 'Armchair', w: 32, d: 34, h: 32, kind: 'seat', role: 'seat' },
       { id: 'coffee', name: 'Coffee table', w: 48, d: 24, h: 18, kind: 'table', role: 'coffee' },
+      { id: 'coffeeR', name: 'Round coffee table', w: 36, d: 36, h: 18, kind: 'table', role: 'coffee', shape: 'round' },
+      { id: 'ottoman', name: 'Round ottoman', w: 30, d: 30, h: 17, kind: 'table', role: 'coffee', shape: 'round' },
       { id: 'side', name: 'Side table', w: 20, d: 20, h: 24, kind: 'table', role: 'side' },
+      { id: 'sideR', name: 'Round side table', w: 20, d: 20, h: 24, kind: 'table', role: 'side', shape: 'round' },
       { id: 'media', name: 'Media console', w: 70, d: 18, h: 24, kind: 'table', role: 'storage' }
     ] },
     { group: 'Bedroom', items: [
@@ -721,7 +726,9 @@ var FURNITURE = (function () {
       { id: 'dresser', name: 'Dresser', w: 60, d: 20, h: 34, kind: 'table', role: 'storage' }
     ] },
     { group: 'Dining', items: [
-      { id: 'dining4r', name: 'Round table for 4', w: 48, d: 48, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: 'round' },
+      { id: 'dining4r', name: 'Round table for 4', w: 48, d: 48, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: { around: 4 } },
+      { id: 'dining6r', name: 'Round table for 6', w: 60, d: 60, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: { around: 6 } },
+      { id: 'dining6o', name: 'Oval table for 6', w: 78, d: 42, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: [2, 1] },
       { id: 'dining4', name: 'Table for 4', w: 60, d: 36, h: 30, kind: 'table', role: 'dining', chairs: [2, 0] },
       { id: 'dining6', name: 'Table for 6', w: 72, d: 38, h: 30, kind: 'table', role: 'dining', chairs: [2, 1] },
       { id: 'dining8', name: 'Table for 8', w: 96, d: 40, h: 30, kind: 'table', role: 'dining', chairs: [3, 1] },
@@ -753,7 +760,7 @@ var FURNITURE = (function () {
     var w = pc.w, d = pc.d, i;
     if (pc.shape === 'round') {
       var pts = [];
-      for (i = 0; i < 24; i++) { var a = i / 24 * Math.PI * 2; pts.push({ x: Math.cos(a) * w / 2, y: Math.sin(a) * d / 2 }); }
+      for (i = 0; i < 48; i++) { var a = i / 48 * Math.PI * 2; pts.push({ x: Math.cos(a) * w / 2, y: Math.sin(a) * d / 2 }); }
       return pts;
     }
     if (pc.shape === 'L') {
@@ -785,15 +792,22 @@ var FURNITURE = (function () {
   function chairLayout(t) {
     var c = get('chair'), off = c.d / 2 - TUCK, out = [];
     if (!t || !t.chairs) return out;
-    if (t.chairs === 'round') {
-      var R = t.w / 2 + off;
-      return [{ x: 0, y: -R, rot: 0 }, { x: R, y: 0, rot: 90 }, { x: 0, y: R, rot: 180 }, { x: -R, y: 0, rot: 270 }];
+    if (t.chairs.around) {
+      // Evenly around, starting at the top, each chair facing the middle
+      var R = Math.max(t.w, t.d) / 2 + off;
+      for (var k = 0; k < t.chairs.around; k++) {
+        var a = k / t.chairs.around * Math.PI * 2 - Math.PI / 2;
+        out.push({ x: Math.cos(a) * R, y: Math.sin(a) * R, rot: ((a * 180 / Math.PI + 90) % 360 + 360) % 360 });
+      }
+      return out;
     }
     var n = t.chairs[0], step = t.w / n;
     for (var i = 0; i < n; i++) {
       var x = -t.w / 2 + step * (i + 0.5);
-      out.push({ x: x, y: -(t.d / 2 + off), rot: 0 });
-      out.push({ x: x, y: t.d / 2 + off, rot: 180 });
+      // An oval table's edge curves in toward the ends, so its side chairs sit closer
+      var edge = t.shape === 'round' ? t.d / 2 * Math.sqrt(Math.max(0, 1 - Math.pow(x / (t.w / 2), 2))) : t.d / 2;
+      out.push({ x: x, y: -(edge + off), rot: 0 });
+      out.push({ x: x, y: edge + off, rot: 180 });
     }
     if (t.chairs[1]) {
       out.push({ x: -(t.w / 2 + off), y: 0, rot: 270 });
@@ -802,6 +816,14 @@ var FURNITURE = (function () {
     return out;
   }
 
+  // The outline split into pieces with no inward corners (a sectional is two boxes),
+  // in the piece's own frame, inches. Used to measure how much two pieces overlap.
+  function parts(pc) {
+    if (pc.shape !== 'L') return [outline(pc)];
+    var w = pc.w, d = pc.d, t = Math.min(pc.arm || 38, w / 2, d / 2), f = pc.flip ? -1 : 1;
+    function box(x0, y0, x1, y1) { return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(function (p) { return { x: p[0] * f, y: p[1] }; }); }
+    return [box(-w / 2, -d / 2, w / 2, -d / 2 + t), box(-w / 2, -d / 2 + t, -w / 2 + t, d / 2)];
+  }
   // The outline on the plan: cx, cy and the result share units, k is those units per inch
   function shapeAt(pc, cx, cy, k) { return GEO.place(outline(pc), cx, cy, pc.rot, k); }
   // A point in the piece's own frame: x across its width, y from back (-) to front (+)
@@ -817,7 +839,7 @@ var FURNITURE = (function () {
   // Bounding box of the piece on the plan, same units as cx, cy
   function bounds(pc, cx, cy, k) { return PLAN.bounds(shapeAt(pc, cx, cy, k)); }
 
-  return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, outline: outline, legs: legs,
+  return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, outline: outline, legs: legs, parts: parts,
            chairLayout: chairLayout, shapeAt: shapeAt, toLocal: toLocal, contains: contains, bounds: bounds };
 })();
 
@@ -926,8 +948,8 @@ var SPACE = (function () {
         else if (pc.role === 'bed' && (sd.name === 'left' || sd.name === 'right')) rule = 'bed';
         else if (pc.role === 'dining') rule = 'dining';
         // A narrow walkway is flagged between two pieces, or between a wall and a piece big enough
-        // to make a path (not a nightstand in a corner). Chairs at a table are covered by the dining check.
-        var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || WALL_PATH[pc.role]);
+        // to make a path (36" or more across, and not a nightstand or side table). Chairs at a table are covered by the dining check.
+        var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || (WALL_PATH[pc.role] && Math.max(pc.w, pc.d) >= 36));
         var show = rule !== 'walk' ? 'always' : inch < AGAINST ? false : passage ? 'always' : 'selected';
         lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, status: status(rule, inch),
                      to: { x: best.from.x + sd.dir.x * best.gap, y: best.from.y + sd.dir.y * best.gap },
@@ -971,7 +993,76 @@ var SPACE = (function () {
     return rows.sort(function (p, q) { return (ORDER[p.type] - ORDER[q.type]) || (RANK[q.status] - RANK[p.status]) || (p.a - q.a); });
   }
 
-  return { RULES: RULES, AGAINST: AGAINST, PASSAGE: PASSAGE, status: status, sides: sides, check: check, report: report };
+  /* ---------- Pieces in the wrong place ----------
+     A piece that runs into a wall, or into another piece. Walls here are the
+     plan's real wall lines (SNAP's wall map), not the room outlines, so a sofa
+     can sit across the line between two rooms of an open plan. */
+  var WALL_MIN = 2;      // inches: less than this into a wall is drawing slop
+  var OVERLAP_MIN = 1;   // inches
+  // How far into the wall ink the piece reaches (feet): sample the piece every
+  // 1.5" and keep the wall point farthest in from the piece's edge.
+  function intoWall(pc, wallTest) {
+    var bb = PLAN.bounds(pc.poly), step = 1.5 / 12, deep = 0;
+    for (var x = bb.x + step / 2; x < bb.x + bb.w; x += step) {
+      for (var y = bb.y + step / 2; y < bb.y + bb.h; y += step) {
+        var p = { x: x, y: y };
+        if (!wallTest(p) || !PLAN.pointInPoly(p, pc.poly)) continue;
+        deep = Math.max(deep, GEO.edgeDist(p, pc.poly));
+      }
+    }
+    return deep;
+  }
+  // How far one shape with no inward corners would have to move to clear the other (feet)
+  function sat(A, B) {
+    var best = Infinity, sets = [A, B];
+    for (var s = 0; s < 2; s++) {
+      var P = sets[s];
+      for (var i = 0; i < P.length; i++) {
+        var a = P[i], b = P[(i + 1) % P.length], ex = b.x - a.x, ey = b.y - a.y, L = Math.hypot(ex, ey);
+        if (L < 1e-9) continue;
+        var nx = -ey / L, ny = ex / L;
+        var pa = proj(A, nx, ny), pb = proj(B, nx, ny), ov = Math.min(pa[1], pb[1]) - Math.max(pa[0], pb[0]);
+        if (ov <= 0) return 0;
+        best = Math.min(best, ov);
+      }
+    }
+    return best;
+  }
+  function proj(P, nx, ny) {
+    var lo = Infinity, hi = -Infinity;
+    P.forEach(function (p) { var v = p.x * nx + p.y * ny; lo = Math.min(lo, v); hi = Math.max(hi, v); });
+    return [lo, hi];
+  }
+  function overlap(a, b) {
+    var A = FURNITURE.parts(a).map(function (q) { return GEO.place(q, a.cx, a.cy, a.rot, 1 / 12); });
+    var B = FURNITURE.parts(b).map(function (q) { return GEO.place(q, b.cx, b.cy, b.rot, 1 / 12); });
+    var deep = 0;
+    A.forEach(function (pa) { B.forEach(function (pb) { deep = Math.max(deep, sat(pa, pb)); }); });
+    return deep;
+  }
+  // Chairs are meant to tuck under dining tables and desks
+  function tucked(c, t) { return c.role === 'chair' && (t.role === 'dining' || t.role === 'desk'); }
+  // [{ type: 'wall', a, inch }] and [{ type: 'overlap', a, b, inch }].
+  // wallTest(p) says whether point p (feet) is wall ink; pass null when the plan has no wall map.
+  function conflicts(pieces, wallTest) {
+    var out = [];
+    pieces.forEach(function (a, i) {
+      if (wallTest) {
+        var w = Math.round(intoWall(a, wallTest) * 12);
+        if (w >= WALL_MIN) out.push({ type: 'wall', a: i, inch: w });
+      }
+      for (var j = i + 1; j < pieces.length; j++) {
+        var b = pieces[j];
+        if (tucked(a, b) || tucked(b, a)) continue;
+        var o = Math.round(overlap(a, b) * 12);
+        if (o >= OVERLAP_MIN) out.push({ type: 'overlap', a: i, b: j, inch: o });
+      }
+    });
+    return out;
+  }
+
+  return { RULES: RULES, AGAINST: AGAINST, PASSAGE: PASSAGE, status: status, sides: sides, check: check, report: report,
+           conflicts: conflicts, overlap: overlap, intoWall: intoWall };
 })();
 
 /* =====================================================================

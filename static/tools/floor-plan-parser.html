@@ -243,6 +243,9 @@
     .rug-empty.small { font-size: 13px; margin-bottom: 10px; }
     .door-row { margin-top: 14px; margin-bottom: 0; }
     .door-hint { font-size: 13px; color: #582b36; }
+    .warn-text { color: #582b36; font-weight: 600; }
+    .room-select.custom-shape { height: 34px; min-width: 0; font-size: 14px; }
+    @media (max-width: 520px) { .room-select.custom-shape { width: 100%; } }
     #doorBar { margin-top: 10px; }
     .room-select.door-w { height: 34px; min-width: 0; font-size: 13px; }
     .space-list { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; overflow: hidden; }
@@ -315,7 +318,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=6"></script>
+  <script src="/static/tools/plan-engine.js?v=7"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -872,7 +875,10 @@
       }
       return -1;
     }
-    function pieceSize(pc) { return pc.shape === 'round' ? FURNITURE.fmtIn(pc.w) + ' round' : FURNITURE.fmtIn(pc.w) + ' x ' + FURNITURE.fmtIn(pc.d); }
+    function pieceSize(pc) {
+      if (pc.shape === 'round') return Math.round(pc.w) === Math.round(pc.d) ? FURNITURE.fmtIn(pc.w) + ' round' : FURNITURE.fmtIn(pc.w) + ' x ' + FURNITURE.fmtIn(pc.d) + ' oval';
+      return FURNITURE.fmtIn(pc.w) + ' x ' + FURNITURE.fmtIn(pc.d);
+    }
     // A piece in feet, the way the engine's spacing, rug and door checks take it
     function pieceFt(pc) {
       var f = state.scale.ftPerPx, cx = pc.x / 100 * state.W * f, cy = pc.y / 100 * state.H * f;
@@ -885,6 +891,19 @@
     function groupFor(r) {
       if (!state.scale || !r) return [];
       return state.pieces.filter(function (pc) { return pieceRoom(pc) === r; }).map(pieceFt);
+    }
+    // Pieces that run into a wall or into each other (see SPACE.conflicts in plan-engine.js).
+    // Walls come from the plan's wall lines, so this needs the wall map from the analysis step.
+    function wallTestFt() {
+      if (!state.scale || !state.walls || !state.walls.map) return null;
+      var f = state.scale.ftPerPx;
+      return function (p) { return PLAN.wallAt(state.walls, p.x / f, p.y / f, state.W); };
+    }
+    function conflicts() { return state.scale && state.pieces.length ? SPACE.conflicts(piecesFt(), wallTestFt()) : []; }
+    function conflictText(c, who) {
+      var other = who === c.a ? c.b : c.a;
+      if (c.type === 'wall') return 'runs ' + c.inch + '" into a wall';
+      return 'overlaps the ' + nameOf(other).toLowerCase() + ' by ' + c.inch + '"';
     }
     // Every spacing line on the plan (see SPACE in plan-engine.js)
     function spacing() { return state.scale && state.pieces.length ? SPACE.check(piecesFt(), wallsFt()) : []; }
@@ -900,7 +919,8 @@
     }
 
     function drawPieces(ctx, forExport) {
-      var ratio = displayRatio();
+      var ratio = displayRatio(), bad = {};
+      conflicts().forEach(function (c) { bad[c.a] = 1; if (c.type === 'overlap') bad[c.b] = 1; });
       state.pieces.forEach(function (pc, k) {
         var q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && k === state.pieceSel;
         var loc = FURNITURE.outline(pc).map(function (p) { return { x: p.x * q.k, y: p.y * q.k }; });
@@ -908,7 +928,7 @@
         ctx.translate(q.cx, q.cy);
         ctx.rotate(pc.rot * Math.PI / 180);
         ctx.shadowColor = 'rgba(67,62,60,0.22)'; ctx.shadowBlur = 4 * ratio; ctx.shadowOffsetY = 1 * ratio;
-        ctx.fillStyle = '#f5f0e8';
+        ctx.fillStyle = bad[k] ? '#f6e6e9' : '#f5f0e8';
         tracePath(ctx, loc); ctx.fill();
         ctx.shadowColor = 'transparent';
         // The back of seating and the headboard of a bed, so you can tell which way it faces
@@ -928,7 +948,9 @@
         }
         tracePath(ctx, loc);
         ctx.lineJoin = 'round';
-        ctx.lineWidth = (sel ? 3 : 1.6) * ratio; ctx.strokeStyle = sel ? '#7f9433' : '#433E3C'; ctx.stroke();
+        // A piece in a wall or on another piece gets a burgundy outline (green while selected, burgundy dashes over it)
+        ctx.lineWidth = (sel || bad[k] ? 3 : 1.6) * ratio; ctx.strokeStyle = sel ? '#7f9433' : bad[k] ? '#582b36' : '#433E3C'; ctx.stroke();
+        if (sel && bad[k]) { ctx.setLineDash([6 * ratio, 5 * ratio]); ctx.strokeStyle = '#582b36'; ctx.stroke(); ctx.setLineDash([]); }
         // Name and size, kept upright. A sectional's label sits on its long back run.
         var lx = 0, ly = pc.kind === 'bed' ? q.d * 0.12 : 0, room = q.w - 6 * ratio, depth = q.d;
         if (pc.shape === 'L') { var arm = Math.min(pc.arm || 38, pc.w / 2, pc.d / 2) * q.k; ly = -q.d / 2 + arm / 2; depth = arm; }
@@ -1008,14 +1030,15 @@
     // The chairs that came with a table
     function chairsOf(pc) { return pc && pc.role === 'dining' ? state.pieces.filter(function (o) { return o.group === pc.id; }) : []; }
     function addCustom() {
-      var nameEl = $('customName'), wEl = $('customW'), dEl = $('customD');
+      var nameEl = $('customName'), wEl = $('customW'), dEl = $('customD'), round = $('customShape').value === 'round';
       var w = FURNITURE.parseInches(wEl.value), d = FURNITURE.parseInches(dEl.value), ok = true;
+      if (round && !dEl.value.trim()) d = w;   // round: the width is the diameter unless a depth makes it an oval
       [[wEl, w], [dEl, d]].forEach(function (pair) {
         var bad = !pair[1] || pair[1] < 4 || pair[1] > 240;
         pair[0].classList.toggle('bad', bad); if (bad) ok = false;
       });
       if (!ok) return;
-      addPiece({ name: (nameEl.value.trim() || 'My piece').slice(0, 30), w: w, d: d, kind: 'other', role: 'other' });
+      addPiece({ name: (nameEl.value.trim() || 'My piece').slice(0, 30), w: w, d: d, kind: 'other', role: 'other', shape: round ? 'round' : 'rect' });
       nameEl.value = ''; wEl.value = ''; dEl.value = '';
     }
     // Removing a table takes its chairs with it
@@ -1064,9 +1087,11 @@
         : 'Pick a room, then tap a piece to drop it in at its real size.';
       if (!pc) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
       bar.classList.remove('hidden');
-      var nCh = chairsOf(pc).length;
+      var nCh = chairsOf(pc).length, k = state.pieceSel;
+      var probs = conflicts().filter(function (c) { return c.a === k || c.b === k; }).map(function (c) { return conflictText(c, k); });
       bar.innerHTML = '<p><b>' + esc(pc.name) + '</b>, ' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (pc.rot ? ', turned ' + pc.rot + '&deg;' : '') +
-        '. Drag it on the plan to move it' + (nCh ? '; the chairs come along, and each chair can be dragged on its own.' : '.') + '</p>' +
+        '. ' + (probs.length ? '<span class="warn-text">It ' + esc(probs.join(' and ')) + '.</span> ' : '') +
+        'Drag it on the plan to move it' + (nCh ? '; the chairs come along, and each chair can be dragged on its own.' : '.') + '</p>' +
         '<div class="btn-row">' +
           '<button class="btn-secondary btn-sm" data-pact="turn15">Turn 15&deg;</button>' +
           '<button class="btn-secondary btn-sm" data-pact="turn90">Turn 90&deg;</button>' +
@@ -1105,7 +1130,14 @@
         else { label = 'Walkway between the ' + nameOf(r.a).toLowerCase() + ' and ' + (r.b < 0 ? 'the wall' : 'the ' + nameOf(r.b).toLowerCase()); value = inchText(r.inch); }
         return { label: label, value: value, status: r.status, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0])) };
       });
-      var pcs = piecesFt();
+      var pcs = piecesFt(), probs = [];
+      conflicts().forEach(function (c) {
+        if (!inRoom(c.a) && !(c.type === 'overlap' && inRoom(c.b))) return;
+        probs.push(c.type === 'wall'
+          ? { label: 'The ' + nameOf(c.a).toLowerCase() + ' runs into a wall', value: c.inch + '"', status: 'close', word: 'Into the wall' }
+          : { label: 'The ' + nameOf(c.a).toLowerCase() + ' overlaps the ' + nameOf(c.b).toLowerCase(), value: c.inch + '"', status: 'close', word: 'Overlapping' });
+      });
+      rows = probs.concat(rows);
       state.doors.forEach(function (d, k) {
         if (room && d.room !== room.id) return;
         var chk = DOOR.check(doorFt(d), pcs), hit = chk.hits.length > 0;
@@ -1697,7 +1729,7 @@
       if (state.drag && (state.drag.mode === 'piece' || state.drag.mode === 'door')) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
         state.drag = null;
-        renderSpacing(); renderDoorBar();
+        renderSpacing(); renderDoorBar(); renderPieceBar();
         if (state.mode === 'furnish' && state.rooms[state.selected] && state.rooms[state.selected].rug) renderFurnish();
         return;
       }
@@ -2426,6 +2458,7 @@
               <input id="customName" placeholder="Name" maxlength="30" autocomplete="off" aria-label="Piece name">
               <input id="customW" class="short" placeholder="Width, inches" autocomplete="off" inputmode="decimal" aria-label="Width in inches">
               <input id="customD" class="short" placeholder="Depth, inches" autocomplete="off" inputmode="decimal" aria-label="Depth in inches">
+              <select id="customShape" class="room-select custom-shape" aria-label="Shape"><option value="rect">Rectangle</option><option value="round">Round or oval</option></select>
               <button class="btn-secondary btn-sm" id="customAdd">Add</button>
             </div>
             <div class="rug-placed hidden" id="pieceBar"></div>
@@ -2455,7 +2488,7 @@
             <span class="legend"><span class="swatch" style="border-top-color:#7f9433"></span>Comfortable</span>
             <span class="legend"><span class="swatch" style="border-top-color:#b07d14"></span>Tight</span>
             <span class="legend"><span class="swatch"></span>Doesn't work</span><br>
-            Rugs want 12" of floor at the walls (6" is tight). Spacing lines show the room checks and any walkway under 36"; pick a piece to see every side of it.
+            Rugs want 12" of floor at the walls (6" is tight). Spacing lines show the room checks and any walkway under 36"; pick a piece to see every side of it. A piece outlined in burgundy runs into a wall or another piece.
             Everything is measured against the room outlines, so fix an outline in Measure first if it's off. Drag a rug, piece, or door to move it; Delete removes whichever is selected.
           </p>
         </div>
