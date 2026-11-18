@@ -867,10 +867,18 @@
       var f = state.scale.ftPerPx, k = 1 / 12 / f;
       return { cx: pc.x / 100 * state.W, cy: pc.y / 100 * state.H, w: pc.w * k, d: pc.d * k, k: k };
     }
+    // Drawing order: chairs first, so a table covers the part of a chair pushed in under it,
+    // the way it looks from above. Everything else keeps the order it was added in.
+    function drawOrder() {
+      var chairs = [], rest = [];
+      state.pieces.forEach(function (pc, k) { (pc.role === 'chair' ? chairs : rest).push(k); });
+      return chairs.concat(rest);
+    }
     function hitPiece(p) {
       if (!state.scale) return -1;
-      for (var k = state.pieces.length - 1; k >= 0; k--) {   // topmost first
-        var q = piecePx(state.pieces[k]);
+      var order = drawOrder();
+      for (var n = order.length - 1; n >= 0; n--) {   // topmost first
+        var k = order[n], q = piecePx(state.pieces[k]);
         if (FURNITURE.contains(p, q.cx, q.cy, state.pieces[k], q.k)) return k;
       }
       return -1;
@@ -921,8 +929,8 @@
     function drawPieces(ctx, forExport) {
       var ratio = displayRatio(), bad = {};
       conflicts().forEach(function (c) { bad[c.a] = 1; if (c.type === 'overlap') bad[c.b] = 1; });
-      state.pieces.forEach(function (pc, k) {
-        var q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && k === state.pieceSel;
+      drawOrder().forEach(function (k) {
+        var pc = state.pieces[k], q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && k === state.pieceSel;
         var loc = FURNITURE.outline(pc).map(function (p) { return { x: p.x * q.k, y: p.y * q.k }; });
         ctx.save();
         ctx.translate(q.cx, q.cy);
