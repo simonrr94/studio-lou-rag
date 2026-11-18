@@ -238,6 +238,21 @@
     .custom-row input.short { width: 92px; }
     .custom-row input:focus { outline: none; border-color: #582b36; background: #ffffff; }
     .custom-row input.bad { border-color: #b3475b; background: #fdf6f7; }
+    .piece-chip.on { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; color: #433E3C; }
+    .style-row { margin-bottom: 12px; }
+    .rug-empty.small { font-size: 13px; margin-bottom: 10px; }
+    .door-row { margin-top: 14px; margin-bottom: 0; }
+    .door-hint { font-size: 13px; color: #582b36; }
+    #doorBar { margin-top: 10px; }
+    .room-select.door-w { height: 34px; min-width: 0; font-size: 13px; }
+    .space-list { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; overflow: hidden; }
+    .space-list .rug-empty { padding: 12px 14px; }
+    .space-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 9px 14px; font-size: 13px; line-height: 1.45; }
+    .space-row + .space-row { border-top: 1px solid #f0ebe3; }
+    .space-label { color: #433E3C; }
+    .space-val { color: #6b6560; white-space: nowrap; }
+    .space-val .badge { margin-left: 6px; }
+    .badge.ok { background: #eef2dc; color: #4f5c1d; }
     @media (max-width: 520px) {
       .piece-group-name { width: 100%; }
       .custom-row input { width: 100%; }
@@ -300,7 +315,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=5"></script>
+  <script src="/static/tools/plan-engine.js?v=6"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -339,6 +354,8 @@
       rugCheck: null,   // { room, key, result }: the rug sizes checked for the selected room
       pieces: [],       // furniture placed in Furnish
       pieceSel: -1,     // index of the selected piece, or -1
+      doors: [],        // doors marked in Furnish
+      doorSel: -1,      // index of the selected door, or -1
       ptSel: -1         // Measure: the corner tapped on the selected room's shape, which shows a remove (x) button
     };
 
@@ -536,7 +553,7 @@
 
       state.rooms = []; state.selected = -1;
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null; endScaleTool();
-      state.pieces = []; state.pieceSel = -1;
+      state.pieces = []; state.pieceSel = -1; state.doors = []; state.doorSel = -1;
       setMode('measure');
       // Find walls and printed room names while the model reads the plan
       state.analysis = new Promise(function (resolve) {
@@ -586,7 +603,7 @@
         ctx.restore();
       });
 
-      if (state.scale) { drawRugs(ctx, forExport); drawPieces(ctx, forExport); }
+      if (state.scale) { drawRugs(ctx, forExport); drawPieces(ctx, forExport); drawDoors(ctx, forExport); }
 
       state.rooms.forEach(function (r, i) {
         var b = px(r), sel = !forExport && i === state.selected;
@@ -638,10 +655,17 @@
         ctx.restore();
       });
 
-      // Spacing lines: the selected room's rug on screen, every rug in exports
+      // Spacing lines: the selected room's rug on screen, every rug in exports; then
+      // the furniture checks, plus every side of the selected piece while it's picked
       if (state.scale) {
         if (forExport) state.rooms.forEach(function (r) { drawGaps(ctx, r); });
         else if (state.mode === 'furnish' && state.selected > -1) drawGaps(ctx, state.rooms[state.selected]);
+        if (forExport || state.mode === 'furnish') {
+          var selPc = forExport ? -1 : state.pieceSel;
+          spacing().forEach(function (l) {
+            if (l.show === 'always' || (l.show === 'selected' && l.piece === selPc)) drawGapLine(ctx, l.from, l.to, SPACE_COL[l.status], fmtGap(l.gap));
+          });
+        }
       }
 
       // Corner handles on the selected room, and a + in the middle of each side to add a corner
@@ -799,32 +823,35 @@
     // Spacing lines from each side of the rug to the nearest wall, colored by how much floor is left
     function drawGaps(ctx, r) {
       if (!rugOK(r)) return;
-      var info = rugInfo(r), f = state.scale.ftPerPx, ratio = displayRatio();
-      info.gaps.forEach(function (g) {
-        var a = { x: g.from.x / f, y: g.from.y / f }, b = { x: g.to.x / f, y: g.to.y / f }, col = gapColor(g.gap);
-        var len = Math.hypot(b.x - a.x, b.y - a.y);
-        if (len < 1) return;
-        var nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len, t = 5 * ratio;
-        ctx.save();
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 4.5 * ratio;
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        ctx.strokeStyle = col; ctx.lineWidth = 2 * ratio;
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-        [a, b].forEach(function (p) { ctx.moveTo(p.x - nx * t, p.y - ny * t); ctx.lineTo(p.x + nx * t, p.y + ny * t); });
-        ctx.stroke();
-        var label = fmtGap(g.gap), fs = 11 * ratio;
-        ctx.font = '700 ' + fs + 'px "DM Sans", sans-serif';
-        var pw = ctx.measureText(label).width + 10 * ratio, ph = fs + 7 * ratio;
-        var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-        // Short lines: set the label beside the line instead of on it
-        if (len < Math.max(pw, ph) + 6 * ratio) { mx += nx * (pw / 2 + 8 * ratio); my += ny * (ph / 2 + 8 * ratio); }
-        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = col; ctx.lineWidth = 1.2 * ratio;
-        roundRect(ctx, mx - pw / 2, my - ph / 2, pw, ph, ph / 2); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(label, mx, my + 0.5 * ratio);
-        ctx.restore();
-      });
+      rugInfo(r).gaps.forEach(function (g) { drawGapLine(ctx, g.from, g.to, gapColor(g.gap), fmtGap(g.gap)); });
+    }
+    // One spacing line between two points in feet, with end ticks and its measurement
+    var SPACE_COL = { ok: '#7f9433', tight: '#b07d14', close: '#582b36' };
+    function drawGapLine(ctx, from, to, col, label) {
+      var f = state.scale.ftPerPx, ratio = displayRatio();
+      var a = { x: from.x / f, y: from.y / f }, b = { x: to.x / f, y: to.y / f };
+      var len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 1) return;
+      var nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len, t = 5 * ratio;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 4.5 * ratio;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 2 * ratio;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      [a, b].forEach(function (p) { ctx.moveTo(p.x - nx * t, p.y - ny * t); ctx.lineTo(p.x + nx * t, p.y + ny * t); });
+      ctx.stroke();
+      var fs = 11 * ratio;
+      ctx.font = '700 ' + fs + 'px "DM Sans", sans-serif';
+      var pw = ctx.measureText(label).width + 10 * ratio, ph = fs + 7 * ratio;
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      // Short lines: set the label beside the line instead of on it
+      if (len < Math.max(pw, ph) + 6 * ratio) { mx += nx * (pw / 2 + 8 * ratio); my += ny * (ph / 2 + 8 * ratio); }
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = col; ctx.lineWidth = 1.2 * ratio;
+      roundRect(ctx, mx - pw / 2, my - ph / 2, pw, ph, ph / 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, mx, my + 0.5 * ratio);
+      ctx.restore();
     }
 
     /* ---------- Furniture (Furnish mode) ----------
@@ -832,19 +859,35 @@
        (open plans, doorways). Each is { id, type, name, kind, w, d, h, x, y, rot }:
        size in inches, center in percent of the image, rot in degrees clockwise. */
     function pieceOK(pc) { return pc && state.scale; }
+    // Center in canvas px, size in canvas px, and k: canvas px per inch
     function piecePx(pc) {
-      var f = state.scale.ftPerPx;
-      return { cx: pc.x / 100 * state.W, cy: pc.y / 100 * state.H, w: pc.w / 12 / f, d: pc.d / 12 / f };
+      var f = state.scale.ftPerPx, k = 1 / 12 / f;
+      return { cx: pc.x / 100 * state.W, cy: pc.y / 100 * state.H, w: pc.w * k, d: pc.d * k, k: k };
     }
     function hitPiece(p) {
       if (!state.scale) return -1;
       for (var k = state.pieces.length - 1; k >= 0; k--) {   // topmost first
         var q = piecePx(state.pieces[k]);
-        if (FURNITURE.contains(p, q.cx, q.cy, q.w, q.d, state.pieces[k].rot)) return k;
+        if (FURNITURE.contains(p, q.cx, q.cy, state.pieces[k], q.k)) return k;
       }
       return -1;
     }
-    function pieceSize(pc) { return FURNITURE.fmtIn(pc.w) + ' x ' + FURNITURE.fmtIn(pc.d); }
+    function pieceSize(pc) { return pc.shape === 'round' ? FURNITURE.fmtIn(pc.w) + ' round' : FURNITURE.fmtIn(pc.w) + ' x ' + FURNITURE.fmtIn(pc.d); }
+    // A piece in feet, the way the engine's spacing, rug and door checks take it
+    function pieceFt(pc) {
+      var f = state.scale.ftPerPx, cx = pc.x / 100 * state.W * f, cy = pc.y / 100 * state.H * f;
+      return { id: pc.id, role: pc.role || 'other', group: pc.group || null, shape: pc.shape, flip: pc.flip, arm: pc.arm,
+               w: pc.w, d: pc.d, rot: pc.rot, cx: cx, cy: cy, poly: FURNITURE.shapeAt(pc, cx, cy, 1 / 12) };
+    }
+    function piecesFt() { return state.scale ? state.pieces.map(pieceFt) : []; }
+    function wallsFt() { return state.rooms.filter(function (r) { return r.ftShape; }).map(function (r) { return r.ftShape; }); }
+    // The pieces standing in a room (their middle inside its outline), in feet
+    function groupFor(r) {
+      if (!state.scale || !r) return [];
+      return state.pieces.filter(function (pc) { return pieceRoom(pc) === r; }).map(pieceFt);
+    }
+    // Every spacing line on the plan (see SPACE in plan-engine.js)
+    function spacing() { return state.scale && state.pieces.length ? SPACE.check(piecesFt(), wallsFt()) : []; }
     // Smallest room whose outline holds the piece's center, for the PDF list
     function pieceRoom(pc) {
       var p = { x: pc.x / 100 * state.W, y: pc.y / 100 * state.H }, best = null, bestA = Infinity;
@@ -860,43 +903,53 @@
       var ratio = displayRatio();
       state.pieces.forEach(function (pc, k) {
         var q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && k === state.pieceSel;
+        var loc = FURNITURE.outline(pc).map(function (p) { return { x: p.x * q.k, y: p.y * q.k }; });
         ctx.save();
         ctx.translate(q.cx, q.cy);
         ctx.rotate(pc.rot * Math.PI / 180);
         ctx.shadowColor = 'rgba(67,62,60,0.22)'; ctx.shadowBlur = 4 * ratio; ctx.shadowOffsetY = 1 * ratio;
         ctx.fillStyle = '#f5f0e8';
-        roundRect(ctx, -q.w / 2, -q.d / 2, q.w, q.d, Math.min(4 * ratio, q.w / 4, q.d / 4)); ctx.fill();
+        tracePath(ctx, loc); ctx.fill();
         ctx.shadowColor = 'transparent';
         // The back of seating and the headboard of a bed, so you can tell which way it faces
         if (pc.kind === 'seat' || pc.kind === 'bed') {
-          var band = Math.min(q.d * (pc.kind === 'bed' ? 0.08 : 0.24), 8 / 12 / state.scale.ftPerPx);
+          ctx.save();
+          tracePath(ctx, loc); ctx.clip();
+          var band = Math.min(q.d * (pc.kind === 'bed' ? 0.08 : 0.24), 8 * q.k);
           ctx.fillStyle = '#d0c9bc';
           ctx.fillRect(-q.w / 2, -q.d / 2, q.w, band);
+          if (pc.shape === 'L') ctx.fillRect(pc.flip ? q.w / 2 - band : -q.w / 2, -q.d / 2, band, q.d);   // back of the return
+          ctx.restore();
           if (pc.kind === 'bed') { // two pillows
             ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#d0c9bc'; ctx.lineWidth = 1 * ratio;
             var pw = q.w * 0.4, ph = q.d * 0.12, py = -q.d / 2 + band + q.d * 0.03;
             [-q.w / 4, q.w / 4].forEach(function (x) { roundRect(ctx, x - pw / 2, py, pw, ph, ph / 3); ctx.fill(); ctx.stroke(); });
           }
         }
-        roundRect(ctx, -q.w / 2, -q.d / 2, q.w, q.d, Math.min(4 * ratio, q.w / 4, q.d / 4));
+        tracePath(ctx, loc);
+        ctx.lineJoin = 'round';
         ctx.lineWidth = (sel ? 3 : 1.6) * ratio; ctx.strokeStyle = sel ? '#7f9433' : '#433E3C'; ctx.stroke();
-        // Name and size, kept upright
+        // Name and size, kept upright. A sectional's label sits on its long back run.
+        var lx = 0, ly = pc.kind === 'bed' ? q.d * 0.12 : 0, room = q.w - 6 * ratio, depth = q.d;
+        if (pc.shape === 'L') { var arm = Math.min(pc.arm || 38, pc.w / 2, pc.d / 2) * q.k; ly = -q.d / 2 + arm / 2; depth = arm; }
+        if (pc.shape === 'round') room = q.w * 0.8;
         var turned = pc.rot % 360 > 90 && pc.rot % 360 <= 270;
+        ctx.translate(lx, ly);
         if (turned) ctx.rotate(Math.PI);
-        var fs = 10.5 * ratio, size = pieceSize(pc), ty = pc.kind === 'bed' ? q.d * 0.12 : 0;
+        var fs = 10.5 * ratio, size = pieceSize(pc);
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
         var nw = ctx.measureText(pc.name).width;
         ctx.font = '500 ' + (fs * 0.9) + 'px "DM Sans", sans-serif';
         var sw = ctx.measureText(size).width;
-        var room = q.w - 6 * ratio, twoLines = q.d > fs * 2.6;
+        var twoLines = depth > fs * 2.6;
         if (nw <= room || sel) {
           ctx.fillStyle = '#433E3C';
           ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
-          ctx.fillText(pc.name, 0, ty - (twoLines && sw <= room ? fs * 0.55 : 0));
+          ctx.fillText(pc.name, 0, -(twoLines && sw <= room ? fs * 0.55 : 0));
           if (twoLines && sw <= room) {
             ctx.fillStyle = '#6b6560'; ctx.font = '500 ' + (fs * 0.9) + 'px "DM Sans", sans-serif';
-            ctx.fillText(size, 0, ty + fs * 0.6);
+            ctx.fillText(size, 0, fs * 0.6);
           }
         }
         ctx.restore();
@@ -911,9 +964,8 @@
       var b = r ? px(r) : { x: 0, y: 0, w: state.W, h: state.H }, poly = r ? ptsPx(r) : null;
       var mid = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
       var boxes = state.pieces.map(function (pc) {
-        var q = piecePx(pc), cs = FURNITURE.corners(q.cx, q.cy, q.w, q.d, pc.rot);
-        var xs = cs.map(function (c) { return c.x; }), ys = cs.map(function (c) { return c.y; });
-        return { x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs), y0: Math.min.apply(null, ys), y1: Math.max.apply(null, ys) };
+        var q = piecePx(pc), bb = FURNITURE.bounds(pc, q.cx, q.cy, q.k);
+        return { x0: bb.x, x1: bb.x + bb.w, y0: bb.y, y1: bb.y + bb.h };
       });
       var step = Math.max(3 / 12 / f, Math.min(b.w, b.h) / 30), spots = [];
       for (var x = b.x + w / 2; x <= b.x + b.w - w / 2 + 0.01; x += step)
@@ -927,14 +979,34 @@
       }
       return { x: mid.x / state.W * 100, y: mid.y / state.H * 100 };
     }
+    function makePiece(spec, x, y, rot, group) {
+      return { id: state.nextId++, type: spec.id || 'custom', name: spec.name, kind: spec.kind || 'other', role: spec.role || 'other',
+               shape: spec.shape || 'rect', arm: spec.arm || null, flip: false, group: group || null,
+               w: spec.w, d: spec.d, h: spec.h || null, x: x, y: y, rot: rot || 0 };
+    }
+    // A dining table brings its chairs: they land around it, pushed in, and move and turn with it
     function addPiece(spec) {
       if (!state.scale) return;
-      var at = openSpot(spec, state.rooms[state.selected]);
-      state.pieces.push({ id: state.nextId++, type: spec.id || 'custom', name: spec.name, kind: spec.kind || 'other',
-                          w: spec.w, d: spec.d, h: spec.h || null, x: at.x, y: at.y, rot: 0 });
-      state.pieceSel = state.pieces.length - 1;
-      renderPieceBar(); draw();
+      var seats = FURNITURE.chairLayout(spec), chair = FURNITURE.get('chair');
+      var room = { w: spec.w, d: spec.d };
+      seats.forEach(function (c) {
+        var bb = PLAN.bounds(GEO.place(FURNITURE.outline(chair), c.x, c.y, c.rot, 1));
+        room.w = Math.max(room.w, 2 * Math.max(Math.abs(bb.x), Math.abs(bb.x + bb.w)));
+        room.d = Math.max(room.d, 2 * Math.max(Math.abs(bb.y), Math.abs(bb.y + bb.h)));
+      });
+      var at = openSpot(room, state.rooms[state.selected]);
+      var table = makePiece(spec, at.x, at.y, 0);
+      state.pieces.push(table);
+      var k = 1 / 12 / state.scale.ftPerPx;
+      seats.forEach(function (c) {
+        state.pieces.push(makePiece(chair, at.x + c.x * k / state.W * 100, at.y + c.y * k / state.H * 100, c.rot, table.id));
+      });
+      state.pieceSel = state.pieces.indexOf(table);
+      state.doorSel = -1;
+      renderPieceBar(); renderSpacing(); draw();
     }
+    // The chairs that came with a table
+    function chairsOf(pc) { return pc && pc.role === 'dining' ? state.pieces.filter(function (o) { return o.group === pc.id; }) : []; }
     function addCustom() {
       var nameEl = $('customName'), wEl = $('customW'), dEl = $('customD');
       var w = FURNITURE.parseInches(wEl.value), d = FURNITURE.parseInches(dEl.value), ok = true;
@@ -943,20 +1015,36 @@
         pair[0].classList.toggle('bad', bad); if (bad) ok = false;
       });
       if (!ok) return;
-      addPiece({ name: (nameEl.value.trim() || 'My piece').slice(0, 30), w: w, d: d, kind: 'other' });
+      addPiece({ name: (nameEl.value.trim() || 'My piece').slice(0, 30), w: w, d: d, kind: 'other', role: 'other' });
       nameEl.value = ''; wEl.value = ''; dEl.value = '';
     }
+    // Removing a table takes its chairs with it
     function removePiece() {
-      if (state.pieceSel < 0) return;
-      state.pieces.splice(state.pieceSel, 1);
+      var pc = state.pieces[state.pieceSel];
+      if (!pc) return;
+      var gone = [pc].concat(chairsOf(pc));
+      state.pieces = state.pieces.filter(function (o) { return gone.indexOf(o) < 0; });
       state.pieceSel = -1;
-      renderPieceBar(); draw();
+      renderPieceBar(); renderSpacing(); draw();
     }
+    // Turning a table turns its chairs around it too
     function turnPiece(deg) {
       var pc = state.pieces[state.pieceSel];
       if (!pc) return;
       pc.rot = ((pc.rot + deg) % 360 + 360) % 360;
-      renderPieceBar(); draw();
+      var cx = pc.x / 100 * state.W, cy = pc.y / 100 * state.H;
+      chairsOf(pc).forEach(function (c) {
+        var p = GEO.place([{ x: c.x / 100 * state.W - cx, y: c.y / 100 * state.H - cy }], cx, cy, deg, 1)[0];
+        c.x = p.x / state.W * 100; c.y = p.y / state.H * 100;
+        c.rot = ((c.rot + deg) % 360 + 360) % 360;
+      });
+      renderPieceBar(); renderSpacing(); draw();
+    }
+    function mirrorPiece() {
+      var pc = state.pieces[state.pieceSel];
+      if (!pc || pc.shape !== 'L') return;
+      pc.flip = !pc.flip;
+      renderPieceBar(); renderSpacing(); draw();
     }
 
     // Static part of the furniture panel: the catalog buttons, built once
@@ -964,7 +1052,7 @@
       $('pieceChips').innerHTML = FURNITURE.CATALOG.map(function (g) {
         return '<div class="piece-group"><span class="piece-group-name">' + g.group + '</span>' +
           g.items.map(function (it) {
-            return '<button class="piece-chip" data-piece="' + it.id + '">' + it.name + ' <small>' + FURNITURE.fmtIn(it.w) + ' x ' + FURNITURE.fmtIn(it.d) + '</small></button>';
+            return '<button class="piece-chip" data-piece="' + it.id + '">' + it.name + ' <small>' + pieceSize(it) + '</small></button>';
           }).join('') + '</div>';
       }).join('');
     }
@@ -976,11 +1064,14 @@
         : 'Pick a room, then tap a piece to drop it in at its real size.';
       if (!pc) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
       bar.classList.remove('hidden');
-      bar.innerHTML = '<p><b>' + esc(pc.name) + '</b>, ' + pieceSize(pc) + (pc.rot ? ', turned ' + pc.rot + '&deg;' : '') + '. Drag it on the plan to move it.</p>' +
+      var nCh = chairsOf(pc).length;
+      bar.innerHTML = '<p><b>' + esc(pc.name) + '</b>, ' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (pc.rot ? ', turned ' + pc.rot + '&deg;' : '') +
+        '. Drag it on the plan to move it' + (nCh ? '; the chairs come along, and each chair can be dragged on its own.' : '.') + '</p>' +
         '<div class="btn-row">' +
           '<button class="btn-secondary btn-sm" data-pact="turn15">Turn 15&deg;</button>' +
           '<button class="btn-secondary btn-sm" data-pact="turn90">Turn 90&deg;</button>' +
-          '<button class="btn-secondary btn-sm" data-pact="remove">Remove</button>' +
+          (pc.shape === 'L' ? '<button class="btn-secondary btn-sm" data-pact="mirror">Flip side</button>' : '') +
+          '<button class="btn-secondary btn-sm" data-pact="remove">' + (nCh ? 'Remove with chairs' : 'Remove') + '</button>' +
         '</div>';
     }
     function onPieceClick(e) {
@@ -990,7 +1081,203 @@
       if (id) addPiece(FURNITURE.get(id));
       else if (act === 'turn15') turnPiece(15);
       else if (act === 'turn90') turnPiece(90);
+      else if (act === 'mirror') mirrorPiece();
       else if (act === 'remove') removePiece();
+    }
+
+    /* ---------- Spacing list (Furnish mode) ---------- */
+    // One readable row per check: { label, value, status (ok, tight, close), word }
+    function nameOf(i) { var pc = state.pieces[i]; return pc ? pc.name : 'piece'; }
+    function spaceWord(type, status, inch) {
+      if (status === 'ok') return 'Comfortable';
+      if (type === 'coffee') return status === 'close' ? 'Too close' : inch > 20 ? 'A bit far' : 'Tight';
+      return status === 'close' ? 'Too narrow' : 'Tight';
+    }
+    function inchText(n) { return n < 36 ? n + '"' : fmtFtIn(n / 12); }
+    function spaceRows(room) {
+      if (!state.scale) return [];
+      var inRoom = function (i) { return !room || pieceRoom(state.pieces[i]) === room; };
+      var rows = SPACE.report(spacing()).filter(function (r) { return inRoom(r.a); }).map(function (r) {
+        var label, value;
+        if (r.type === 'coffee') { label = nameOf(r.a) + ' to ' + nameOf(r.b).toLowerCase(); value = inchText(r.inch); }
+        else if (r.type === 'bed') { label = 'Beside the ' + nameOf(r.a).toLowerCase(); value = r.inches.map(inchText).join(' and '); }
+        else if (r.type === 'dining') { label = 'Around the ' + nameOf(r.a).toLowerCase(); value = inchText(r.inch) + ' at the tightest side'; }
+        else { label = 'Walkway between the ' + nameOf(r.a).toLowerCase() + ' and ' + (r.b < 0 ? 'the wall' : 'the ' + nameOf(r.b).toLowerCase()); value = inchText(r.inch); }
+        return { label: label, value: value, status: r.status, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0])) };
+      });
+      var pcs = piecesFt();
+      state.doors.forEach(function (d, k) {
+        if (room && d.room !== room.id) return;
+        var chk = DOOR.check(doorFt(d), pcs), hit = chk.hits.length > 0;
+        rows.push({ label: 'Door ' + (k + 1) + ' swing', status: hit ? 'close' : 'ok', word: hit ? 'Door hits' : 'Door clears',
+                    value: hit ? 'Hits the ' + listNames(chk.hits) : chk.nearest && chk.nearest.gap < 2 ? 'Clears by ' + fmtGap(chk.nearest.gap) : 'Clears' });
+      });
+      return rows;
+    }
+    function listNames(idx) {
+      var names = [];
+      idx.forEach(function (i) { var n = nameOf(i).toLowerCase(); if (names.indexOf(n) < 0) names.push(n); });
+      return names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+    }
+    var BADGE = { ok: 'fits', tight: 'tight', close: 'big' };
+    function renderSpacing() {
+      var el = $('spaceList');
+      if (!el) return;
+      var r = state.rooms[state.selected], rows = spaceRows(r);
+      $('spaceSub').innerHTML = !state.scale ? 'Spacing is measured to scale, so this plan needs a scale first.'
+        : 'Measured square off each piece, so turned pieces are checked too' + (r ? ', in <b>' + esc(r.name) + '</b>.' : '.') +
+          ' Walkways want 36", the space beside a bed 24", around a dining table 36", and 16" to 18" from sofa to coffee table.';
+      if (!rows.length) { el.innerHTML = '<p class="rug-empty">' + (state.pieces.length || state.doors.length ? 'Nothing to check here yet. Place seating with a coffee table, a bed, a dining table, or a door.' : 'Place a few pieces and the spacing between them shows up here.') + '</p>'; return; }
+      el.innerHTML = rows.map(function (rw) {
+        return '<div class="space-row"><span class="space-label">' + esc(rw.label) + '</span>' +
+          '<span class="space-val">' + esc(rw.value) + ' <span class="badge ' + BADGE[rw.status] + '">' + rw.word + '</span></span></div>';
+      }).join('');
+    }
+
+    /* ---------- Doors (Furnish mode) ----------
+       A door sits on a room's outline: { id, x, y (middle of the opening, percent of
+       the image), ux, uy (along the wall), nx, ny (the way it swings, on-screen
+       direction), out (true when it swings away from the room it was marked on),
+       w (inches), hinge (+1 or -1), room (that room's id) }. */
+    function doorFt(d) {
+      var f = state.scale.ftPerPx;
+      return { cx: d.x / 100 * state.W * f, cy: d.y / 100 * state.H * f, ux: d.ux, uy: d.uy, nx: d.nx, ny: d.ny, w: d.w, hinge: d.hinge };
+    }
+    function doorGeomPx(d) {
+      var g = DOOR.geom(doorFt(d)), f = state.scale.ftPerPx;
+      function q(p) { return { x: p.x / f, y: p.y / f }; }
+      return { hinge: q(g.hinge), latch: q(g.latch), open: q(g.open), arc: g.arc.map(q), sector: g.sector.map(q) };
+    }
+    // Nearest point on any room's outline within reach of the tap, with the wall's
+    // direction and the direction into that room
+    function snapToWall(p) {
+      var reach = 28 * displayRatio(), best = null;
+      state.rooms.forEach(function (r) {
+        var list = ptsPx(r);
+        list.forEach(function (a, k) {
+          var b = list[(k + 1) % list.length], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+          if (L < 1) return;
+          var t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / (L * L), 0, 1), q = { x: a.x + t * dx, y: a.y + t * dy };
+          var dist = Math.hypot(p.x - q.x, p.y - q.y);
+          if (dist <= reach && (!best || dist < best.dist)) best = { dist: dist, a: a, L: L, t: t, q: q, room: r, u: { x: dx / L, y: dy / L } };
+        });
+      });
+      if (!best) return null;
+      var n = { x: -best.u.y, y: best.u.x }, step = 3 * displayRatio();
+      if (!PLAN.pointInPoly({ x: best.q.x + n.x * step, y: best.q.y + n.y * step }, ptsPx(best.room))) n = { x: -n.x, y: -n.y };
+      best.n = n;
+      return best;
+    }
+    // Middle of the opening, kept far enough from the ends of the wall for the door to fit
+    function doorSpot(sn, wIn) {
+      var half = wIn / 12 / state.scale.ftPerPx / 2, along = sn.t * sn.L;
+      along = sn.L > half * 2 ? clamp(along, half, sn.L - half) : sn.L / 2;
+      return { x: sn.a.x + sn.u.x * along, y: sn.a.y + sn.u.y * along };
+    }
+    function setDoorOn(d, sn) {
+      var c = doorSpot(sn, d.w), u = sn.u;
+      if (d.ux != null && u.x * d.ux + u.y * d.uy < 0) u = { x: -u.x, y: -u.y };   // keep the hinge on the same end
+      d.x = c.x / state.W * 100; d.y = c.y / state.H * 100;
+      d.ux = u.x; d.uy = u.y;
+      d.nx = d.out ? -sn.n.x : sn.n.x; d.ny = d.out ? -sn.n.y : sn.n.y;
+      d.room = sn.room.id;
+    }
+    function startDoorTool() {
+      if (!state.scale) return;
+      state.tool = 'door';
+      $('doorBtn').textContent = 'Cancel';
+      $('doorHint').textContent = 'Tap a wall on the plan where the door is.';
+      $('planCanvas').classList.add('editing');
+    }
+    function endDoorTool() {
+      if (state.tool === 'door') state.tool = null;
+      if (!$('doorBtn')) return;
+      $('doorBtn').textContent = 'Mark a door';
+      $('doorHint').textContent = '';
+    }
+    function placeDoorAt(p) {
+      var sn = snapToWall(p);
+      if (!sn) { $('doorHint').textContent = 'Tap right on a wall of a room (the outline drawn on the plan).'; return; }
+      var d = { id: state.nextId++, w: 32, hinge: 1, out: false };
+      setDoorOn(d, sn);
+      state.doors.push(d);
+      state.doorSel = state.doors.length - 1; state.pieceSel = -1;
+      endDoorTool(); renderPieceBar(); renderDoorBar(); renderSpacing(); draw();
+    }
+    function moveDoor(d, p) { var sn = snapToWall(p); if (sn) setDoorOn(d, sn); }
+    function hitDoor(p) {
+      if (!state.scale) return -1;
+      for (var k = state.doors.length - 1; k >= 0; k--) {
+        var g = doorGeomPx(state.doors[k]);
+        if (PLAN.pointInPoly(p, g.sector) || GEO.segDist(p, g.hinge, g.latch) <= 10 * displayRatio()) return k;
+      }
+      return -1;
+    }
+    function drawDoors(ctx, forExport) {
+      if (!state.doors.length) return;
+      var ratio = displayRatio(), pcs = piecesFt();
+      state.doors.forEach(function (d, k) {
+        var g = doorGeomPx(d), sel = !forExport && state.mode === 'furnish' && k === state.doorSel;
+        var hit = DOOR.check(doorFt(d), pcs).hits.length > 0, col = hit ? '#582b36' : '#7f9433';
+        ctx.save();
+        tracePath(ctx, g.sector);
+        ctx.fillStyle = hit ? 'rgba(88,43,54,0.16)' : 'rgba(166,190,71,0.16)'; ctx.fill();
+        if (sel) { ctx.lineWidth = 1.5 * ratio; ctx.strokeStyle = col; ctx.stroke(); }
+        ctx.setLineDash([5 * ratio, 4 * ratio]); ctx.lineWidth = 1.4 * ratio; ctx.strokeStyle = col;
+        ctx.beginPath();
+        g.arc.forEach(function (q, i) { if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+        ctx.stroke(); ctx.setLineDash([]);
+        ctx.lineCap = 'round'; ctx.lineWidth = (sel ? 3.5 : 2.5) * ratio;
+        ctx.beginPath(); ctx.moveTo(g.hinge.x, g.hinge.y); ctx.lineTo(g.open.x, g.open.y); ctx.stroke();
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(g.hinge.x, g.hinge.y, (sel ? 4 : 3) * ratio, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      });
+    }
+    function renderDoorBar() {
+      var bar = $('doorBar'), d = state.doors[state.doorSel];
+      if (!bar) return;
+      if (!d || !state.scale) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+      var chk = DOOR.check(doorFt(d), piecesFt());
+      var msg = chk.hits.length ? 'It hits the <b>' + esc(listNames(chk.hits)) + '</b> as it opens.'
+        : 'It clears every piece' + (chk.nearest && chk.nearest.gap < 2 ? ' (closest is the ' + esc(nameOf(chk.nearest.i).toLowerCase()) + ', ' + fmtGap(chk.nearest.gap) + ' away)' : '') + '.';
+      bar.classList.remove('hidden');
+      bar.innerHTML = '<p><b>Door ' + (state.doorSel + 1) + '</b>, ' + d.w + '" wide. ' + msg + ' Drag it along the walls to move it.</p>' +
+        '<div class="btn-row">' +
+          '<select class="room-select door-w" data-dact="width" aria-label="Door width">' + DOOR.WIDTHS.map(function (w) {
+            return '<option value="' + w + '"' + (w === d.w ? ' selected' : '') + '>' + w + '" wide</option>';
+          }).join('') + '</select>' +
+          '<button class="btn-secondary btn-sm" data-dact="swing">Flip swing</button>' +
+          '<button class="btn-secondary btn-sm" data-dact="hinge">Flip hinge</button>' +
+          '<button class="btn-secondary btn-sm" data-dact="remove">Remove</button>' +
+        '</div>';
+    }
+    function removeDoor() {
+      if (state.doorSel < 0) return;
+      state.doors.splice(state.doorSel, 1);
+      state.doorSel = -1;
+      renderDoorBar(); renderSpacing(); draw();
+    }
+    function onDoorClick(e) {
+      var btn = e.target.closest('button');
+      if (e.target.id === 'doorBtn') { if (state.tool === 'door') endDoorTool(); else startDoorTool(); return; }
+      var d = state.doors[state.doorSel];
+      if (!btn || !d) return;
+      var act = btn.getAttribute('data-dact');
+      if (act === 'swing') { d.out = !d.out; d.nx = -d.nx; d.ny = -d.ny; }
+      else if (act === 'hinge') d.hinge = -d.hinge;
+      else if (act === 'remove') { removeDoor(); return; }
+      else return;
+      renderDoorBar(); renderSpacing(); draw();
+    }
+    function onDoorChange(e) {
+      var d = state.doors[state.doorSel];
+      if (!d || e.target.getAttribute('data-dact') !== 'width') return;
+      d.w = +e.target.value;
+      // Keep the wider door on its wall
+      var sn = snapToWall({ x: d.x / 100 * state.W, y: d.y / 100 * state.H });
+      if (sn) setDoorOn(d, sn);
+      renderDoorBar(); renderSpacing(); draw();
     }
 
     /* ---------- Furnish panel ---------- */
@@ -1001,12 +1288,26 @@
       other: 'Leave at least 12" of floor between the rug and the walls.'
     };
     var STATUS_TEXT = { fits: 'Fits', tight: 'Tight', big: 'Too big' };
+    var STYLE_ADVICE = {
+      allOn: 'All legs on: the rug holds the whole seating group, with about 6" of rug past the legs.',
+      frontLegs: 'Front legs on: the front legs of the sofa and chairs sit at least 6" onto the rug, and the coffee table sits fully on it.',
+      floating: 'Floating: the rug sits under the coffee table only, and the seating stays off it.',
+      bed: 'Under the bed: the rug runs 18" to 24" past each side and past the foot, under the lower two thirds of the bed so the nightstands stay off it.',
+      dining: 'Under the table: the rug reaches at least 24" past the table on every side so the chairs stay on it when pulled out.'
+    };
 
-    // Every size checked against the selected room. Rechecked only when the room's outline or the scale changes.
+    // The rug style picked for a room, if the room's furniture allows it
+    function rugStyle(r, group) {
+      var st = r.rugStyle || 'walls';
+      return RUGSTYLE.available(group || groupFor(r)).indexOf(st) > -1 ? st : 'walls';
+    }
+    // Every size checked against the selected room. Rechecked only when the room's
+    // outline, the scale, the style or the furniture that style looks at changes.
     function rugCheckFor(r) {
-      var key = JSON.stringify(r.ftShape);
+      var group = groupFor(r), style = rugStyle(r, group);
+      var key = JSON.stringify(r.ftShape) + style + JSON.stringify(RUGSTYLE.relevant(style, group).map(function (p) { return [p.cx, p.cy, p.rot, p.w, p.d, p.flip]; }));
       if (!state.rugCheck || state.rugCheck.room !== r || state.rugCheck.key !== key) {
-        state.rugCheck = { room: r, key: key, result: RUG.check(r.ftShape) };
+        state.rugCheck = { room: r, key: key, style: style, result: RUGSTYLE.check(r.ftShape, style, group) };
       }
       return state.rugCheck.result;
     }
@@ -1014,6 +1315,35 @@
       if (c < 0) return 'Larger than the room';
       if (RUG.status(c) === 'big') return 'Only ' + fmtGap(c) + ' of floor at the closest wall';
       return 'Leaves ' + fmtGap(c) + ' at the closest wall';
+    }
+    // What holds a size back for a style (the measurement RUGSTYLE reports as worst)
+    function styleDetail(t) {
+      var v = t.val, g = fmtGap(Math.max(0, v));
+      switch (t.name) {
+        case 'allOn': return v < 0 ? 'Too small to hold every leg' : 'Legs only ' + g + ' from the edge';
+        case 'front': return v < 0 ? "Doesn't reach the front legs" : 'Front legs only ' + g + ' on';
+        case 'coffee': return v < 0 ? 'The coffee table hangs off it' : 'Coffee table only ' + g + ' from the edge';
+        case 'seatOff': return v < 0 ? 'Runs under the seating' : 'Nearly touches the seating';
+        case 'bedSide': return v < 0 ? 'Narrower than the bed' : 'Only ' + g + ' past the sides of the bed';
+        case 'bedFoot': return v < 0 ? "Doesn't reach the foot of the bed" : 'Only ' + g + ' past the foot';
+        case 'bedHead': return 'Runs up under the nightstands';
+        case 'dining': return v < 0 ? 'Smaller than the table' : 'Only ' + g + ' past the table';
+      }
+      return '';
+    }
+    // A size held back by the furniture is usually too small to reach it, not too big
+    function statusWord(it, style) {
+      var w = it.spot && it.spot.worst;
+      if (it.status === 'big' && style !== 'walls' && w && w.name !== 'seatOff' && w.name !== 'bedHead') return 'Too small';
+      return STATUS_TEXT[it.status];
+    }
+    // Card text for one size: the style's limit if it has one, otherwise the walls
+    function sizeDetail(it, style) {
+      var sp = it.spot;
+      if (!sp) return 'Larger than the room';
+      if (style !== 'walls' && sp.worst) return styleDetail(sp.worst);
+      if (style !== 'walls' && sp.clearance < 0) return 'Would run into the walls to reach the furniture';
+      return rugDetail(sp.clearance);
     }
 
     function renderFurnish() {
@@ -1034,32 +1364,39 @@
         body.innerHTML = '<p class="rug-empty">Pick a room on the plan or from the list.</p>';
         return;
       }
+      var group = groupFor(r), style = rugStyle(r, group), avail = RUGSTYLE.available(group);
       var res = rugCheckFor(r), type = RUG.roomType(r.name);
       var bestLabel = res && res.best ? RUG.get(res.best).label : null;
-      $('rugSub').innerHTML = bestLabel
-        ? 'The largest rug that fits <b>' + esc(r.name) + '</b> comfortably is <b>' + bestLabel + '</b>.'
-        : 'None of the standard sizes leave 12" of floor in <b>' + esc(r.name) + '</b>.';
+      $('rugSub').innerHTML = style === 'walls'
+        ? (bestLabel ? 'The largest rug that fits <b>' + esc(r.name) + '</b> comfortably is <b>' + bestLabel + '</b>.'
+                     : 'None of the standard sizes leave 12" of floor in <b>' + esc(r.name) + '</b>.')
+        : (bestLabel ? 'The largest rug that works <b>' + RUGSTYLE.NAMES[style].toLowerCase() + '</b> in <b>' + esc(r.name) + '</b> is <b>' + bestLabel + '</b>.'
+                     : 'None of the standard sizes work <b>' + RUGSTYLE.NAMES[style].toLowerCase() + '</b> with the furniture as it sits in <b>' + esc(r.name) + '</b>.');
+      var styles = avail.length > 1
+        ? '<div class="piece-group style-row"><span class="piece-group-name">Rug style</span>' + avail.map(function (st) {
+            return '<button class="piece-chip' + (st === style ? ' on' : '') + '" data-style="' + st + '">' + RUGSTYLE.NAMES[st] + '</button>';
+          }).join('') + '</div>'
+        : '<p class="rug-empty small">Place seating, a bed, or a dining table in this room to check rug styles like front legs on.</p>';
       var cards = res.list.map(function (it) {
-        var c = it.spot ? it.spot.clearance : -1, on = r.rug && r.rug.size === it.size.id;
+        var on = r.rug && r.rug.size === it.size.id;
         return '<button class="rug-card' + (on ? ' on' : '') + '" data-rug="' + it.size.id + '">' +
-          '<span class="rug-top"><b>' + it.size.label + '</b><span class="badge ' + it.status + '">' + STATUS_TEXT[it.status] + '</span></span>' +
-          '<span class="rug-detail">' + rugDetail(c) + '</span>' +
+          '<span class="rug-top"><b>' + it.size.label + '</b><span class="badge ' + it.status + '">' + statusWord(it, style) + '</span></span>' +
+          '<span class="rug-detail">' + sizeDetail(it, style) + '</span>' +
           (it.size.id === res.best ? '<span class="best">Best fit</span>' : '') +
         '</button>';
       }).join('');
       var placed = '';
       if (rugOK(r)) {
-        var info = rugInfo(r), st = RUG.status(info.clearance), s = RUG.get(r.rug.size);
-        var msg = info.clearance < 0 ? 'runs past the walls. Drag it back inside the room, or tap <b>Center it</b>.'
-          : 'leaves <b>' + fmtGap(info.clearance) + '</b> of floor at the closest wall (' + STATUS_TEXT[st].toLowerCase() + ').';
-        placed = '<div class="rug-placed"><p id="rugPlacedMsg">Your <b>' + s.label + '</b> rug ' + msg + '</p>' +
+        var s = RUG.get(r.rug.size);
+        placed = '<div class="rug-placed"><p id="rugPlacedMsg">' + placedMsg(r) + '</p>' +
           '<div class="btn-row">' +
             (s.d ? '' : '<button class="btn-secondary btn-sm" data-act="turn">Turn</button>') +
             '<button class="btn-secondary btn-sm" data-act="center">Center it</button>' +
             '<button class="btn-secondary btn-sm" data-act="remove">Remove</button>' +
           '</div></div>';
       }
-      body.innerHTML = '<p class="rug-advice">' + RUG_ADVICE[type] + ' Tap a size to lay it on the plan, then drag it into place.</p>' +
+      body.innerHTML = styles + '<p class="rug-advice">' + (style === 'walls' ? RUG_ADVICE[type] : STYLE_ADVICE[style] + ' Rugs still keep 12" of floor at the walls.') +
+        ' Tap a size to lay it on the plan, then drag it into place.</p>' +
         '<div class="rug-grid">' + cards + '</div>' + placed;
     }
 
@@ -1070,31 +1407,47 @@
       var res = rugCheckFor(r), it = res.list.filter(function (x) { return x.size.id === id; })[0];
       if (!it || !it.spot) return;
       var f = state.scale.ftPerPx;
-      r.rug = { size: id, rot: it.spot.rot, x: it.spot.cx / f / state.W * 100, y: it.spot.cy / f / state.H * 100 };
+      r.rug = { size: id, rot: it.spot.rot, x: it.spot.cx / f / state.W * 100, y: it.spot.cy / f / state.H * 100, style: state.rugCheck.style };
       renderFurnish(); draw();
     }
     function onFurnishClick(e) {
       var r = state.rooms[state.selected], btn = e.target.closest('button');
       if (!btn || !r) return;
       if (btn.getAttribute('data-rug')) { placeRug(btn.getAttribute('data-rug')); return; }
+      if (btn.getAttribute('data-style')) { r.rugStyle = btn.getAttribute('data-style'); renderFurnish(); draw(); return; }
       var act = btn.getAttribute('data-act');
       if (!r.rug) return;
       if (act === 'turn') { r.rug.rot = r.rug.rot === 90 ? 0 : 90; renderFurnish(); draw(); }
       else if (act === 'center') placeRug(r.rug.size);
       else if (act === 'remove') { r.rug = null; renderFurnish(); draw(); }
     }
+    // The rug where it sits now, judged on the walls and on the room's rug style
+    function rugJudge(r) {
+      var group = groupFor(r), style = rugStyle(r, group), c = rugCenterFt(r);
+      return { style: style, j: RUGSTYLE.judge(r.ftShape, style, RUG.get(r.rug.size), r.rug.rot, c.x, c.y, group) };
+    }
+    function placedMsg(r) {
+      var info = rugInfo(r), s = RUG.get(r.rug.size);
+      var msg = 'Your <b>' + s.label + '</b> rug ' + (info.clearance < 0 ? 'runs past the walls. Drag it back inside the room, or tap <b>Center it</b>.'
+        : 'leaves <b>' + fmtGap(info.clearance) + '</b> of floor at the closest wall (' + STATUS_TEXT[RUG.status(info.clearance)].toLowerCase() + ').');
+      var rj = rugJudge(r);
+      if (rj.style !== 'walls' && info.clearance >= 0) {
+        msg += rj.j.worst ? ' ' + RUGSTYLE.NAMES[rj.style] + ': ' + styleDetail(rj.j.worst).toLowerCase() + '.'
+          : ' ' + RUGSTYLE.NAMES[rj.style] + ' works here.';
+      }
+      return msg;
+    }
     // Updates just the sentence under the sizes while a rug is dragged
     function updatePlacedMsg() {
       var r = state.rooms[state.selected], el = $('rugPlacedMsg');
       if (!el || !rugOK(r)) return;
-      var info = rugInfo(r), s = RUG.get(r.rug.size);
-      el.innerHTML = 'Your <b>' + s.label + '</b> rug ' + (info.clearance < 0 ? 'runs past the walls. Drag it back inside the room, or tap <b>Center it</b>.'
-        : 'leaves <b>' + fmtGap(info.clearance) + '</b> of floor at the closest wall (' + STATUS_TEXT[RUG.status(info.clearance)].toLowerCase() + ').');
+      el.innerHTML = placedMsg(r);
     }
 
     /* ---------- Modes ---------- */
     function setMode(m) {
       if (state.tool === 'scale') endScaleTool();
+      if (state.tool === 'door') endDoorTool();
       state.mode = m; state.drag = null;
       var tabs = document.querySelectorAll('.mode');
       for (var i = 0; i < tabs.length; i++) {
@@ -1176,6 +1529,7 @@
         draw();
         return;
       }
+      if (state.tool === 'door') { placeDoorAt(toCanvas(e)); e.preventDefault(); return; }
       if (state.mode === 'furnish') { furnishDown(e); return; }
       var p = toCanvas(e), xb = removeBtn();
       if (xb && Math.hypot(p.x - xb.x, p.y - xb.y) <= xb.r * 1.3) { removePoint(state.selected, state.ptSel); e.preventDefault(); return; }
@@ -1210,15 +1564,26 @@
     function furnishDown(e) {
       var p = toCanvas(e), pk = hitPiece(p);
       if (pk > -1) {
-        state.pieceSel = pk;
+        state.pieceSel = pk; state.doorSel = -1;
         var pc = state.pieces[pk];
-        state.drag = { mode: 'piece', start: p, orig: { x: pc.x, y: pc.y } };
+        state.drag = { mode: 'piece', start: p, orig: { x: pc.x, y: pc.y },
+                       chairs: chairsOf(pc).map(function (c) { return { c: c, x: c.x, y: c.y }; }) };
         try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
         e.preventDefault();
-        renderPieceBar(); draw();
+        renderPieceBar(); renderDoorBar(); draw();
         return;
       }
       if (state.pieceSel > -1) { state.pieceSel = -1; renderPieceBar(); }
+      var dk = hitDoor(p);
+      if (dk > -1) {
+        state.doorSel = dk;
+        state.drag = { mode: 'door', start: p, moved: false };
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        renderDoorBar(); draw();
+        return;
+      }
+      if (state.doorSel > -1) { state.doorSel = -1; renderDoorBar(); }
       var i = hitRug(p);
       if (i > -1) {
         if (i !== state.selected) select(i, false);
@@ -1258,6 +1623,13 @@
           var pp = state.pieces[state.pieceSel], pd = state.drag;
           pp.x = clamp(pd.orig.x + (p.x - pd.start.x) / state.W * 100, 0, 100);
           pp.y = clamp(pd.orig.y + (p.y - pd.start.y) / state.H * 100, 0, 100);
+          var mx = pp.x - pd.orig.x, my = pp.y - pd.orig.y;
+          pd.chairs.forEach(function (o) { o.c.x = o.x + mx; o.c.y = o.y + my; });
+          draw();
+        } else if (state.drag && state.drag.mode === 'door') {
+          if (!state.drag.moved && Math.hypot(p.x - state.drag.start.x, p.y - state.drag.start.y) < 4 * displayRatio()) return;
+          state.drag.moved = true;
+          moveDoor(state.doors[state.doorSel], p);
           draw();
         } else if (state.drag && state.drag.mode === 'rug') {
           var rr = state.rooms[state.selected], dd = state.drag;
@@ -1265,7 +1637,7 @@
           rr.rug.y = clamp(dd.orig.y + (p.y - dd.start.y) / state.H * 100, 0, 100);
           draw(); updatePlacedMsg();
         } else {
-          c.style.cursor = hitPiece(p) > -1 || hitRug(p) > -1 ? 'move' : hitRoom(p) > -1 ? 'pointer' : 'default';
+          c.style.cursor = state.tool === 'door' ? 'crosshair' : hitPiece(p) > -1 || hitDoor(p) > -1 || hitRug(p) > -1 ? 'move' : hitRoom(p) > -1 ? 'pointer' : 'default';
         }
         return;
       }
@@ -1322,9 +1694,11 @@
         try { inp.focus({ preventScroll: true }); } catch (err) { inp.focus(); }
         return;
       }
-      if (state.drag && state.drag.mode === 'piece') {
+      if (state.drag && (state.drag.mode === 'piece' || state.drag.mode === 'door')) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
         state.drag = null;
+        renderSpacing(); renderDoorBar();
+        if (state.mode === 'furnish' && state.rooms[state.selected] && state.rooms[state.selected].rug) renderFurnish();
         return;
       }
       if (state.drag && state.drag.mode === 'rug') {
@@ -1357,6 +1731,7 @@
     /* ---------- Setting the scale ---------- */
     function startScaleTool() {
       if (!state.img) return;
+      if (state.tool === 'door') endDoorTool();
       select(-1);
       state.tool = 'scale'; state.scaleLine = null;
       $('planCanvas').classList.add('editing');
@@ -1414,7 +1789,7 @@
         var rect = cards[i].getBoundingClientRect();
         if (rect.top > window.innerHeight || rect.bottom < 0) cards[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
-      if (state.mode === 'furnish') renderFurnish();
+      if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); }
       draw();
     }
 
@@ -1473,7 +1848,7 @@
       $('statEst').textContent = est;
     }
 
-    function renderAll() { syncGeometry(); renderCards(); renderStats(); renderScaleBar(); if (state.mode === 'furnish') renderFurnish(); draw(); }
+    function renderAll() { syncGeometry(); renderCards(); renderStats(); renderScaleBar(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderDoorBar(); } draw(); }
 
     function cardIndex(el) {
       var card = el.closest('.room-card');
@@ -1645,13 +2020,14 @@
         doc.text('SIZE (W X D)', fc[1], y + 14);
         doc.text('ROOM', fc[2], y + 14, { align: 'right' });
         y += 22;
-        state.pieces.forEach(function (pc, i) {
+        // Chairs that came with a table are listed with it
+        state.pieces.filter(function (pc) { return !(pc.group && state.pieces.some(function (o) { return o.id === pc.group; })); }).forEach(function (pc, i) {
           checkPage(22);
-          var rm = pieceRoom(pc);
+          var rm = pieceRoom(pc), nCh = chairsOf(pc).length;
           doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
           doc.rect(margin, y, contentW, 20, 'F');
           doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
-          doc.text(ascii(pc.name).slice(0, 34), fc[0], y + 13);
+          doc.text(ascii(pc.name + (nCh ? ' with ' + nCh + ' chairs' : '')).slice(0, 40), fc[0], y + 13);
           doc.text(ascii(pieceSize(pc)), fc[1], y + 13);
           doc.setTextColor(107, 101, 96);
           doc.text(rm ? ascii(rm.name).slice(0, 30) : '-', fc[2], y + 13, { align: 'right' });
@@ -1683,7 +2059,8 @@
           doc.rect(margin, y, contentW, 20, 'F');
           doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
           doc.text(ascii(r.name).slice(0, 30), rc[0], y + 13);
-          doc.text(ascii(RUG.get(r.rug.size).label), rc[1], y + 13);
+          var rjs = rugJudge(r).style;
+          doc.text(ascii(RUG.get(r.rug.size).label + (rjs !== 'walls' ? ', ' + RUGSTYLE.NAMES[rjs].toLowerCase() : '')), rc[1], y + 13);
           doc.text(info.clearance < 0 ? 'Runs past the walls' : ascii(fmtGap(info.clearance)), rc[2], y + 13);
           if (st === 'big') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
           doc.text(STATUS_TEXT[st], rc[3], y + 13, { align: 'right' });
@@ -1694,6 +2071,39 @@
         var rn = doc.splitTextToSize('Rug sizes are checked against the room outlines on this plan, so they are only as accurate as the plan and its scale. Measure the room before ordering.', contentW);
         doc.text(rn, margin, y + 4);
         y += rn.length * 12 + 18;
+      }
+
+      // Spacing checks between pieces, and door swings
+      var sRows = spaceRows(null);
+      if (sRows.length) {
+        y += 8;
+        checkPage(90);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+        doc.text('Spacing checks', margin, y);
+        y += 12;
+        var sc = [margin + 8, margin + 290, pageW - margin - 8];
+        doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 22, 'F');
+        doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+        doc.text('CHECK', sc[0], y + 14);
+        doc.text('MEASURED', sc[1], y + 14);
+        doc.text('RESULT', sc[2], y + 14, { align: 'right' });
+        y += 22;
+        sRows.forEach(function (rw, i) {
+          checkPage(22);
+          doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
+          doc.rect(margin, y, contentW, 20, 'F');
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+          doc.text(ascii(rw.label).slice(0, 52), sc[0], y + 13);
+          doc.text(ascii(rw.value).slice(0, 30), sc[1], y + 13);
+          if (rw.status === 'close') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
+          doc.text(rw.word, sc[2], y + 13, { align: 'right' });
+          y += 20;
+        });
+        y += 10;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 101, 96);
+        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight), 24" beside a bed (18" is tight), 36" around a dining table (30" is tight), and 16" to 18" from sofa to coffee table. Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
+        doc.text(sn, margin, y + 4);
+        y += sn.length * 12 + 18;
       }
 
       // Practical note when anything was estimated
@@ -1726,9 +2136,19 @@
         scale: state.scale ? { ft_per_px: +state.scale.ftPerPx.toFixed(6), source: state.scale.source, canvas_px: [state.W, state.H] } : null,
         furniture: state.scale ? state.pieces.map(function (pc) {
           var f = state.scale.ftPerPx, rm = pieceRoom(pc);
-          return { name: pc.name, type: pc.type, width_in: pc.w, depth_in: pc.d, height_in: pc.h, turned_deg: pc.rot,
-                   center_ft: [+(pc.x / 100 * state.W * f).toFixed(2), +(pc.y / 100 * state.H * f).toFixed(2)], room: rm ? rm.name : null };
+          var tbl = pc.group ? state.pieces.filter(function (o) { return o.id === pc.group; })[0] : null;
+          return { id: pc.id, name: pc.name, type: pc.type, role: pc.role || 'other', shape: pc.shape || 'rect', mirrored: !!pc.flip,
+                   width_in: pc.w, depth_in: pc.d, height_in: pc.h, turned_deg: pc.rot,
+                   center_ft: [+(pc.x / 100 * state.W * f).toFixed(2), +(pc.y / 100 * state.H * f).toFixed(2)], room: rm ? rm.name : null,
+                   with_table: tbl ? tbl.id : null };
         }) : [],
+        doors: state.scale ? state.doors.map(function (d, k) {
+          var df = doorFt(d), chk = DOOR.check(df, piecesFt());
+          return { name: 'Door ' + (k + 1), width_in: d.w, center_ft: [+df.cx.toFixed(2), +df.cy.toFixed(2)],
+                   along_wall: [+d.ux.toFixed(3), +d.uy.toFixed(3)], swings_toward: [+d.nx.toFixed(3), +d.ny.toFixed(3)], hinge_end: d.hinge,
+                   hits: chk.hits.map(function (i) { return state.pieces[i].name; }) };
+        }) : [],
+        spacing: spaceRows(null).map(function (rw) { return { check: rw.label, measured: rw.value, result: rw.word, status: rw.status }; }),
         rooms: state.rooms.map(function (r) {
           return {
             name: r.name, width: fmtFtIn(r.width), length: fmtFtIn(r.length),
@@ -1741,7 +2161,8 @@
             shape_ft: r.shape && r.ftShape ? r.ftShape.map(function (q) { return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) : null,
             rug: rugOK(r) ? (function () {
               var info = rugInfo(r), c = rugCenterFt(r);
-              return { size: r.rug.size, label: RUG.get(r.rug.size).label, turned: r.rug.rot === 90,
+              var rj = rugJudge(r);
+              return { size: r.rug.size, label: RUG.get(r.rug.size).label, turned: r.rug.rot === 90, style: RUGSTYLE.NAMES[rj.style], style_result: rj.j.status,
                        center_ft: [+c.x.toFixed(2), +c.y.toFixed(2)], floor_at_closest_wall_in: Math.round(info.clearance * 12) };
             })() : null
           };
@@ -1778,8 +2199,8 @@
     function reset() {
       state.img = null; state.rooms = []; state.selected = -1; state.sendB64 = '';
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
-      state.pieces = []; state.pieceSel = -1;
-      endScaleTool();
+      state.pieces = []; state.pieceSel = -1; state.doors = []; state.doorSel = -1;
+      endScaleTool(); endDoorTool();
       setMode('measure');
       $('fileInput').value = '';
       showScreen('upload');
@@ -1834,6 +2255,8 @@
       $('rugBody').addEventListener('click', onFurnishClick);
       buildPieceChips();
       $('pieceArea').addEventListener('click', onPieceClick);
+      $('doorArea').addEventListener('click', onDoorClick);
+      $('doorArea').addEventListener('change', onDoorChange);
       $('customAdd').addEventListener('click', addCustom);
       ['customName', 'customW', 'customD'].forEach(function (id) {
         $(id).addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } });
@@ -1851,6 +2274,12 @@
 
       document.addEventListener('keydown', function (e) {
         if (state.tool === 'scale') { if (e.key === 'Escape' && !/INPUT/.test(document.activeElement.tagName)) endScaleTool(); return; }
+        if (state.tool === 'door') { if (e.key === 'Escape') endDoorTool(); return; }
+        if (state.mode === 'furnish' && state.doorSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+          if (e.key === 'Delete' || e.key === 'Backspace') { removeDoor(); e.preventDefault(); }
+          if (e.key === 'Escape') { state.doorSel = -1; renderDoorBar(); draw(); }
+          return;
+        }
         if (state.mode === 'furnish' && state.pieceSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
           if (e.key === 'Delete' || e.key === 'Backspace') { removePiece(); e.preventDefault(); }
           if (e.key === 'Escape') { state.pieceSel = -1; renderPieceBar(); draw(); }
@@ -2000,6 +2429,19 @@
               <button class="btn-secondary btn-sm" id="customAdd">Add</button>
             </div>
             <div class="rug-placed hidden" id="pieceBar"></div>
+            <div id="doorArea">
+              <div class="custom-row door-row">
+                <span class="piece-group-name">Doors</span>
+                <button class="btn-secondary btn-sm" id="doorBtn">Mark a door</button>
+                <span class="door-hint" id="doorHint"></span>
+              </div>
+              <div class="rug-placed hidden" id="doorBar"></div>
+            </div>
+          </div>
+          <div class="piece-area">
+            <p class="eyebrow">Spacing</p>
+            <p class="furnish-sub" id="spaceSub"></p>
+            <div class="space-list" id="spaceList"></div>
           </div>
           <div class="furnish-head">
             <div>
@@ -2010,10 +2452,11 @@
           </div>
           <div id="rugBody"></div>
           <p class="hint">
-            <span class="legend"><span class="swatch" style="border-top-color:#7f9433"></span>12" or more of floor</span>
-            <span class="legend"><span class="swatch" style="border-top-color:#b07d14"></span>6" to 12"</span>
-            <span class="legend"><span class="swatch"></span>Under 6"</span><br>
-            Sizes are checked against the room outline, so fix the outline in Measure first if it's off. Drag a rug or piece to move it; Delete removes whichever is selected.
+            <span class="legend"><span class="swatch" style="border-top-color:#7f9433"></span>Comfortable</span>
+            <span class="legend"><span class="swatch" style="border-top-color:#b07d14"></span>Tight</span>
+            <span class="legend"><span class="swatch"></span>Doesn't work</span><br>
+            Rugs want 12" of floor at the walls (6" is tight). Spacing lines show the room checks and any walkway under 36"; pick a piece to see every side of it.
+            Everything is measured against the room outlines, so fix an outline in Measure first if it's off. Drag a rug, piece, or door to move it; Delete removes whichever is selected.
           </p>
         </div>
 

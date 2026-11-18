@@ -625,25 +625,112 @@ var RUG = (function () {
 })();
 
 /* =====================================================================
-   FURNITURE: the starter catalog and the geometry of a placed piece
+   GEO: small shape helpers shared by the furniture, spacing, rug style
+   and door code. Points are { x, y } in whatever units the caller uses.
+   ===================================================================== */
+var GEO = (function () {
+  function segDist(p, a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+    var t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L)) : 0;
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+  function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+  function segsCross(a, b, c, d) {
+    var d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
+    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  }
+  // Distance along a ray from p in direction (dx, dy) to segment a-b, or null if it misses
+  function raySeg(p, dx, dy, a, b) {
+    var ex = b.x - a.x, ey = b.y - a.y, den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-12) return null;
+    var t = ((a.x - p.x) * ey - (a.y - p.y) * ex) / den;
+    var u = ((a.x - p.x) * dy - (a.y - p.y) * dx) / den;
+    return (t >= -1e-9 && u >= -1e-9 && u <= 1 + 1e-9) ? Math.max(0, t) : null;
+  }
+  // Distance along a ray to the outline of a polygon, or null
+  function rayPoly(p, dx, dy, poly) {
+    var best = null;
+    for (var i = 0, n = poly.length; i < n; i++) {
+      var t = raySeg(p, dx, dy, poly[i], poly[(i + 1) % n]);
+      if (t != null && (best == null || t < best)) best = t;
+    }
+    return best;
+  }
+  // Shortest distance from a point to a polygon's outline
+  function edgeDist(p, poly) {
+    var d = Infinity;
+    for (var i = 0, n = poly.length; i < n; i++) d = Math.min(d, segDist(p, poly[i], poly[(i + 1) % n]));
+    return d;
+  }
+  // Shortest distance between two polygons, 0 when they touch or overlap
+  function polyDist(A, B) {
+    var i, j, n = A.length, m = B.length;
+    for (i = 0; i < n; i++) if (PLAN.pointInPoly(A[i], B)) return 0;
+    for (j = 0; j < m; j++) if (PLAN.pointInPoly(B[j], A)) return 0;
+    for (i = 0; i < n; i++) for (j = 0; j < m; j++) if (segsCross(A[i], A[(i + 1) % n], B[j], B[(j + 1) % m])) return 0;
+    var d = Infinity;
+    for (i = 0; i < n; i++) d = Math.min(d, edgeDist(A[i], B));
+    for (j = 0; j < m; j++) d = Math.min(d, edgeDist(B[j], A));
+    return d;
+  }
+  // Points in a shape's own frame, turned rot degrees clockwise, scaled by k, moved to (cx, cy)
+  function place(pts, cx, cy, rot, k) {
+    var a = (rot || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    return pts.map(function (p) { return { x: cx + (p.x * c - p.y * s) * k, y: cy + (p.x * s + p.y * c) * k }; });
+  }
+  // A direction in a shape's own frame, turned to the plan
+  function turn(v, rot) {
+    var a = (rot || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };
+  }
+  return { segDist: segDist, segsCross: segsCross, raySeg: raySeg, rayPoly: rayPoly, edgeDist: edgeDist,
+           polyDist: polyDist, place: place, turn: turn };
+})();
+
+/* =====================================================================
+   FURNITURE: the catalog and the geometry of a placed piece
    Sizes in inches: w is the width (side to side, as you face the piece),
    d the depth (front to back), h the height (for the 3D view later).
    Beds are listed with the frame. At rot 0 a piece faces down the plan:
    its back is at the top. The code only measures; the person places.
+
+   kind  how it is drawn: 'seat' (shaded back), 'bed' (headboard and
+         pillows), 'table' (plain)
+   role  what it is for, which decides its spacing checks and rug styles:
+         seat, coffee, side, storage, bed, nightstand, dining, chair, desk
+   shape 'rect' (default), 'round', or 'L' (a sectional: back along the
+         top, the return down the left side, arm deep; flip mirrors it)
+   chairs  dining tables only: [chairs per long side, chairs per end]
    ===================================================================== */
 var FURNITURE = (function () {
   var CATALOG = [
     { group: 'Living', items: [
-      { id: 'sofa', name: 'Sofa', w: 84, d: 38, h: 34, kind: 'seat' },
-      { id: 'loveseat', name: 'Loveseat', w: 64, d: 36, h: 34, kind: 'seat' },
-      { id: 'armchair', name: 'Armchair', w: 32, d: 34, h: 32, kind: 'seat' },
-      { id: 'coffee', name: 'Coffee table', w: 48, d: 24, h: 18, kind: 'table' },
-      { id: 'side', name: 'Side table', w: 20, d: 20, h: 24, kind: 'table' }
+      { id: 'sofa', name: 'Sofa', w: 84, d: 38, h: 34, kind: 'seat', role: 'seat' },
+      { id: 'loveseat', name: 'Loveseat', w: 64, d: 36, h: 34, kind: 'seat', role: 'seat' },
+      { id: 'sectional', name: 'Sectional', w: 112, d: 84, h: 34, kind: 'seat', role: 'seat', shape: 'L', arm: 38 },
+      { id: 'armchair', name: 'Armchair', w: 32, d: 34, h: 32, kind: 'seat', role: 'seat' },
+      { id: 'coffee', name: 'Coffee table', w: 48, d: 24, h: 18, kind: 'table', role: 'coffee' },
+      { id: 'side', name: 'Side table', w: 20, d: 20, h: 24, kind: 'table', role: 'side' },
+      { id: 'media', name: 'Media console', w: 70, d: 18, h: 24, kind: 'table', role: 'storage' }
     ] },
     { group: 'Bedroom', items: [
-      { id: 'queen', name: 'Queen bed', w: 64, d: 86, h: 24, kind: 'bed' },
-      { id: 'king', name: 'King bed', w: 80, d: 86, h: 24, kind: 'bed' },
-      { id: 'nightstand', name: 'Nightstand', w: 24, d: 18, h: 26, kind: 'table' }
+      { id: 'full', name: 'Full bed', w: 58, d: 80, h: 24, kind: 'bed', role: 'bed' },
+      { id: 'queen', name: 'Queen bed', w: 64, d: 86, h: 24, kind: 'bed', role: 'bed' },
+      { id: 'king', name: 'King bed', w: 80, d: 86, h: 24, kind: 'bed', role: 'bed' },
+      { id: 'nightstand', name: 'Nightstand', w: 24, d: 18, h: 26, kind: 'table', role: 'nightstand' },
+      { id: 'dresser', name: 'Dresser', w: 60, d: 20, h: 34, kind: 'table', role: 'storage' }
+    ] },
+    { group: 'Dining', items: [
+      { id: 'dining4r', name: 'Round table for 4', w: 48, d: 48, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: 'round' },
+      { id: 'dining4', name: 'Table for 4', w: 60, d: 36, h: 30, kind: 'table', role: 'dining', chairs: [2, 0] },
+      { id: 'dining6', name: 'Table for 6', w: 72, d: 38, h: 30, kind: 'table', role: 'dining', chairs: [2, 1] },
+      { id: 'dining8', name: 'Table for 8', w: 96, d: 40, h: 30, kind: 'table', role: 'dining', chairs: [3, 1] },
+      { id: 'chair', name: 'Dining chair', w: 20, d: 22, h: 36, kind: 'seat', role: 'chair' }
+    ] },
+    { group: 'Office', items: [
+      { id: 'desk', name: 'Desk', w: 60, d: 30, h: 30, kind: 'table', role: 'desk' },
+      { id: 'deskchair', name: 'Desk chair', w: 26, d: 26, h: 38, kind: 'seat', role: 'chair' },
+      { id: 'bookcase', name: 'Bookcase', w: 36, d: 14, h: 72, kind: 'table', role: 'storage' }
     ] }
   ];
   function get(id) {
@@ -661,22 +748,446 @@ var FURNITURE = (function () {
   }
   function fmtIn(n) { return Math.round(n) + '"'; }
 
-  // Four corners of a piece in whatever units cx, cy, w, d share, turned rot degrees clockwise
-  function corners(cx, cy, w, d, rot) {
-    var a = (rot || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-    return [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(function (p) {
-      return { x: cx + p[0] * c - p[1] * s, y: cy + p[0] * s + p[1] * c };
-    });
+  // The piece's outline in its own frame, in inches, going clockwise on the plan
+  function outline(pc) {
+    var w = pc.w, d = pc.d, i;
+    if (pc.shape === 'round') {
+      var pts = [];
+      for (i = 0; i < 24; i++) { var a = i / 24 * Math.PI * 2; pts.push({ x: Math.cos(a) * w / 2, y: Math.sin(a) * d / 2 }); }
+      return pts;
+    }
+    if (pc.shape === 'L') {
+      var t = Math.min(pc.arm || 38, w / 2, d / 2);
+      var L = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, -d / 2 + t], [-w / 2 + t, -d / 2 + t], [-w / 2 + t, d / 2], [-w / 2, d / 2]];
+      var out = L.map(function (p) { return { x: pc.flip ? -p[0] : p[0], y: p[1] }; });
+      return pc.flip ? out.reverse() : out;   // a mirror image runs the other way round
+    }
+    return [{ x: -w / 2, y: -d / 2 }, { x: w / 2, y: -d / 2 }, { x: w / 2, y: d / 2 }, { x: -w / 2, y: d / 2 }];
   }
+  // Leg positions in the piece's own frame (inches), 2" in from the edges.
+  // front: the legs nearest the front edge (where you sit), back: the rest.
+  function legs(pc) {
+    var w = pc.w, d = pc.d, k = 2, f = pc.flip ? -1 : 1;
+    function m(p) { return { x: p[0] * f, y: p[1] }; }
+    if (pc.shape === 'L') {
+      var t = Math.min(pc.arm || 38, w / 2, d / 2);
+      return { front: [[w / 2 - k, -d / 2 + t - k], [-w / 2 + t - k, -d / 2 + t - k], [-w / 2 + t - k, d / 2 - k]].map(m),
+               back: [[-w / 2 + k, -d / 2 + k], [w / 2 - k, -d / 2 + k], [-w / 2 + k, d / 2 - k]].map(m) };
+    }
+    return { front: [{ x: -w / 2 + k, y: d / 2 - k }, { x: w / 2 - k, y: d / 2 - k }],
+             back: [{ x: -w / 2 + k, y: -d / 2 + k }, { x: w / 2 - k, y: -d / 2 + k }] };
+  }
+
+  // Where a dining table's chairs go, in inches from the table's center at rot 0,
+  // and which way each one is turned. Chairs face the table with their seats
+  // TUCK inches under its edge, the way they sit when pushed in.
+  var TUCK = 4;
+  function chairLayout(t) {
+    var c = get('chair'), off = c.d / 2 - TUCK, out = [];
+    if (!t || !t.chairs) return out;
+    if (t.chairs === 'round') {
+      var R = t.w / 2 + off;
+      return [{ x: 0, y: -R, rot: 0 }, { x: R, y: 0, rot: 90 }, { x: 0, y: R, rot: 180 }, { x: -R, y: 0, rot: 270 }];
+    }
+    var n = t.chairs[0], step = t.w / n;
+    for (var i = 0; i < n; i++) {
+      var x = -t.w / 2 + step * (i + 0.5);
+      out.push({ x: x, y: -(t.d / 2 + off), rot: 0 });
+      out.push({ x: x, y: t.d / 2 + off, rot: 180 });
+    }
+    if (t.chairs[1]) {
+      out.push({ x: -(t.w / 2 + off), y: 0, rot: 270 });
+      out.push({ x: t.w / 2 + off, y: 0, rot: 90 });
+    }
+    return out;
+  }
+
+  // The outline on the plan: cx, cy and the result share units, k is those units per inch
+  function shapeAt(pc, cx, cy, k) { return GEO.place(outline(pc), cx, cy, pc.rot, k); }
   // A point in the piece's own frame: x across its width, y from back (-) to front (+)
   function toLocal(p, cx, cy, rot) {
     var a = -(rot || 0) * Math.PI / 180, dx = p.x - cx, dy = p.y - cy;
     return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) };
   }
-  function contains(p, cx, cy, w, d, rot) {
-    var q = toLocal(p, cx, cy, rot);
-    return Math.abs(q.x) <= w / 2 && Math.abs(q.y) <= d / 2;
+  // Is point p (same units as cx, cy; k units per inch) on the piece?
+  function contains(p, cx, cy, pc, k) {
+    var q = toLocal(p, cx, cy, pc.rot);
+    return PLAN.pointInPoly({ x: q.x / k, y: q.y / k }, outline(pc));
+  }
+  // Bounding box of the piece on the plan, same units as cx, cy
+  function bounds(pc, cx, cy, k) { return PLAN.bounds(shapeAt(pc, cx, cy, k)); }
+
+  return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, outline: outline, legs: legs,
+           chairLayout: chairLayout, shapeAt: shapeAt, toLocal: toLocal, contains: contains, bounds: bounds };
+})();
+
+/* =====================================================================
+   SPACE: live spacing checks between placed pieces and the walls
+   Everything here is in feet. Each piece comes in as
+     { role, group, shape, flip, arm, w, d (inches), rot, cx, cy, poly }
+   where poly is its outline on the plan in feet (FURNITURE.shapeAt), and
+   walls is a list of room outlines in feet. Lines run straight out from
+   each side of a piece, square to that side, so turned pieces (15° steps)
+   are measured the same way as straight ones. The code only measures;
+   the person decides where things go.
+   ===================================================================== */
+var SPACE = (function () {
+  var RANGE = 8;          // feet: anything farther counts as open floor
+  var AGAINST = 4;        // inches: closer than this, the piece is set against it on purpose
+  var PASSAGE = 12;       // inches: walkway gaps from here up to 36" are flagged on the plan
+  var COFFEE_PAIR = 30;   // inches: a coffee table farther than this from a seat is not its pair
+  var WALL_PATH = { seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, other: 1 };   // pieces whose gap to a wall can be a walkway
+  // ok: comfortable from this many inches; tight: still works from here
+  var RULES = {
+    walk: { ok: 36, tight: 30 },     // main walkway
+    dining: { ok: 36, tight: 30 },   // around a dining table
+    bed: { ok: 24, tight: 18 }       // beside a bed
+  };
+  // Judged on whole inches, the number the person sees on the plan
+  function status(rule, inch) {
+    if (rule === 'coffee') return inch < 14 ? 'close' : inch < 16 ? 'tight' : inch <= 20 ? 'ok' : 'tight';
+    var r = RULES[rule];
+    return inch >= r.ok ? 'ok' : inch >= r.tight ? 'tight' : 'close';
   }
 
-  return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, corners: corners, toLocal: toLocal, contains: contains };
+  // Nearest wall or piece straight out from p, within RANGE feet
+  function cast(p, dir, walls, pieces, skip) {
+    var best = null;
+    pieces.forEach(function (o, j) {
+      if (skip(o, j)) return;
+      if (PLAN.pointInPoly(p, o.poly)) { best = { gap: 0, hit: { type: 'piece', i: j } }; return; }
+      var t = GEO.rayPoly(p, dir.x, dir.y, o.poly);
+      if (t != null && (!best || t < best.gap)) best = { gap: t, hit: { type: 'piece', i: j } };
+    });
+    walls.forEach(function (poly) {
+      var t = GEO.rayPoly(p, dir.x, dir.y, poly);
+      if (t != null && (!best || t < best.gap)) best = { gap: t, hit: { type: 'wall' } };
+    });
+    return best && best.gap <= RANGE ? best : null;
+  }
+
+  // The sides of a piece: { name, pts: sample points (feet, on the plan), dir }
+  // name is back, front, left or right in the piece's own frame. A round piece
+  // gets four lines, one each way; other shapes get one per edge.
+  function sides(pc) {
+    var k = 1 / 12, out = [];
+    function nameOf(n) { return n.y < -0.7 ? 'back' : n.y > 0.7 ? 'front' : n.x < 0 ? 'left' : 'right'; }
+    if (pc.shape === 'round') {
+      [{ x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }].forEach(function (n) {
+        var p = GEO.place([{ x: n.x * pc.w / 2, y: n.y * pc.d / 2 }], pc.cx, pc.cy, pc.rot, k)[0];
+        out.push({ name: nameOf(n), pts: [p], dir: GEO.turn(n, pc.rot) });
+      });
+      return out;
+    }
+    var loc = FURNITURE.outline(pc);
+    for (var i = 0; i < loc.length; i++) {
+      var a = loc[i], b = loc[(i + 1) % loc.length], ex = b.x - a.x, ey = b.y - a.y, len = Math.hypot(ex, ey);
+      if (len < 6) continue;
+      var n = { x: ey / len, y: -ex / len }, name = nameOf(n), ts = [0.5, 0.3, 0.7, 0.12, 0.88];
+      // Beside a bed, measure the lower part, below the nightstands
+      if (pc.role === 'bed' && (name === 'left' || name === 'right')) {
+        ts = [0.5, 0.35, 0.65, 0.2, 0.8, 0.05, 0.95].filter(function (t) {
+          var fh = (a.y + t * ey + pc.d / 2) / pc.d;
+          return fh >= 0.35 && fh <= 0.95;
+        });
+      }
+      var pts = ts.map(function (t) { return { x: a.x + t * ex, y: a.y + t * ey }; });
+      out.push({ name: name, pts: GEO.place(pts, pc.cx, pc.cy, pc.rot, k), dir: GEO.turn(n, pc.rot) });
+    }
+    return out;
+  }
+
+  // Every spacing line: [{ piece, side, from, to, gap (ft), inch, rule, status, hit, show }]
+  //   rule   coffee (seat front to its coffee table), bed (beside a bed),
+  //          dining (out from a dining table, chairs ignored), walk (the rest)
+  //   show   'always' for the room checks and narrow walkways,
+  //          'selected' for lines drawn only while that piece is picked,
+  //          false for pieces set against something
+  function check(pieces, walls) {
+    var lines = [];
+    pieces.forEach(function (pc, i) {
+      var skip = function (o, j) {
+        if (j === i) return true;
+        if (pc.role === 'dining' && o.role === 'chair') return true;            // chairs pull out
+        if (pc.group && o.group === pc.group) return true;                      // a chair and its own table or neighbors
+        if (pc.role === 'chair' && pc.group && o.id === pc.group) return true;
+        return false;
+      };
+      sides(pc).forEach(function (sd) {
+        var best = null;
+        sd.pts.forEach(function (p) {
+          var r = cast(p, sd.dir, walls, pieces, skip);
+          if (r && (!best || r.gap < best.gap)) best = { gap: r.gap, hit: r.hit, from: p };
+        });
+        if (!best) return;
+        var inch = Math.round(best.gap * 12), other = best.hit.type === 'piece' ? pieces[best.hit.i] : null;
+        var rule = 'walk';
+        if (pc.role === 'seat' && sd.name === 'front' && other && other.role === 'coffee' && inch <= COFFEE_PAIR) rule = 'coffee';
+        else if (pc.role === 'bed' && (sd.name === 'left' || sd.name === 'right')) rule = 'bed';
+        else if (pc.role === 'dining') rule = 'dining';
+        // A narrow walkway is flagged between two pieces, or between a wall and a piece big enough
+        // to make a path (not a nightstand in a corner). Chairs at a table are covered by the dining check.
+        var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || WALL_PATH[pc.role]);
+        var show = rule !== 'walk' ? 'always' : inch < AGAINST ? false : passage ? 'always' : 'selected';
+        lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, status: status(rule, inch),
+                     to: { x: best.from.x + sd.dir.x * best.gap, y: best.from.y + sd.dir.y * best.gap },
+                     hit: best.hit, show: show });
+      });
+    });
+    // Two pieces facing each other measure the same gap twice: keep one line.
+    // A room check (coffee, bed, dining) wins over a plain walkway line.
+    lines.forEach(function (a, ia) {
+      if (a.hit.type !== 'piece' || a.dup) return;
+      lines.forEach(function (b, ib) {
+        if (ib === ia || b.dup || b.hit.type !== 'piece' || b.piece !== a.hit.i || b.hit.i !== a.piece) return;
+        if (Math.abs(a.gap - b.gap) > 1.5 / 12) return;
+        var drop = (a.rule === 'walk' && b.rule !== 'walk') ? a : (b.rule === 'walk' && a.rule !== 'walk') ? b : (ia < ib ? b : a);
+        drop.dup = true;
+      });
+    });
+    return lines.filter(function (l) { return !l.dup; });
+  }
+
+  // One row per check, for the panel and the PDF:
+  //   { type: 'coffee', a, b, inch, status }
+  //   { type: 'bed', a, inches: [..], status }             both sides of a bed
+  //   { type: 'dining', a, inch, status }                  the tightest side of a table
+  //   { type: 'walk', a, b (or -1 for a wall), inch, status }  walkways under 36"
+  var RANK = { ok: 0, tight: 1, close: 2 };
+  function report(lines) {
+    var rows = [], beds = {}, tables = {};
+    lines.forEach(function (l) {
+      if (l.rule === 'coffee') rows.push({ type: 'coffee', a: l.piece, b: l.hit.i, inch: l.inch, status: l.status });
+      else if (l.rule === 'bed') (beds[l.piece] = beds[l.piece] || []).push(l);
+      else if (l.rule === 'dining') { if (!tables[l.piece] || l.inch < tables[l.piece].inch) tables[l.piece] = l; }
+      else if (l.show === 'always') rows.push({ type: 'walk', a: l.piece, b: l.hit.type === 'piece' ? l.hit.i : -1, inch: l.inch, status: l.status });
+    });
+    Object.keys(beds).forEach(function (k) {
+      var ls = beds[k].sort(function (p, q) { return p.inch - q.inch; });
+      rows.push({ type: 'bed', a: +k, inches: ls.map(function (l) { return l.inch; }), status: ls[0].status });
+    });
+    Object.keys(tables).forEach(function (k) { var l = tables[k]; rows.push({ type: 'dining', a: +k, inch: l.inch, status: l.status }); });
+    var ORDER = { coffee: 0, dining: 1, bed: 2, walk: 3 };
+    return rows.sort(function (p, q) { return (ORDER[p.type] - ORDER[q.type]) || (RANK[q.status] - RANK[p.status]) || (p.a - q.a); });
+  }
+
+  return { RULES: RULES, AGAINST: AGAINST, PASSAGE: PASSAGE, status: status, sides: sides, check: check, report: report };
+})();
+
+/* =====================================================================
+   DOOR: a door the person marks on a wall, and the space it swings through
+   A door in feet: { cx, cy (middle of the opening), ux, uy (along the
+   wall), nx, ny (the way it swings open), w (inches), hinge (+1 or -1,
+   which end of the opening the hinge is at) }.
+   ===================================================================== */
+var DOOR = (function () {
+  var WIDTHS = [24, 28, 30, 32, 36];
+  function geom(d) {
+    var r = d.w / 12;
+    var h = { x: d.cx + d.ux * d.hinge * r / 2, y: d.cy + d.uy * d.hinge * r / 2 };   // hinge
+    var e = { x: d.cx - d.ux * d.hinge * r / 2, y: d.cy - d.uy * d.hinge * r / 2 };   // latch side, door closed
+    var ex = -d.ux * d.hinge, ey = -d.uy * d.hinge, arc = [];
+    for (var k = 0; k <= 12; k++) {
+      var t = k / 12 * Math.PI / 2, c = Math.cos(t), s = Math.sin(t);
+      arc.push({ x: h.x + (ex * c + d.nx * s) * r, y: h.y + (ey * c + d.ny * s) * r });
+    }
+    return { hinge: h, latch: e, open: arc[arc.length - 1], arc: arc, sector: [h].concat(arc) };
+  }
+  // Does the door hit anything as it swings? pieces: [{ poly }] in feet.
+  // Returns { hits: [indices], nearest: { i, gap (ft) } or null }
+  function check(d, pieces) {
+    var g = geom(d), hits = [], nearest = null;
+    pieces.forEach(function (pc, j) {
+      var dist = GEO.polyDist(g.sector, pc.poly);
+      if (dist <= 1e-6) hits.push(j);
+      else if (!nearest || dist < nearest.gap) nearest = { i: j, gap: dist };
+    });
+    return { hits: hits, nearest: nearest };
+  }
+  return { WIDTHS: WIDTHS, geom: geom, check: check };
+})();
+
+/* =====================================================================
+   RUGSTYLE: rug sizes judged against the furniture in a room
+   Builds on RUG (which only looks at the walls). Each style turns into a
+   few measurements, each with a comfortable amount (comfy) in feet:
+   fits when every measurement reaches its comfy amount, tight when every
+   one is at least zero, too big (or too small) otherwise. The rug also
+   still needs RUG's floor at the walls.
+     allOn      every leg of the seating and the coffee table on the rug, 6" in
+     frontLegs  the front legs of each seat 6" onto the rug, coffee table on it
+     floating   only the coffee table on the rug; the seating stays off it
+     bed        rug runs 18" past each side of the bed (12" is tight) and past
+                the foot, under the lower two thirds, clear of the nightstands
+     dining     rug reaches 24" past the table on every side (18" is tight)
+   group: the room's pieces in feet, as SPACE takes them.
+   ===================================================================== */
+var RUGSTYLE = (function () {
+  var NAMES = { walls: 'By the walls', allOn: 'All legs on', frontLegs: 'Front legs on', floating: 'Floating', bed: 'Under the bed', dining: 'Under the table' };
+  function role(group, r) { return group.filter(function (p) { return p.role === r; }); }
+  function biggest(list) { return list.slice().sort(function (p, q) { return q.w * q.d - p.w * p.d; })[0] || null; }
+
+  // Which styles make sense for the pieces in this room
+  function available(group) {
+    var out = ['walls'], seats = role(group, 'seat'), coffee = role(group, 'coffee');
+    if (seats.length) out.push('allOn', 'frontLegs');
+    if (seats.length && coffee.length) out.push('floating');
+    if (role(group, 'bed').length) out.push('bed');
+    if (role(group, 'dining').length) out.push('dining');
+    return out;
+  }
+
+  // The rug on the plan in feet: { round, cx, cy, r } or a rectangle, plus its outline
+  function rugAt(s, rot, cx, cy) {
+    var f = RUG.footprint(s, rot), poly = [];
+    if (f.round) {
+      for (var i = 0; i < 32; i++) { var a = i / 32 * Math.PI * 2; poly.push({ x: cx + Math.cos(a) * f.w / 2, y: cy + Math.sin(a) * f.w / 2 }); }
+      return { round: true, cx: cx, cy: cy, r: f.w / 2, poly: poly };
+    }
+    var x0 = cx - f.w / 2, y0 = cy - f.h / 2, x1 = cx + f.w / 2, y1 = cy + f.h / 2;
+    return { x0: x0, y0: y0, x1: x1, y1: y1, poly: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }] };
+  }
+  // How far inside the rug a point is (feet); negative when it's off the rug
+  function inside(rg, p) {
+    if (rg.round) return rg.r - Math.hypot(p.x - rg.cx, p.y - rg.cy);
+    return Math.min(p.x - rg.x0, rg.x1 - p.x, p.y - rg.y0, rg.y1 - p.y);
+  }
+  function onPlan(pc, pts) { return GEO.place(pts, pc.cx, pc.cy, pc.rot, 1 / 12); }
+  function minInside(rg, pts) { return pts.reduce(function (m, p) { return Math.min(m, inside(rg, p)); }, Infinity); }
+  function legsOf(pc, which) {
+    if (pc.shape === 'round' || pc.role !== 'seat') return onPlan(pc, FURNITURE.outline(pc));
+    var L = FURNITURE.legs(pc);
+    return onPlan(pc, which === 'front' ? L.front : L.front.concat(L.back));
+  }
+  // How far the rug runs past point p going in direction dir (feet). Negative when p is off the rug.
+  function reach(rg, p, dir) {
+    if (!PLAN.pointInPoly(p, rg.poly)) return -GEO.edgeDist(p, rg.poly);
+    return GEO.rayPoly(p, dir.x, dir.y, rg.poly) || 0;
+  }
+
+  // The measurements for one style with the rug at one spot: [{ name, m, comfy, val }]
+  // m is measured against "tight" (0 means just tight), val is the number to show.
+  function terms(style, rg, group) {
+    var out = [], seats = role(group, 'seat'), coffee = role(group, 'coffee');
+    if (style === 'allOn') {
+      var m = Infinity;
+      seats.concat(coffee).forEach(function (pc) { m = Math.min(m, minInside(rg, legsOf(pc, 'all'))); });
+      out.push({ name: 'allOn', m: m, comfy: 0.5, val: m });
+    } else if (style === 'frontLegs') {
+      var mf = Infinity;
+      seats.forEach(function (pc) { mf = Math.min(mf, minInside(rg, legsOf(pc, 'front'))); });
+      out.push({ name: 'front', m: mf, comfy: 0.5, val: mf });
+      coffee.forEach(function (pc) { var mc = minInside(rg, legsOf(pc)); out.push({ name: 'coffee', m: mc, comfy: 0.5, val: mc }); });
+    } else if (style === 'floating') {
+      coffee.forEach(function (pc) { var mc = minInside(rg, legsOf(pc)); out.push({ name: 'coffee', m: mc, comfy: 0.5, val: mc }); });
+      seats.forEach(function (pc) {
+        var gap = GEO.polyDist(rg.poly, pc.poly);
+        // On the rug: how far the seat reaches onto it (at least a little, so it never reads as zero)
+        if (gap <= 0) gap = -Math.max(0.05, Math.max.apply(null, pc.poly.map(function (p) { return inside(rg, p); })));
+        out.push({ name: 'seatOff', m: gap, comfy: 0.25, val: gap });
+      });
+    } else if (style === 'bed') {
+      var bd = biggest(role(group, 'bed'));
+      if (bd) {
+        var w = bd.w, d = bd.d;
+        [-1, 1].forEach(function (sgn) {
+          var ext = Infinity, dir = GEO.turn({ x: sgn, y: 0 }, bd.rot);
+          [1 / 3, 0.6, 0.9].forEach(function (f) { ext = Math.min(ext, reach(rg, onPlan(bd, [{ x: sgn * w / 2, y: -d / 2 + f * d }])[0], dir)); });
+          out.push({ name: 'bedSide', m: ext - 1, comfy: 0.5, val: ext });
+        });
+        var foot = reach(rg, onPlan(bd, [{ x: 0, y: d / 2 }])[0], GEO.turn({ x: 0, y: 1 }, bd.rot));
+        out.push({ name: 'bedFoot', m: foot, comfy: 1, val: foot });
+        // From a third of the way down the bed, the rug should stop short of the headboard
+        var third = onPlan(bd, [{ x: 0, y: -d / 2 + d / 3 }])[0];
+        var up = reach(rg, third, GEO.turn({ x: 0, y: -1 }, bd.rot));
+        out.push({ name: 'bedHead', m: (d / 3) / 12 - up, comfy: 0, val: up });
+      }
+    } else if (style === 'dining') {
+      var tb = biggest(role(group, 'dining'));
+      if (tb) { var mt = minInside(rg, onPlan(tb, FURNITURE.outline(tb))); out.push({ name: 'dining', m: mt - 1.5, comfy: 0.5, val: mt }); }
+    }
+    return out;
+  }
+  function norm(t) { return t.comfy ? t.m / t.comfy : (t.m >= -1e-6 ? 1 : t.m * 12); }
+
+  // A rug size at one spot, judged on the style and the walls together
+  //   score  1 or more fits, 0 to 1 tight, under 0 doesn't work
+  //   worst  the measurement holding it back (or null when the walls are)
+  function evalAt(poly, style, s, rot, cx, cy, group) {
+    var c = RUG.clearanceAt(poly, s, rot, cx, cy), span = RUG.COMFORT - RUG.TIGHT;
+    // judged on whole inches, the same numbers the person sees
+    var score = Math.min(1, (Math.round(c * 12) / 12 - RUG.TIGHT) / span), worst = null;
+    if (style && style !== 'walls') {
+      terms(style, rugAt(s, rot, cx, cy), group).forEach(function (t) {
+        var sc = norm({ m: Math.round(t.m * 12) / 12, comfy: t.comfy });
+        if (sc < score) { score = sc; worst = t; }
+      });
+    }
+    return { score: score, raw: Math.min(1, (c - RUG.TIGHT) / span, rawStyle(style, s, rot, cx, cy, group)), clearance: c, worst: worst,
+             status: score >= 1 ? 'fits' : score >= 0 ? 'tight' : 'big' };
+  }
+  // Same as evalAt's score without rounding, so the search can feel its way
+  function rawStyle(style, s, rot, cx, cy, group) {
+    if (!style || style === 'walls') return Infinity;
+    var rg = rugAt(s, rot, cx, cy);
+    return terms(style, rg, group).reduce(function (m, t) { return Math.min(m, norm(t)); }, Infinity);
+  }
+
+  // Where this size works best for the style: a coarse grid over the room, then
+  // zoom in. Ties go to the spot closest to the middle of the furniture.
+  function bestSpot(poly, style, s, group) {
+    var b = PLAN.bounds(poly), mid = groupMid(group) || { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    var rots = s.d ? [0] : [0, 90], best = null;
+    function consider(rot, x, y) {
+      var e = evalAt(poly, style, s, rot, x, y, group), sc = Math.min(1, e.raw), dm = Math.hypot(x - mid.x, y - mid.y);
+      if (!best || sc > best.sc + 1e-4 || (Math.abs(sc - best.sc) <= 1e-4 && dm < best.dm)) best = { rot: rot, cx: x, cy: y, sc: sc, dm: dm };
+    }
+    var step = Math.max(0.25, Math.max(b.w, b.h) / 32);
+    rots.forEach(function (rot) {
+      for (var x = b.x + step / 2; x < b.x + b.w; x += step)
+        for (var y = b.y + step / 2; y < b.y + b.h; y += step) consider(rot, x, y);
+    });
+    if (!best) return null;
+    for (var st = step / 2; st > 0.02; st /= 2) {
+      var bx = best.cx, by = best.cy, br = best.rot;
+      for (var i = -2; i <= 2; i++) for (var j = -2; j <= 2; j++) if (i || j) consider(br, bx + i * st, by + j * st);
+    }
+    var e = evalAt(poly, style, s, best.rot, best.cx, best.cy, group);
+    return { rot: best.rot, cx: best.cx, cy: best.cy, clearance: e.clearance, score: e.score, worst: e.worst, status: e.status };
+  }
+  function groupMid(group) {
+    if (!group || !group.length) return null;
+    var all = []; group.forEach(function (p) { all = all.concat(p.poly); });
+    var bb = PLAN.bounds(all);
+    return { x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 };
+  }
+  // Pieces that matter to a style (the rest of the room's furniture is ignored)
+  function relevant(style, group) {
+    var keep = { allOn: ['seat', 'coffee'], frontLegs: ['seat', 'coffee'], floating: ['seat', 'coffee'], bed: ['bed'], dining: ['dining'] }[style];
+    if (!keep) return [];
+    var g = group.filter(function (p) { return keep.indexOf(p.role) > -1; });
+    if (style === 'bed' || style === 'dining') { var big = biggest(g); return big ? [big] : []; }
+    return g;
+  }
+
+  // Every standard size for a style. Same shape as RUG.check's result.
+  function check(poly, style, group) {
+    if (!style || style === 'walls') return RUG.check(poly);
+    if (!poly || poly.length < 3) return null;
+    var g = relevant(style, group || []);
+    var list = RUG.SIZES.map(function (s) {
+      var spot = bestSpot(poly, style, s, g);
+      return { size: s, spot: spot, status: spot ? spot.status : 'big' };
+    });
+    var best = null;
+    list.forEach(function (it) { if (it.status === 'fits' && (!best || sizeArea(it.size) > sizeArea(best.size))) best = it; });
+    return { list: list, best: best ? best.size.id : null };
+  }
+  function sizeArea(s) { return s.d ? Math.PI * s.d * s.d / 4 : s.w * s.h; }
+  // The rug where the person left it, judged on the style
+  function judge(poly, style, s, rot, cx, cy, group) {
+    return evalAt(poly, style, s, rot, cx, cy, relevant(style, group || []));
+  }
+
+  return { NAMES: NAMES, available: available, relevant: relevant, terms: terms, evalAt: evalAt, bestSpot: bestSpot, check: check, judge: judge };
 })();
