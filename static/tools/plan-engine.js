@@ -905,6 +905,7 @@ var SPACE = (function () {
   var RULES = {
     walk: { ok: 36, tight: 30 },        // main walkway
     dining: { ok: 36, tight: 30 },      // around a dining table, on a side with chairs
+    diningWalk: { ok: 44, tight: 36 },  // a side with chairs that people walk behind (on a route)
     diningOpen: { ok: 24, tight: 18 },  // a side of the table with no chairs (against a wall, say)
     bed: { ok: 24, tight: 18 },         // beside a bed
     bedFoot: { ok: 30, tight: 24 },     // at the foot of a bed
@@ -926,8 +927,24 @@ var SPACE = (function () {
     return inch >= r.ok ? 'ok' : inch >= r.tight ? 'tight' : 'close';
   }
 
+  // Is there a real wall where a line meets a room outline? Room outlines can
+  // meet along an open edge (a living room open to an entrance), so the line
+  // only counts as reaching a wall if the plan has wall ink just beyond the
+  // outline, or on both sides of the spot (a window or doorway in a real wall,
+  // up to 5 feet wide). wallTest(p) says whether point p (feet) is wall ink.
+  function realWall(p, dir, wallTest) {
+    var t, s, u = { x: -dir.y, y: dir.x };
+    function ink(q) { return wallTest(q); }
+    for (t = 0; t <= 10; t += 1) if (ink({ x: p.x + dir.x * t / 12, y: p.y + dir.y * t / 12 })) return true;
+    function side(sg) {
+      for (s = 3; s <= 30; s += 3) for (t = 0; t <= 10; t += 2)
+        if (ink({ x: p.x + (u.x * sg * s + dir.x * t) / 12, y: p.y + (u.y * sg * s + dir.y * t) / 12 })) return true;
+      return false;
+    }
+    return side(1) && side(-1);
+  }
   // Nearest wall or piece straight out from p, within RANGE feet
-  function cast(p, dir, walls, pieces, skip) {
+  function cast(p, dir, walls, pieces, skip, wallTest) {
     var best = null;
     pieces.forEach(function (o, j) {
       if (skip(o, j)) return;
@@ -937,7 +954,9 @@ var SPACE = (function () {
     });
     walls.forEach(function (poly) {
       var t = GEO.rayPoly(p, dir.x, dir.y, poly);
-      if (t != null && (!best || t < best.gap)) best = { gap: t, hit: { type: 'wall' } };
+      if (t == null || t > RANGE || (best && t >= best.gap)) return;
+      if (wallTest && !realWall({ x: p.x + dir.x * t, y: p.y + dir.y * t }, dir, wallTest)) return;   // open floor, not a wall
+      best = { gap: t, hit: { type: 'wall' } };
     });
     return best && best.gap <= RANGE ? best : null;
   }
@@ -979,7 +998,9 @@ var SPACE = (function () {
   //   show   'always' for the room checks and narrow walkways,
   //          'selected' for lines drawn only while that piece is picked,
   //          false for pieces set against something
-  function check(pieces, walls) {
+  // wallTest (optional): checks lines that end on a room outline against the plan's real walls.
+  // A piece may carry walkBehind { side: true } for dining sides a walking route passes behind.
+  function check(pieces, walls, wallTest) {
     var lines = [];
     pieces.forEach(function (pc, i) {
       var skip = function (o, j) {
@@ -992,7 +1013,7 @@ var SPACE = (function () {
       sides(pc).forEach(function (sd) {
         var best = null;
         sd.pts.forEach(function (p) {
-          var r = cast(p, sd.dir, walls, pieces, skip);
+          var r = cast(p, sd.dir, walls, pieces, skip, wallTest);
           if (r && (!best || r.gap < best.gap)) best = { gap: r.gap, hit: r.hit, from: p };
         });
         if (!best) return;
@@ -1003,7 +1024,7 @@ var SPACE = (function () {
         else if (other && seatConsole(pc, other) && inch <= CONSOLE_PAIR) rule = 'console';
         else if (pc.role === 'bed' && (sd.name === 'left' || sd.name === 'right')) rule = 'bed';
         else if (pc.role === 'bed' && sd.name === 'front') rule = 'bedFoot';
-        else if (pc.role === 'dining') rule = chairsOnSide(pc, sd, pieces) ? 'dining' : 'diningOpen';
+        else if (pc.role === 'dining') rule = chairsOnSide(pc, sd, pieces) ? (pc.walkBehind && pc.walkBehind[sd.name] ? 'diningWalk' : 'dining') : 'diningOpen';
         else if (pc.role === 'desk' && sd.name === 'front') rule = 'desk';
         else if (pc.role === 'dresser' && sd.name === 'front') rule = 'drawers';
         // A bed set right against a wall on a side nobody uses is on purpose (a kids' room, a daybed)
@@ -1042,7 +1063,7 @@ var SPACE = (function () {
     lines = lines.filter(function (l) { return !l.dup; });
     return lines.concat(talkLines(pieces), tvLines(pieces));
   }
-  var PRIORITY = { coffee: 0, console: 1, drawers: 2, desk: 3, dining: 4, diningOpen: 4, bedFoot: 5, bed: 6 };
+  var PRIORITY = { coffee: 0, console: 1, drawers: 2, desk: 3, dining: 4, diningWalk: 4, diningOpen: 4, bedFoot: 5, bed: 6 };
 
   /* ---------- Seats facing each other, and the TV ---------- */
   // Where someone sits: the middle of a seat's front edge (a sectional's long run), in feet
@@ -1105,7 +1126,7 @@ var SPACE = (function () {
       var b = l.hit.type === 'piece' ? l.hit.i : -1;
       if (l.rule === 'coffee') rows.push({ type: 'coffee', a: l.piece, b: b, inch: l.inch, status: l.status });
       else if (l.rule === 'bed') (beds[l.piece] = beds[l.piece] || []).push(l);
-      else if (l.rule === 'dining' || l.rule === 'diningOpen') { if (!tables[l.piece] || worse(l, tables[l.piece]) > 0) tables[l.piece] = l; }
+      else if (l.rule === 'dining' || l.rule === 'diningWalk' || l.rule === 'diningOpen') { if (!tables[l.piece] || worse(l, tables[l.piece]) > 0) tables[l.piece] = l; }
       else if (l.rule === 'bedFoot' && !l.against) rows.push({ type: 'bedFoot', a: l.piece, b: b, inch: l.inch, status: l.status });
       else if (l.rule === 'desk' || l.rule === 'drawers') rows.push({ type: l.rule, a: l.piece, b: b, inch: l.inch, status: l.status });
       else if (l.rule === 'console' && l.status !== 'ok') rows.push({ type: 'console', a: l.piece, b: b, inch: l.inch, status: l.status });
@@ -1119,7 +1140,7 @@ var SPACE = (function () {
       rows.push({ type: 'bed', a: +k, sides: ls.map(function (l) { return { inch: l.inch, against: !!l.against }; }),
                   inches: ls.map(function (l) { return l.inch; }), status: open.length ? open[0].status : 'ok' });
     });
-    Object.keys(tables).forEach(function (k) { var l = tables[k]; rows.push({ type: 'dining', a: +k, inch: l.inch, open: l.rule === 'diningOpen', status: l.status }); });
+    Object.keys(tables).forEach(function (k) { var l = tables[k]; rows.push({ type: 'dining', a: +k, inch: l.inch, open: l.rule === 'diningOpen', walk: l.rule === 'diningWalk', status: l.status }); });
     var ORDER = { coffee: 0, talk: 1, tv: 2, console: 3, dining: 4, desk: 5, drawers: 6, bed: 7, bedFoot: 8, walk: 9 };
     return rows.sort(function (p, q) { return (ORDER[p.type] - ORDER[q.type]) || (RANK[q.status] - RANK[p.status]) || (p.a - q.a); });
   }
@@ -1412,4 +1433,340 @@ var RUGSTYLE = (function () {
   }
 
   return { NAMES: NAMES, available: available, relevant: relevant, terms: terms, evalAt: evalAt, bestSpot: bestSpot, check: check, judge: judge };
+})();
+
+/* =====================================================================
+   WALK: the real walking routes through a plan
+   Lays a fine grid (2") over the rooms. Wall ink and furniture are blocked;
+   everything else inside a room (or within a foot of one, so routes can pass
+   through openings and doorways) is floor. For every open floor square it
+   works out how wide the clear space is there, then finds, from each marked
+   door, the widest way to each place people need to reach: the other doors,
+   each open side of a bed, the front of each seat, the desk, and the front of
+   each dresser. A route's width is its narrowest point (the pinch). Doorways
+   themselves, and the last stretch at the place being reached (a bed side,
+   the space at a sofa), are left out of the pinch: those have their own checks.
+   Input, all in feet:
+     pieces    as for SPACE (role, rot, w, d, cx, cy, poly, ...)
+     rooms     room outlines
+     doors     { cx, cy, w (inches) }
+     wallTest  p -> true when p is wall ink
+   The code only measures; the person decides where things go.
+   ===================================================================== */
+var WALK = (function () {
+  var CELL = 2;          // inches per grid square
+  var CAP = 48;          // inches: wider than this is all the same (open floor)
+  var REACH = 36;        // inches: the space at a bed side, a seat, a desk or a dresser (judged by its own check)
+  var DOOR_PAD = 4;      // inches past each end of a doorway that count as the opening itself
+  var EDGE_PAD = 12;     // inches outside a room outline still counted as floor (walls, openings)
+  var BEHIND = [18, 60]; // inches out from a dining table edge where a route passes behind the chairs
+  var RULE = { ok: 36, tight: 30 };
+  function status(inch) { return inch >= RULE.ok ? 'ok' : inch >= RULE.tight ? 'tight' : 'close'; }
+
+  function nameOf(n) { return n.y < -0.7 ? 'back' : n.y > 0.7 ? 'front' : n.x < 0 ? 'left' : 'right'; }
+  // The sides of a piece on the plan: { name, a, b (ends, feet), n (outward), along: [lo, hi] share of the edge }
+  function edges(pc) {
+    var out = [];
+    if (pc.shape === 'round') {
+      [{ x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }].forEach(function (n) {
+        // a straight stand-in for the curve: the tangent at that point, as wide as the piece
+        var half = (n.x ? pc.d : pc.w) / 2, rad = (n.x ? pc.w : pc.d) / 2, t = { x: -n.y, y: n.x };
+        var pts = GEO.place([{ x: n.x * rad + t.x * half, y: n.y * rad + t.y * half }, { x: n.x * rad - t.x * half, y: n.y * rad - t.y * half }], pc.cx, pc.cy, pc.rot, 1 / 12);
+        out.push({ name: nameOf(n), a: pts[0], b: pts[1], n: GEO.turn(n, pc.rot) });
+      });
+      return out;
+    }
+    var loc = FURNITURE.outline(pc), pl = GEO.place(loc, pc.cx, pc.cy, pc.rot, 1 / 12);
+    for (var i = 0; i < loc.length; i++) {
+      var a = loc[i], b = loc[(i + 1) % loc.length], ex = b.x - a.x, ey = b.y - a.y, len = Math.hypot(ex, ey);
+      if (len < 6) continue;
+      var n = { x: ey / len, y: -ex / len };
+      out.push({ name: nameOf(n), a: pl[i], b: pl[(i + 1) % loc.length], n: GEO.turn(n, pc.rot), local: { a: a, b: b } });
+    }
+    return out;
+  }
+  // Where a point sits against an edge: how far along it (0 to 1) and how far out (feet)
+  function against(p, e) {
+    var ex = e.b.x - e.a.x, ey = e.b.y - e.a.y, L2 = ex * ex + ey * ey;
+    return { t: ((p.x - e.a.x) * ex + (p.y - e.a.y) * ey) / L2, out: (p.x - e.a.x) * e.n.x + (p.y - e.a.y) * e.n.y };
+  }
+
+  // Squared distance transform (Felzenszwalb and Huttenlocher), one row or column
+  function edt1d(f, n) {
+    var d = new Float64Array(n), v = new Int32Array(n), z = new Float64Array(n + 1), k = 0, q, s;
+    v[0] = 0; z[0] = -Infinity; z[1] = Infinity;
+    for (q = 1; q < n; q++) {
+      if (f[q] === Infinity) continue;
+      if (f[v[k]] === Infinity) { v[k] = q; z[k] = -Infinity; z[k + 1] = Infinity; continue; }
+      s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      while (s <= z[k]) { k--; if (k < 0) break; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+      if (k < 0) { k = 0; v[0] = q; z[0] = -Infinity; z[1] = Infinity; continue; }
+      k++; v[k] = q; z[k] = s; z[k + 1] = Infinity;
+    }
+    if (f[v[0]] === Infinity) { for (q = 0; q < n; q++) d[q] = Infinity; return d; }
+    k = 0;
+    for (q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
+    return d;
+  }
+  function edt(free, nx, ny) {
+    var g = new Float64Array(nx * ny), i, x, y, col = new Float64Array(ny), row = new Float64Array(nx);
+    for (i = 0; i < nx * ny; i++) g[i] = free[i] ? Infinity : 0;
+    for (x = 0; x < nx; x++) {
+      for (y = 0; y < ny; y++) col[y] = g[y * nx + x];
+      var dc = edt1d(col, ny);
+      for (y = 0; y < ny; y++) g[y * nx + x] = dc[y];
+    }
+    for (y = 0; y < ny; y++) {
+      for (x = 0; x < nx; x++) row[x] = g[y * nx + x];
+      var dr = edt1d(row, nx);
+      for (x = 0; x < nx; x++) g[y * nx + x] = Math.sqrt(dr[x]);
+    }
+    return g;   // in cells, to the nearest blocked cell's center
+  }
+
+  // A small binary heap of cell numbers, smallest key first
+  function Heap() { this.k = []; this.v = []; }
+  Heap.prototype.push = function (key, val) {
+    var k = this.k, v = this.v, i = k.length; k.push(key); v.push(val);
+    while (i > 0) { var p = (i - 1) >> 1; if (k[p] <= key) break; k[i] = k[p]; v[i] = v[p]; i = p; }
+    k[i] = key; v[i] = val;
+  };
+  Heap.prototype.pop = function () {
+    var k = this.k, v = this.v, top = v[0], lk = k.pop(), lv = v.pop(), n = k.length, i = 0;
+    if (!n) return top;
+    while (true) {
+      var l = 2 * i + 1, r = l + 1, m = i, mk = lk;
+      if (l < n && k[l] < mk) { m = l; mk = k[l]; }
+      if (r < n && k[r] < mk) { m = r; mk = k[r]; }
+      if (m === i) break;
+      k[i] = k[m]; v[i] = v[m]; i = m;
+    }
+    k[i] = lk; v[i] = lv;
+    return top;
+  };
+
+  function routes(o) {
+    var rooms = o.rooms || [], pieces = o.pieces || [], doors = o.doors || [], wallTest = o.wallTest;
+    if (!rooms.length || !doors.length || !wallTest) return null;
+    var all = []; rooms.forEach(function (r) { all = all.concat(r); });
+    var bb = PLAN.bounds(all), pad = 2, c = CELL / 12;
+    var area = (bb.w + 2 * pad) * (bb.h + 2 * pad);
+    if (area / (c * c) > 400000) c = Math.sqrt(area / 400000);   // keep very large plans quick
+    var x0 = bb.x - pad, y0 = bb.y - pad, nx = Math.ceil((bb.w + 2 * pad) / c), ny = Math.ceil((bb.h + 2 * pad) / c), N = nx * ny;
+    var free = new Uint8Array(N), inside = new Uint8Array(N), i, x, y;
+    function at(i) { return { x: x0 + (i % nx + 0.5) * c, y: y0 + (Math.floor(i / nx) + 0.5) * c }; }
+    function cellOf(p) { var cx = Math.floor((p.x - x0) / c), cy = Math.floor((p.y - y0) / c); return cx < 0 || cy < 0 || cx >= nx || cy >= ny ? -1 : cy * nx + cx; }
+    // Floor: in a room, or close enough to one to be a wall or an opening between rooms
+    var edgePad = EDGE_PAD / 12;
+    for (i = 0; i < N; i++) {
+      var p = at(i), inR = false, near = false;
+      for (var r = 0; r < rooms.length && !inR; r++) {
+        var rb = PLAN.bounds(rooms[r]);
+        if (p.x < rb.x - edgePad || p.x > rb.x + rb.w + edgePad || p.y < rb.y - edgePad || p.y > rb.y + rb.h + edgePad) continue;
+        if (PLAN.pointInPoly(p, rooms[r])) inR = true;
+        else if (!near && GEO.edgeDist(p, rooms[r]) <= edgePad) near = true;
+      }
+      if ((inR || near) && !wallTest(p)) { free[i] = 1; inside[i] = inR ? 1 : 0; }
+    }
+    // Furniture is in the way
+    var owner = new Int32Array(N).fill(-1);
+    pieces.forEach(function (pc, k) {
+      var b = PLAN.bounds(pc.poly);
+      for (y = Math.max(0, Math.floor((b.y - y0) / c)); y <= Math.min(ny - 1, Math.floor((b.y + b.h - y0) / c)); y++)
+        for (x = Math.max(0, Math.floor((b.x - x0) / c)); x <= Math.min(nx - 1, Math.floor((b.x + b.w - x0) / c)); x++) {
+          var j = y * nx + x;
+          if (PLAN.pointInPoly(at(j), pc.poly)) { free[j] = 0; owner[j] = k; }
+        }
+    });
+    // Clear width at each square, whole inches, capped
+    var dist = edt(free, nx, ny), wide = new Int16Array(N);
+    for (i = 0; i < N; i++) wide[i] = free[i] ? Math.min(CAP, Math.max(0, Math.round((2 * dist[i] - 1) * c * 12))) : 0;
+    // Doorways: the squares around each door, which are where routes start
+    var doorCells = doors.map(function (d) {
+      var R = (d.w / 2 + DOOR_PAD) / 12, list = [];
+      for (y = Math.max(0, Math.floor((d.cy - R - y0) / c)); y <= Math.min(ny - 1, Math.floor((d.cy + R - y0) / c)); y++)
+        for (x = Math.max(0, Math.floor((d.cx - R - x0) / c)); x <= Math.min(nx - 1, Math.floor((d.cx + R - x0) / c)); x++) {
+          var j = y * nx + x, q = at(j);
+          if (free[j] && Math.hypot(q.x - d.cx, q.y - d.cy) <= R) list.push(j);
+        }
+      return list;
+    });
+    var inDoor = new Uint8Array(N);
+    doorCells.forEach(function (l) { l.forEach(function (j) { inDoor[j] = 1; }); });
+    function cellsNear(e, lo, hi, depth0, depth1) {
+      var L = Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y), reach = depth1 / 12, list = [];
+      var ex = (e.b.x - e.a.x), ey = (e.b.y - e.a.y);
+      var A = { x: e.a.x + ex * Math.min(0, lo), y: e.a.y + ey * Math.min(0, lo) }, Bq = { x: e.a.x + ex * Math.max(1, hi), y: e.a.y + ey * Math.max(1, hi) };
+      var pts = [A, Bq, { x: A.x + e.n.x * reach, y: A.y + e.n.y * reach }, { x: Bq.x + e.n.x * reach, y: Bq.y + e.n.y * reach }], b = PLAN.bounds(pts);
+      for (y = Math.max(0, Math.floor((b.y - y0) / c)); y <= Math.min(ny - 1, Math.floor((b.y + b.h - y0) / c)); y++)
+        for (x = Math.max(0, Math.floor((b.x - x0) / c)); x <= Math.min(nx - 1, Math.floor((b.x + b.w - x0) / c)); x++) {
+          var j = y * nx + x;
+          if (!free[j]) continue;
+          var s = against(at(j), e);
+          if (s.t >= lo && s.t <= hi && s.out > depth0 / 12 && s.out <= reach) list.push({ j: j, out: s.out });
+        }
+      return L ? list : [];
+    }
+    // The places people need to reach
+    var dests = [];
+    pieces.forEach(function (pc, k) {
+      var want = pc.role === 'bed' ? { left: 1, right: 1 } : pc.role === 'seat' || pc.role === 'desk' || pc.role === 'dresser' ? { front: 1 } : null;
+      if (!want) return;
+      edges(pc).forEach(function (e) {
+        if (!want[e.name]) return;
+        var lo = 0, hi = 1;
+        if (pc.role === 'bed' && e.local) {   // beside a bed: where you stand is the lower part, below the nightstands
+          var fa = (e.local.a.y + pc.d / 2) / pc.d, fb = (e.local.b.y + pc.d / 2) / pc.d;
+          var t1 = (0.35 - fa) / (fb - fa), t2 = (0.95 - fa) / (fb - fa); lo = Math.min(t1, t2); hi = Math.max(t1, t2);
+        }
+        // A side set against a wall or another piece leaves nowhere to stand: nothing to reach
+        if (!cellsNear(e, lo, hi, 0, REACH).some(function (z) { return z.out >= 12 / 12; })) return;
+        // ...and the space you arrive in runs the whole side, plus 18" past each end (the way into it)
+        var Ls = Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y) * 12, ext = 18 / Ls;
+        var zone = cellsNear(e, -ext, 1 + ext, 0, REACH);
+        var mid = (lo + hi) / 2, stand = { x: e.a.x + (e.b.x - e.a.x) * mid + e.n.x, y: e.a.y + (e.b.y - e.a.y) * mid + e.n.y };   // 12" out
+        dests.push({ piece: k, side: e.name, cells: zone.map(function (z) { return z.j; }), stand: stand });
+      });
+    });
+
+    // From each door: the widest way to every square (then the shortest of those, kept to the middle)
+    var NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
+    function run(src, d) {
+      function start(j) { var q = at(j); return Math.hypot(q.x - d.cx, q.y - d.cy) / c; }
+      var B = new Int16Array(N).fill(-1), cost = new Float64Array(N).fill(Infinity), par = new Int32Array(N).fill(-1), done = new Uint8Array(N), h = new Heap();
+      src.forEach(function (j) { if (!inside[j]) return; B[j] = CAP; cost[j] = start(j); h.push(cost[j], j); });
+      if (!h.v.length) src.forEach(function (j) { B[j] = CAP; cost[j] = start(j); h.push(cost[j], j); });
+      while (h.v.length) {
+        var j = h.pop();
+        if (done[j]) continue;
+        done[j] = 1;
+        var jx = j % nx, jy = (j - jx) / nx;
+        for (var m = 0; m < 8; m++) {
+          var ax = jx + NB[m][0], ay = jy + NB[m][1];
+          if (ax < 0 || ay < 0 || ax >= nx || ay >= ny) continue;
+          var q = ay * nx + ax;
+          if (!free[q] || done[q]) continue;
+          var wq = inDoor[q] ? CAP : wide[q], nb = Math.min(B[j], wq);
+          var nc = cost[j] + NB[m][2] * (1 + 6 / (wq + 6));   // a little extra cost near things keeps routes centered
+          if (nb > B[q] || (nb === B[q] && nc < cost[q])) { B[q] = nb; cost[q] = nc; par[q] = j; h.push((CAP - nb) * 1e7 + nc, q); }
+        }
+      }
+      return { B: B, cost: cost, par: par };
+    }
+    var runs = doorCells.map(function (l, k) { return run(l, doors[k]); });
+    // Best way into a place: from a square next to it (the place itself is left out of the pinch)
+    function reach(rn, dest) {
+      var mark = {}, best = -1;
+      dest.cells.forEach(function (j) { mark[j] = 1; });
+      dest.cells.forEach(function (j) {
+        if (rn.par[j] < 0 && rn.B[j] === CAP) { best = j; return; }   // a door opens right onto it
+        var jx = j % nx, jy = (j - jx) / nx;
+        for (var m = 0; m < 8; m++) {
+          var ax = jx + NB[m][0], ay = jy + NB[m][1], q = ay * nx + ax;
+          if (ax < 0 || ay < 0 || ax >= nx || ay >= ny || mark[q] || rn.B[q] < 0) continue;
+          if (best < 0 || rn.B[q] > rn.B[best] || (rn.B[q] === rn.B[best] && rn.cost[q] < rn.cost[best])) best = q;
+        }
+      });
+      return best;
+    }
+    function trace(rn, j) { var path = []; while (j > -1) { path.push(j); j = rn.par[j]; } return path.reverse(); }
+    // The pinch, measured across: from the nearest thing in the way, straight through to the far side
+    function pinchLine(j) {
+      var p = at(j), R = Math.ceil(dist[j]) + 1, jx = j % nx, jy = (j - jx) / nx, best = -1, bd = Infinity;
+      for (y = Math.max(0, jy - R); y <= Math.min(ny - 1, jy + R); y++)
+        for (x = Math.max(0, jx - R); x <= Math.min(nx - 1, jx + R); x++) {
+          var q = y * nx + x;
+          if (free[q]) continue;
+          var dd = (x - jx) * (x - jx) + (y - jy) * (y - jy);
+          if (dd < bd) { bd = dd; best = q; }
+        }
+      if (best < 0) return null;
+      var a = at(best), u = { x: p.x - a.x, y: p.y - a.y }, L = Math.hypot(u.x, u.y) || 1;
+      u = { x: u.x / L, y: u.y / L };
+      var b = null;
+      for (var s = 0; s < 2 * CAP / 12 + 2; s += c / 2) {
+        var k = cellOf({ x: p.x + u.x * s, y: p.y + u.y * s });
+        if (k < 0) break;
+        if (!free[k]) { b = at(k); break; }
+      }
+      if (!b) return null;
+      function what(q) {
+        var k = cellOf(q);
+        if (k > -1 && owner[k] > -1) return { type: 'piece', i: owner[k] };
+        return { type: 'wall' };
+      }
+      var A = { x: a.x + u.x * c / 2, y: a.y + u.y * c / 2 }, Bp = { x: b.x - u.x * c / 2, y: b.y - u.y * c / 2 };
+      return { a: A, b: Bp, between: [what(a), what(b)] };
+    }
+
+    var out = [];
+    // Every pair of doors, once
+    for (var da = 0; da < doors.length; da++) for (var db = da + 1; db < doors.length; db++)
+      dests.push({ door: db, only: da, cells: doorCells[db], stand: { x: doors[db].cx, y: doors[db].cy } });
+    // For drawing: the last stretch inside the place being reached, from where the route
+    // enters it to where you'd stand (the shortest way through its own squares)
+    function finish(dest, j) {
+      var mark = {}, par = {}, queue = [j], seen = {}, best = j, bd = Infinity;
+      dest.cells.forEach(function (q) { mark[q] = 1; });
+      seen[j] = 1;
+      while (queue.length) {
+        var q = queue.shift(), pq = at(q), dd = Math.hypot(pq.x - dest.stand.x, pq.y - dest.stand.y);
+        if (dd < bd) { bd = dd; best = q; }
+        var qx = q % nx, qy = (q - qx) / nx;
+        for (var m = 0; m < 8; m++) {
+          var ax = qx + NB[m][0], ay = qy + NB[m][1], w = ay * nx + ax;
+          if (ax < 0 || ay < 0 || ax >= nx || ay >= ny || seen[w] || !mark[w]) continue;
+          seen[w] = 1; par[w] = q; queue.push(w);
+        }
+      }
+      var tail = [];
+      for (var t = best; t !== j && t != null; t = par[t]) tail.push(at(t));
+      tail.reverse();
+      if (dest.door != null) tail.push(dest.stand);
+      return tail;
+    }
+    dests.forEach(function (dest) {
+      if (!dest.cells.length) return;
+      var pick = null;
+      runs.forEach(function (rn, k) {
+        if (dest.door === k || (dest.only != null && dest.only !== k)) return;
+        var j = reach(rn, dest);
+        if (j < 0) return;
+        if (!pick || rn.B[j] > pick.rn.B[pick.j] || (rn.B[j] === pick.rn.B[pick.j] && rn.cost[j] < pick.rn.cost[pick.j])) pick = { k: k, rn: rn, j: j };
+      });
+      if (!pick) {
+        out.push({ to: dest.door != null ? { door: dest.door } : { piece: dest.piece, side: dest.side }, from: dest.only != null ? dest.only : -1,
+                   blocked: true, width: 0, status: 'close', path: [] });
+        return;
+      }
+      var cells = trace(pick.rn, pick.j), width = pick.rn.B[pick.j], pinch = null;
+      if (width < CAP) {
+        var pj = -1;
+        cells.forEach(function (j) { if (!inDoor[j] && (pj < 0 || wide[j] < wide[pj])) pj = j; });
+        if (pj > -1) pinch = pinchLine(pj);
+        // Measured across the pinch, edge to edge. No far side within reach: it's open floor after all.
+        width = pinch ? Math.min(CAP, Math.round(Math.hypot(pinch.a.x - pinch.b.x, pinch.a.y - pinch.b.y) * 12)) : CAP;
+      }
+      out.push({ to: dest.door != null ? { door: dest.door } : { piece: dest.piece, side: dest.side }, from: pick.k,
+                 path: [{ x: doors[pick.k].cx, y: doors[pick.k].cy }].concat(cells.map(at), finish(dest, pick.j)), cells: cells, width: width, open: width >= CAP, status: status(width),
+                 blocked: width < 12, pinch: width < CAP ? pinch : null });
+    });
+    // Dining sides that a route passes behind (people walk behind seated guests there)
+    var behind = {};
+    pieces.forEach(function (pc, k) {
+      if (pc.role !== 'dining') return;
+      edges(pc).forEach(function (e) {
+        var zone = {}; cellsNear(e, 0, 1, BEHIND[0], BEHIND[1]).forEach(function (z) { zone[z.j] = 1; });
+        var hit = out.some(function (r) {
+          if (r.to.piece === k) return false;
+          return (r.cells || []).some(function (j) { return zone[j] && !inDoor[j]; });
+        });
+        if (hit) (behind[k] = behind[k] || {})[e.name] = true;
+      });
+    });
+    out.forEach(function (r) { delete r.cells; });
+    return { routes: out, behind: behind, cell: c };
+  }
+
+  return { RULE: RULE, CAP: CAP, routes: routes, status: status };
 })();

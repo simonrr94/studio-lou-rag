@@ -275,7 +275,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=10"></script>
+  <script src="/static/tools/plan-engine.js?v=11"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -677,6 +677,7 @@
         }
       }
 
+      if (state.scale) drawWalkways(ctx, forExport);
       if (!forExport && state.scale) { drawPieceHandles(ctx); drawHandleTag(ctx); }
 
       if (!forExport) {
@@ -872,7 +873,42 @@
                w: pc.w, d: pc.d, rot: pc.rot, cx: cx, cy: cy, poly: FURNITURE.shapeAt(pc, cx, cy, 1 / 12),
                tv: pc.tv || null, room: (pieceRoom(pc) || { id: 0 }).id };
     }
-    function piecesFt() { return state.scale ? state.pieces.map(pieceFt) : []; }
+    function piecesFtRaw() { return state.scale ? state.pieces.map(pieceFt) : []; }
+    // With the dining sides a walking route passes behind, so those sides are judged at 44"
+    function piecesFt() {
+      var list = piecesFtRaw(), wk = walkways();
+      if (wk) list.forEach(function (pc, k) { if (wk.behind[k]) pc.walkBehind = wk.behind[k]; });
+      return list;
+    }
+
+    /* ---------- Real walkways (WALK in plan-engine.js) ----------
+       From the marked doors: the widest way to the other doors, each open side
+       of a bed, the front of each seat, the desk, and the front of each dresser.
+       Needs at least one door and the plan's wall lines. Worked out again only
+       when something changes, and not while a piece is being dragged. */
+    var WALK_CACHE = { key: null, res: null };
+    function walkways() {
+      if (!state.scale || !state.doors.length || !wallTestFt() || !state.rooms.some(function (r) { return r.ftShape; })) return null;
+      if (state.drag && state.drag.moved && WALK_CACHE.res) return WALK_CACHE.res;
+      var key = JSON.stringify([state.pieces, state.doors, state.rooms.map(function (r) { return r.ftShape; }), state.scale.ftPerPx]);
+      if (key !== WALK_CACHE.key) {
+        WALK_CACHE.key = key;
+        try {
+          WALK_CACHE.res = WALK.routes({ pieces: piecesFtRaw(), rooms: wallsFt(), wallTest: wallTestFt(),
+                                         doors: state.doors.map(doorFt) });
+        } catch (e) { if (window.console) console.warn('Walkways skipped:', e); WALK_CACHE.res = null; }
+      }
+      return WALK_CACHE.res;
+    }
+    // A route's end, in words: "the bed's left side", "the sofa", "door 2"
+    var SIDE_WORD = { left: 'left side', right: 'right side', front: 'front', back: 'back' };
+    function routeEnd(rt) {
+      if (rt.to.door != null) return 'door ' + (rt.to.door + 1);
+      var nm = nameOf(rt.to.piece).toLowerCase(), role = state.pieces[rt.to.piece] && state.pieces[rt.to.piece].role;
+      return role === 'bed' ? 'the ' + nm + '\u2019s ' + SIDE_WORD[rt.to.side] : role === 'dresser' ? 'the ' + nm + ' drawers' : 'the ' + nm;
+    }
+    function routeWhat(b) { return b.type === 'piece' ? 'the ' + nameOf(b.i).toLowerCase() : 'the wall'; }
+    function walkRoutesShown() { return state.mode === 'furnish' && state.ptab === 'checks' && state.pieceSel < 0 && state.doorSel < 0 && !state.tool; }
     function wallsFt() { return state.rooms.filter(function (r) { return r.ftShape; }).map(function (r) { return r.ftShape; }); }
     // The pieces standing in a room (their middle inside its outline), in feet
     function groupFor(r) {
@@ -893,7 +929,15 @@
       return 'overlaps the ' + nameOf(other).toLowerCase() + ' by ' + c.inch + '"';
     }
     // Every spacing line on the plan (see SPACE in plan-engine.js)
-    function spacing() { return state.scale && state.pieces.length ? SPACE.check(piecesFt(), wallsFt()) : []; }
+    // Lines that end on a room outline count only where the plan has a real wall.
+    // Once doors are marked, walkways are judged along the real routes instead,
+    // so plain walkway gaps show only on the selected piece.
+    function spacing() {
+      if (!state.scale || !state.pieces.length) return [];
+      var lines = SPACE.check(piecesFt(), wallsFt(), wallTestFt());
+      if (walkways()) lines.forEach(function (l) { if (l.rule === 'walk' && l.show === 'always') l.show = 'selected'; });
+      return lines;
+    }
     // Smallest room whose outline holds the piece's center, for the PDF list
     function pieceRoom(pc) {
       var p = { x: pc.x / 100 * state.W, y: pc.y / 100 * state.H }, best = null, bestA = Infinity;
@@ -1228,6 +1272,45 @@
       renderPieceBar(); renderSpacing(); draw();
     }
 
+    /* ---------- Walking routes on the plan ----------
+       Light dashed curves from the doors, the way a plan illustration shows
+       how people move through a home. Shown while the Checks tab is open; the
+       narrowest point of a route that's too tight gets a measured line. In
+       exports, only the routes with a problem are drawn. */
+    function routeCurve(ctx, pts) {
+      // Thin out the grid steps, then round the corners with curves through the midpoints
+      var step = Math.max(1, Math.round(10 / 12 / (WALK_CACHE.res ? WALK_CACHE.res.cell : 1 / 6))), q = [];
+      for (var i = 0; i < pts.length; i += step) q.push(pts[i]);
+      if (q[q.length - 1] !== pts[pts.length - 1]) q.push(pts[pts.length - 1]);
+      ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y);
+      for (var k = 1; k < q.length - 1; k++) ctx.quadraticCurveTo(q[k].x, q[k].y, (q[k].x + q[k + 1].x) / 2, (q[k].y + q[k + 1].y) / 2);
+      if (q.length > 1) ctx.lineTo(q[q.length - 1].x, q[q.length - 1].y);
+      ctx.stroke();
+    }
+    function drawWalkways(ctx, forExport) {
+      if (!forExport && (!walkRoutesShown() || (state.drag && state.drag.moved))) return;
+      var wk = walkways();
+      if (!wk) return;
+      var f = state.scale.ftPerPx, r = displayRatio();
+      var list = wk.routes.filter(function (rt) { return rt.path.length > 1 && (!forExport || rt.status !== 'ok'); });
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.setLineDash([5 * r, 5 * r]);
+      list.forEach(function (rt) {
+        ctx.strokeStyle = rt.status === 'ok' ? 'rgba(107,101,96,0.55)' : rt.status === 'tight' ? 'rgba(176,125,20,0.75)' : 'rgba(88,43,54,0.75)';
+        ctx.lineWidth = (rt.status === 'ok' ? 1.4 : 1.8) * r;
+        routeCurve(ctx, rt.path.map(function (p) { return { x: p.x / f, y: p.y / f }; }));
+      });
+      ctx.restore();
+      var seen = {};
+      list.forEach(function (rt) {
+        if (rt.status === 'ok' || !rt.pinch) return;
+        var a = rt.pinch.a, b = rt.pinch.b, key = [a.x, a.y, b.x, b.y].map(function (v) { return Math.round(v * 8); }).join(',');
+        if (seen[key]) return; seen[key] = 1;
+        drawGapLine(ctx, a, b, SPACE_COL[rt.status], rt.width + '"');   // feet in, like the other spacing lines
+      });
+    }
+
     /* ---------- Handles on the selected piece ----------
        A rotate handle above the piece (drag to turn, in 15° steps) and stretch
        handles on its sides and corners, which turn with it. A side handle
@@ -1495,7 +1578,7 @@
           value = (r.sides || r.inches.map(function (n) { return { inch: n }; })).map(function (sd) { return sd.against ? 'against the wall' : inchText(sd.inch); }).join(' and ');
         }
         else if (r.type === 'bedFoot') { label = 'Foot of the ' + A + ' to ' + (B ? 'the ' + B : 'the wall'); value = inchText(r.inch); }
-        else if (r.type === 'dining') { label = 'Around the ' + A; value = inchText(r.inch) + (r.open ? ' on a side with no chairs' : ' at the tightest side'); }
+        else if (r.type === 'dining') { label = 'Around the ' + A; value = inchText(r.inch) + (r.open ? ' on a side with no chairs' : r.walk ? ' where people walk behind the chairs' : ' at the tightest side'); }
         else if (r.type === 'desk') { label = 'Chair space behind the ' + A; value = inchText(r.inch); }
         else if (r.type === 'drawers') { label = 'In front of the ' + A + ' (drawers)'; value = inchText(r.inch); }
         else if (r.type === 'console') { label = 'The ' + B + ' behind the ' + A; value = inchText(r.inch); }
@@ -1511,7 +1594,7 @@
           ? { label: 'The ' + nameOf(c.a).toLowerCase() + ' runs into a wall', value: c.inch + '"', status: 'close', word: 'Into the wall' }
           : { label: 'The ' + nameOf(c.a).toLowerCase() + ' overlaps the ' + nameOf(c.b).toLowerCase(), value: c.inch + '"', status: 'close', word: 'Overlapping' });
       });
-      rows = probs.concat(rows);
+      rows = probs.concat(rows, walkRows(room));
       state.doors.forEach(function (d, k) {
         if (room && d.room !== room.id) return;
         var chk = DOOR.check(doorFt(d), pcs), hit = chk.hits.length > 0;
@@ -1519,6 +1602,46 @@
                     value: hit ? 'Hits the ' + listNames(chk.hits) : chk.nearest && chk.nearest.gap < 2 ? 'Clears by ' + fmtGap(chk.nearest.gap) : 'Clears' });
       });
       return rows;
+    }
+    // Walkways with a problem, one row per pinch (many routes can share one narrow spot)
+    function walkRows(room) {
+      var wk = walkways(), rows = [], byPinch = {};
+      if (!wk) return rows;
+      var f = state.scale.ftPerPx;
+      wk.routes.forEach(function (rt) {
+        if (rt.status === 'ok') return;
+        var at = rt.pinch ? { x: (rt.pinch.a.x + rt.pinch.b.x) / 2, y: (rt.pinch.a.y + rt.pinch.b.y) / 2 } : null;
+        if (room) {
+          var mine = (rt.to.piece != null && pieceRoom(state.pieces[rt.to.piece]) === room) ||
+                     (at && PLAN.pointInPoly({ x: at.x / f, y: at.y / f }, ptsPx(room)));
+          if (!mine) return;
+        }
+        var key = at ? Math.round(at.x * 4) + ',' + Math.round(at.y * 4) : 'none' + rows.length;
+        var row = byPinch[key];
+        if (!row) {
+          row = byPinch[key] = { routes: [], width: rt.width, status: rt.status, pinch: rt.pinch, from: rt.from, blocked: rt.blocked || rt.from < 0 };
+          rows.push(row);
+        }
+        row.routes.push(rt);
+      });
+      return rows.map(function (rw) {
+        var ends = [], bedSides = {};
+        rw.routes.forEach(function (rt) {
+          if (rt.to.piece != null && state.pieces[rt.to.piece].role === 'bed') (bedSides[rt.to.piece] = bedSides[rt.to.piece] || []).push(rt);
+        });
+        rw.routes.forEach(function (rt) {
+          var bs = rt.to.piece != null ? bedSides[rt.to.piece] : null;
+          var e = rt.to.door != null && rt.from > -1 ? 'between door ' + (rt.from + 1) + ' and ' + routeEnd(rt)
+            : bs && bs.length > 1 ? 'to both sides of the ' + nameOf(rt.to.piece).toLowerCase()
+            : 'to ' + routeEnd(rt);
+          if (ends.indexOf(e) < 0) ends.push(e);
+        });
+        var way = ends.length > 2 ? ends.slice(0, 2).join(', ') + ' and ' + (ends.length - 2) + ' more' : ends.join(' and ');
+        if (!rw.pinch) return { label: 'No clear way ' + way, value: 'Blocked', status: 'close', word: 'No way through' };
+        var between = rw.pinch.between.map(routeWhat), same = between[0] === between[1];
+        return { label: 'Walkway ' + (same ? 'past ' + between[0] : 'between ' + between[0] + ' and ' + between[1]) + ', on the way ' + way,
+                 value: inchText(rw.width), status: rw.blocked ? 'close' : rw.status, word: rw.blocked ? 'No way through' : spaceWord('walk', rw.status, rw.width) };
+      });
     }
     function listNames(idx) {
       var names = [];
@@ -1534,7 +1657,9 @@
       $('checkCount').textContent = issues; $('checkCount').classList.toggle('hidden', !issues);
       $('spaceSub').innerHTML = !state.scale ? 'Spacing is measured to scale, so this plan needs a scale first.'
         : 'Measured square off each piece, so turned pieces are checked too' + (r ? ', in <b>' + esc(r.name) + '</b>.' : '.') +
-          ' Guides: walkways 36", sofa to coffee table 14" to 18", beside a bed 24", foot of the bed 30", around a dining table 36", behind a desk and in front of a dresser 36", and facing seats within 8 feet.';
+          ' Guides: walkways 36", sofa to coffee table 14" to 18", beside a bed 24", foot of the bed 30", around a dining table 36" (44" where people walk behind the chairs), behind a desk and in front of a dresser 36", and facing seats within 8 feet.' +
+          (walkways() ? ' Walkways follow the real routes from your doors, drawn as dashed lines on the plan.'
+            : state.walls && state.walls.map ? ' <b>Mark your doors</b> to check the real walkways from them.' : '');
       if (!rows.length) { el.innerHTML = '<p class="rug-empty">' + (state.pieces.length || state.doors.length ? 'Nothing to check here yet. Place seating with a coffee table, a bed, a dining table, or a door.' : 'Place a few pieces and the spacing between them shows up here.') + '</p>'; return; }
       el.innerHTML = rows.map(function (rw) {
         return '<div class="space-row"><span class="space-label">' + esc(rw.label) + '</span>' +
@@ -2550,15 +2675,18 @@
         doc.text('RESULT', sc[2], y + 14, { align: 'right' });
         y += 22;
         sRows.forEach(function (rw, i) {
-          checkPage(22);
+          // Long checks (walkways name their routes) wrap onto more lines rather than being cut off
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+          var lines = doc.splitTextToSize(ascii(rw.label), sc[1] - sc[0] - 12), h = 20 + (lines.length - 1) * 12;
+          checkPage(h + 2);
           doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
-          doc.rect(margin, y, contentW, 20, 'F');
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
-          doc.text(ascii(rw.label).slice(0, 52), sc[0], y + 13);
+          doc.rect(margin, y, contentW, h, 'F');
+          doc.setTextColor(67, 62, 60);
+          doc.text(lines, sc[0], y + 13);
           doc.text(ascii(rw.value).slice(0, 30), sc[1], y + 13);
           if (rw.status === 'close') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
           doc.text(rw.word, sc[2], y + 13, { align: 'right' });
-          y += 20;
+          y += h;
         });
         y += 10;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 101, 96);
@@ -2610,6 +2738,15 @@
                    hits: chk.hits.map(function (i) { return state.pieces[i].name; }) };
         }) : [],
         spacing: spaceRows(null).map(function (rw) { return { check: rw.label, measured: rw.value, result: rw.word, status: rw.status }; }),
+        walkways: (function () {
+          var wk = walkways();
+          if (!wk) return null;
+          return wk.routes.map(function (rt) {
+            return { from: rt.from > -1 ? 'Door ' + (rt.from + 1) : null, to: routeEnd(rt), narrowest_in: rt.open ? null : rt.width,
+                     status: rt.blocked || rt.from < 0 ? 'blocked' : rt.status,
+                     pinch_between: rt.pinch ? rt.pinch.between.map(routeWhat) : null };
+          });
+        })(),
         rooms: state.rooms.map(function (r) {
           return {
             name: r.name, width: fmtFtIn(r.width), length: fmtFtIn(r.length),
@@ -2940,7 +3077,7 @@
               <span class="legend"><span class="swatch" style="border-top-color:#7f9433"></span>Comfortable</span>
               <span class="legend"><span class="swatch" style="border-top-color:#b07d14"></span>Tight</span>
               <span class="legend"><span class="swatch"></span>Doesn't work</span><br>
-              Lines on the plan show these checks and any walkway under 36". Select a piece to see every side of it. A piece outlined in burgundy runs into a wall or another piece.
+              Lines on the plan show these checks and any walkway under 36". Dashed lines are the walking routes from your doors; a route turns amber or burgundy where it gets narrow. Select a piece to see every side of it. A piece outlined in burgundy runs into a wall or another piece.
             </p>
           </div>
 

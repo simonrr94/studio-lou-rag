@@ -318,7 +318,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=10"></script>
+  <script src="/static/tools/plan-engine.js?v=11"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -915,7 +915,7 @@
       return 'overlaps the ' + nameOf(other).toLowerCase() + ' by ' + c.inch + '"';
     }
     // Every spacing line on the plan (see SPACE in plan-engine.js)
-    function spacing() { return state.scale && state.pieces.length ? SPACE.check(piecesFt(), wallsFt()) : []; }
+    function spacing() { return state.scale && state.pieces.length ? SPACE.check(piecesFt(), wallsFt(), wallTestFt()) : []; }
     // Smallest room whose outline holds the piece's center, for the PDF list
     function pieceRoom(pc) {
       var p = { x: pc.x / 100 * state.W, y: pc.y / 100 * state.H }, best = null, bestA = Infinity;
