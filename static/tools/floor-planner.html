@@ -108,8 +108,16 @@
     .stage-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1.5px solid #d0c9bc; }
     .stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: hidden; }
     .print { position: relative; background: #ffffff; padding: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 8px 20px rgba(0,0,0,0.10); border-radius: 2px; }
-    canvas { display: block; touch-action: pan-y pinch-zoom; }
-    canvas.editing { touch-action: none; }
+    canvas { display: block; touch-action: pan-y; }
+    canvas.editing, canvas.furnishing { touch-action: none; }
+    .zoom-box { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 3px; box-shadow: 0 2px 8px rgba(67,62,60,0.12); z-index: 4; }
+    .zoom-box button { border: none; background: transparent; color: #433E3C; font: 600 15px 'DM Sans', sans-serif; min-width: 34px; height: 30px; border-radius: 50px; cursor: pointer; padding: 0 8px; }
+    .zoom-box button:hover:not(:disabled) { background: #f5f0e8; }
+    .zoom-box button:disabled { color: #c4bdb2; cursor: default; }
+    .zoom-box #zoomFit { font-size: 12px; letter-spacing: 0.04em; }
+    .member-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .group-hint { margin-top: 12px; }
+    .link-btn { border: none; background: none; padding: 0; color: #582b36; font: inherit; text-decoration: underline; cursor: pointer; }
     .tool-msg {
       position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
       background: #582b36; color: #FAF9F6; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 50px; white-space: nowrap;
@@ -270,6 +278,16 @@
       .head-actions { flex-wrap: nowrap; }
       .head-actions .btn-sm { padding: 7px 12px; }
       .brand { flex-direction: column; gap: 0; }
+      .app-head { padding: 8px 12px; }
+      .brand-studio { font-size: 16px; line-height: 1.1; }
+      .brand-tool { font-size: 10.5px; }
+      .toolbar { gap: 6px; padding: 6px 12px 8px; }
+      .toolbar .mode, .toolbar .tool-btn { padding: 6px 12px; font-size: 13px; }
+      .room-select { padding-top: 6px; padding-bottom: 6px; }
+      .toolbar .tool-btn { order: 1; }   /* modes, Add a door and Undo on one row; the room picker below */
+      #undoBtn .undo-label { display: none; }
+      #undoBtn { padding-left: 10px; padding-right: 10px; }
+      .stage { flex: none; }   /* a fixed height, so zooming in clips the plan instead of growing the page */
       .mode:disabled { display: none; }
     }
   </style>
@@ -305,7 +323,7 @@
       img: null, W: 0, H: 0,
       rooms: [], selected: -1,
       sendB64: '', sendType: 'image/jpeg',
-      drag: null, nextId: 1,
+      drag: null, nextId: 1, extra: [], view: { z: 1, px: 0, py: 0 }, space: false,
       walls: null,   // SNAP's wall map and found words, kept for Furnish and 3D
       scale: null,   // { ftPerPx, source: 'auto' | 'manual', rooms, line }
       tool: null,    // 'scale' while the person is drawing a scale line
@@ -516,7 +534,8 @@
 
       state.rooms = []; state.selected = -1;
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null; endScaleTool();
-      state.pieces = []; state.pieceSel = -1; state.doors = []; state.doorSel = -1;
+      state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
+      state.view = { z: 1, px: 0, py: 0 };
       UNDO = []; $('undoBtn').disabled = true;
       setMode('measure');
       // Find walls and printed room names while the model reads the plan
@@ -554,14 +573,92 @@
       var ph = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 16;
       var k = Math.min(pw / state.W, ph / state.H);
       if (!(k > 0)) return;
-      var w = Math.floor(state.W * k) + 'px', h = Math.floor(state.H * k) + 'px';
+      // Zoomed in, the plan grows and slides inside the stage; clicks still land right
+      // because the canvas keeps its own pixel size and only its on-screen size changes
+      var v = state.view;
+      k *= v.z;
+      var cw = Math.floor(state.W * k), chh = Math.floor(state.H * k);
+      var mx = Math.max(0, (cw - pw) / 2 + 24), my = Math.max(0, (chh - ph) / 2 + 24);
+      if (v.z <= 1) { v.px = 0; v.py = 0; }
+      v.px = clamp(v.px, -mx, mx); v.py = clamp(v.py, -my, my);
+      var w = cw + 'px', h = chh + 'px', tf = v.z > 1 ? 'translate(' + Math.round(v.px) + 'px,' + Math.round(v.py) + 'px)' : '';
       if (c.style.width !== w) c.style.width = w;
       if (c.style.height !== h) c.style.height = h;
+      var pr = $('print');
+      if (pr.style.transform !== tf) pr.style.transform = tf;
+      var zb = $('zoomBox');
+      if (zb) { zb.classList.toggle('hidden', !state.img); $('zoomFit').disabled = v.z <= 1; $('zoomOut').disabled = v.z <= 1; $('zoomIn').disabled = v.z >= ZOOM_MAX; }
+    }
+    /* ---------- Zoom and pan ----------
+       Pinch on a phone, Ctrl or Cmd with the scroll wheel (or a trackpad pinch) on a computer,
+       or the + and - buttons. Zoomed in: two-finger scroll, a one-finger drag on empty floor,
+       or Space with a drag moves the plan around. */
+    var ZOOM_MAX = 5;
+    // Zoom to z keeping the plan point under the client point (cx, cy) where it is
+    function zoomAt(z, cx, cy) {
+      var c = $('planCanvas'), st = $('stage'), v = state.view;
+      z = clamp(z, 1, ZOOM_MAX);
+      var cr = c.getBoundingClientRect(), sr = st.getBoundingClientRect();
+      if (cx == null) { cx = sr.left + sr.width / 2; cy = sr.top + sr.height / 2; }
+      var u = (cx - cr.left) / cr.width, w = (cy - cr.top) / cr.height;
+      var nw = cr.width * z / v.z, nh = cr.height * z / v.z, scx = sr.left + sr.width / 2, scy = sr.top + sr.height / 2;
+      // The plan stays centered in the stage, shifted by the pan
+      v.px = cx - u * nw + nw / 2 - scx; v.py = cy - w * nh + nh / 2 - scy;
+      v.z = z;
+      draw();
+    }
+    function zoomFit() { state.view.z = 1; state.view.px = 0; state.view.py = 0; draw(); }
+    var PINCH = { ptrs: {}, on: null };
+    function pinchDown(e) {
+      if (e.pointerType !== 'touch' || !state.img) return;
+      PINCH.ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var ids = Object.keys(PINCH.ptrs);
+      if (ids.length !== 2) return;
+      // A second finger: whatever the first one started becomes a pinch
+      var d = state.drag;
+      if (d) {
+        if (d.press) clearTimeout(d.press);
+        if (d.moved && d.snap) pushUndo(d.snap);
+        state.drag = null;
+      }
+      var a = PINCH.ptrs[ids[0]], b = PINCH.ptrs[ids[1]];
+      PINCH.on = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: state.view.z, m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, px0: state.view.px, py0: state.view.py };
+      e.stopImmediatePropagation(); e.preventDefault();
+    }
+    function pinchMove(e) {
+      if (!PINCH.ptrs[e.pointerId]) return;
+      PINCH.ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if (!PINCH.on) return;
+      var ids = Object.keys(PINCH.ptrs), a = PINCH.ptrs[ids[0]], b = PINCH.ptrs[ids[1]], P = PINCH.on;
+      var m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, z = clamp(P.z0 * Math.hypot(a.x - b.x, a.y - b.y) / P.d0, 1, ZOOM_MAX);
+      // zoom about where the pinch started, then follow the fingers as they move
+      state.view.z = P.z0; state.view.px = P.px0; state.view.py = P.py0; fitCanvas();
+      zoomAt(z, P.m0.x, P.m0.y);
+      state.view.px += m.x - P.m0.x; state.view.py += m.y - P.m0.y;
+      draw();
+      e.stopImmediatePropagation(); e.preventDefault();
+    }
+    function pinchUp(e) {
+      if (!PINCH.ptrs[e.pointerId]) return;
+      delete PINCH.ptrs[e.pointerId];
+      if (PINCH.on) { if (Object.keys(PINCH.ptrs).length < 2) PINCH.on = null; e.stopImmediatePropagation(); }
+    }
+    function onWheel(e) {
+      if (!state.img) return;
+      if (e.ctrlKey || e.metaKey) {   // a trackpad pinch arrives as Ctrl with the wheel
+        e.preventDefault();
+        zoomAt(state.view.z * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+      } else if (state.view.z > 1) {
+        e.preventDefault();
+        state.view.px -= e.deltaX; state.view.py -= e.deltaY;
+        draw();
+      }
     }
     function draw(forExport) {
       if (!forExport) fitCanvas();
       var c = $('planCanvas'), ctx = c.getContext('2d'), s = scale();
       syncGeometry();
+      LABELS = [];   // room tags and spacing labels placed so far, so later labels can step aside
       ctx.clearRect(0, 0, state.W, state.H);
       ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, state.W, state.H);
       ctx.drawImage(state.img, 0, 0, state.W, state.H);
@@ -581,7 +678,7 @@
         ctx.restore();
       });
 
-      if (state.scale) { drawRugs(ctx, forExport); drawPieces(ctx, forExport); drawDoors(ctx, forExport); }
+      if (state.scale) { drawRugs(ctx, forExport); drawPieces(ctx, forExport); drawDoors(ctx, forExport); drawWalkways(ctx, forExport, 'routes'); }
 
       state.rooms.forEach(function (r, i) {
         var b = px(r), sel = !forExport && i === state.selected;
@@ -616,6 +713,7 @@
         else { cx = b.x + b.w / 2 - cw / 2; cy = b.y + b.h / 2 - ch / 2; }
         cx = clamp(cx, 2, state.W - cw - 2); cy = clamp(cy, 2, state.H - ch - 2);
 
+        LABELS.push({ x: cx, y: cy, w: cw, h: ch });
         ctx.shadowColor = 'rgba(67,62,60,0.18)'; ctx.shadowBlur = 6 * s; ctx.shadowOffsetY = 1.5 * s;
         ctx.fillStyle = sel ? '#582b36' : 'rgba(255,255,255,0.94)';
         roundRect(ctx, cx, cy, cw, ch, Math.min(8 * s + 2, ch / 2));
@@ -677,7 +775,7 @@
         }
       }
 
-      if (state.scale) drawWalkways(ctx, forExport);
+      if (state.scale) drawWalkways(ctx, forExport, 'pinches');
       if (!forExport && state.scale) { drawPieceHandles(ctx); drawHandleTag(ctx); }
 
       if (!forExport) {
@@ -725,6 +823,7 @@
       ctx.restore();
     }
 
+    var LABELS = [];
     // Handle size in canvas pixels, tuned so it is ~22 CSS px on screen
     function handleSize() { return 22 * displayRatio(); }
     // Canvas pixels per on-screen pixel, so labels and handles stay readable at any size
@@ -827,8 +926,20 @@
       ctx.font = '700 ' + fs + 'px "DM Sans", sans-serif';
       var pw = ctx.measureText(label).width + 10 * ratio, ph = fs + 7 * ratio;
       var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      // Short lines: set the label beside the line instead of on it
-      if (len < Math.max(pw, ph) + 6 * ratio) { mx += nx * (pw / 2 + 8 * ratio); my += ny * (ph / 2 + 8 * ratio); }
+      // Find a spot that clears the room name tags and the other labels: along the line,
+      // or, for a line too short to hold its label, beside it on either side
+      var gap = 2 * ratio, hits = function (x, y) {
+        return LABELS.some(function (L) { return x - pw / 2 < L.x + L.w + gap && x + pw / 2 > L.x - gap && y - ph / 2 < L.y + L.h + gap && y + ph / 2 > L.y - gap; });
+      };
+      var spots = [], side = { x: nx * (pw / 2 + 8 * ratio), y: ny * (ph / 2 + 8 * ratio) };
+      if (len < Math.max(pw, ph) + 6 * ratio) spots = [[mx + side.x, my + side.y], [mx - side.x, my - side.y], [mx + 2 * side.x, my + 2 * side.y], [mx - 2 * side.x, my - 2 * side.y]];
+      else {
+        [0.5, 0.35, 0.65, 0.22, 0.78, 0.12, 0.88].forEach(function (t) { spots.push([a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t]); });
+        spots.push([mx + side.x, my + side.y], [mx - side.x, my - side.y], [mx + 2 * side.x, my + 2 * side.y], [mx - 2 * side.x, my - 2 * side.y]);   // last resort: beside the line
+      }
+      var spot = spots.filter(function (q) { return !hits(q[0], q[1]); })[0] || spots[0];
+      mx = spot[0]; my = spot[1];
+      LABELS.push({ x: mx - pw / 2, y: my - ph / 2, w: pw, h: ph });
       ctx.fillStyle = '#ffffff'; ctx.strokeStyle = col; ctx.lineWidth = 1.2 * ratio;
       roundRect(ctx, mx - pw / 2, my - ph / 2, pw, ph, ph / 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -963,7 +1074,7 @@
       var ratio = displayRatio(), bad = {};
       conflicts().forEach(function (c) { bad[c.a] = 1; if (c.type === 'overlap') bad[c.b] = 1; });
       drawOrder().forEach(function (k) {
-        var pc = state.pieces[k], q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && k === state.pieceSel;
+        var pc = state.pieces[k], q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && isSel(k);
         var loc = FURNITURE.outline(pc).map(function (p) { return { x: p.x * q.k, y: p.y * q.k }; });
         ctx.save();
         ctx.translate(q.cx, q.cy);
@@ -1065,7 +1176,7 @@
       seats.forEach(function (c) {
         state.pieces.push(makePiece(chair, at.x + c.x * k / state.W * 100, at.y + c.y * k / state.H * 100, c.rot, table.id));
       });
-      state.pieceSel = state.pieces.indexOf(table);
+      state.pieceSel = state.pieces.indexOf(table); state.extra = [];
       state.doorSel = -1;
       renderPieceBar(); renderSpacing(); draw();
     }
@@ -1085,26 +1196,104 @@
     }
     // Removing a table takes its chairs with it
     function removePiece() {
-      var pc = state.pieces[state.pieceSel];
-      if (!pc) return;
+      var sel = selList();
+      if (!sel.length) return;
       pushUndo();
-      var gone = [pc].concat(chairsOf(pc));
+      var gone = movingSet(sel);
       state.pieces = state.pieces.filter(function (o) { return gone.indexOf(o) < 0; });
-      state.pieceSel = -1;
+      state.pieceSel = -1; state.extra = [];
       renderPieceBar(); renderSpacing(); draw();
     }
-    // Turning a table turns its chairs around it too
-    function turnPiece(deg) {
+    /* ---------- Selecting several pieces, and groups ----------
+       state.pieceSel is the piece picked first (its details show for a single
+       piece); state.extra holds the ids of any others picked with it. A group
+       is pieces sharing pc.gid: picking one picks them all. A dining table's
+       chairs always go wherever the table goes. */
+    function selList() {
       var pc = state.pieces[state.pieceSel];
-      if (!pc) return;
-      pushUndo();
-      pc.rot = ((pc.rot + deg) % 360 + 360) % 360;
-      var cx = pc.x / 100 * state.W, cy = pc.y / 100 * state.H;
-      chairsOf(pc).forEach(function (c) {
-        var p = GEO.place([{ x: c.x / 100 * state.W - cx, y: c.y / 100 * state.H - cy }], cx, cy, deg, 1)[0];
-        c.x = p.x / state.W * 100; c.y = p.y / state.H * 100;
-        c.rot = ((c.rot + deg) % 360 + 360) % 360;
+      if (!pc) { state.extra = []; return []; }
+      var out = [pc];
+      (state.extra || []).forEach(function (id) {
+        var o = state.pieces.filter(function (q) { return q.id === id; })[0];
+        if (o && out.indexOf(o) < 0) out.push(o);
       });
+      return out;
+    }
+    function multi() { return selList().length > 1; }
+    function isSel(k) { return selList().indexOf(state.pieces[k]) > -1; }
+    // Everything that moves with the selection: the pieces plus their tables' chairs
+    function movingSet(sel) {
+      var out = [];
+      sel.forEach(function (pc) { [pc].concat(chairsOf(pc)).forEach(function (q) { if (out.indexOf(q) < 0) out.push(q); }); });
+      return out;
+    }
+    function selBounds(sel) {
+      var all = [];
+      movingSet(sel).forEach(function (pc) { var q = piecePx(pc); all = all.concat(FURNITURE.shapeAt(pc, q.cx, q.cy, q.k)); });
+      return PLAN.bounds(all);
+    }
+    // The point a selection turns around (canvas px): a single piece turns on its own middle
+    function selCenter(sel) {
+      if (sel.length === 1) return { x: sel[0].x / 100 * state.W, y: sel[0].y / 100 * state.H };
+      var b = selBounds(sel); return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    }
+    // Pick a piece: on its own (with its group), or added to or taken out of the selection
+    function pickPiece(k, add) {
+      var pc = state.pieces[k], mates = pc.gid ? state.pieces.filter(function (o) { return o.gid === pc.gid && o !== pc; }) : [];
+      state.doorSel = -1;
+      if (!add || state.pieceSel < 0) { state.pieceSel = k; state.extra = mates.map(function (o) { return o.id; }); return; }
+      var sel = selList(), ids = sel.map(function (o) { return o.id; }), take = [pc].concat(mates);
+      if (ids.indexOf(pc.id) > -1) {   // already picked: take it (and its group) out
+        var left = sel.filter(function (o) { return take.indexOf(o) < 0; });
+        state.pieceSel = left.length ? state.pieces.indexOf(left[0]) : -1;
+        state.extra = left.slice(1).map(function (o) { return o.id; });
+      } else state.extra = (state.extra || []).concat(take.map(function (o) { return o.id; }));
+    }
+    function rotateAbout(pcs, cen, deg) {
+      pcs.forEach(function (o) {
+        var p = GEO.place([{ x: o.x / 100 * state.W - cen.x, y: o.y / 100 * state.H - cen.y }], cen.x, cen.y, deg, 1)[0];
+        o.x = p.x / state.W * 100; o.y = p.y / state.H * 100;
+        o.rot = ((o.rot + deg) % 360 + 360) % 360;
+      });
+    }
+    function groupSel() {
+      var sel = selList();
+      if (sel.length < 2) return;
+      pushUndo();
+      var g = 'g' + (state.nextId++);
+      sel.forEach(function (pc) { pc.gid = g; });
+      renderPieceBar(); draw();
+    }
+    function ungroupSel() {
+      var sel = selList();
+      if (!sel.some(function (pc) { return pc.gid; })) return;
+      pushUndo();
+      sel.forEach(function (pc) { delete pc.gid; });
+      renderPieceBar(); draw();
+    }
+    // Pieces that belong with this one (its coffee and side tables, the seats beside it,
+    // a bed's nightstands) within 36" of it and not already in its group
+    function groupPartners(k) {
+      var pcs = piecesFt(), me = pcs[k], pc = state.pieces[k], out = [];
+      if (!me || pc.role === 'chair') return out;
+      pcs.forEach(function (o, j) {
+        if (j === k || o.room !== me.room || (pc.gid && state.pieces[j].gid === pc.gid)) return;
+        if (SPACE.grouped(me, o) && GEO.polyDist(me.poly, o.poly) * 12 <= 36) out.push(j);
+      });
+      return out;
+    }
+    function groupWithPartners() {
+      var k = state.pieceSel, mates = groupPartners(k);
+      if (!mates.length) return;
+      state.extra = (state.extra || []).concat(mates.map(function (j) { return state.pieces[j].id; }));
+      groupSel();
+    }
+    // Turning a table turns its chairs around it too; several pieces turn around their middle
+    function turnPiece(deg) {
+      var sel = selList();
+      if (!sel.length) return;
+      pushUndo();
+      rotateAbout(movingSet(sel), selCenter(sel), deg);
       renderPieceBar(); renderSpacing(); draw();
     }
     function mirrorPiece() {
@@ -1177,7 +1366,7 @@
       draw();
     }
     function deselect() {
-      state.pieceSel = -1; state.doorSel = -1;
+      state.pieceSel = -1; state.doorSel = -1; state.extra = [];
       renderPieceBar(); renderDoorBar(); draw();
     }
 
@@ -1206,7 +1395,25 @@
         : r ? 'Tap a piece to add it to <b>' + esc(r.name) + '</b> at its real size.'
         : 'Pick a room, then tap a piece to add it at its real size.';
       if (!pc) { bar.innerHTML = ''; showPane(); placeFloat(); return; }
+      var sel = selList();
+      if (sel.length > 1) {
+        var grouped = sel.every(function (o) { return o.gid && o.gid === pc.gid; });
+        bar.innerHTML = '<p class="detail-name" style="border:none;padding-left:0">' + sel.length + ' pieces' + (grouped ? ', grouped' : '') + '</p>' +
+          '<p class="detail-meta">' + (grouped ? 'They move and turn as one. ' : 'Drag any of them to move them together; the handle on top turns them together. ') +
+            'Tap one below to work on it alone.</p>' +
+          '<div class="member-list">' + sel.map(function (o) {
+            return '<button class="btn-secondary btn-sm" data-pact="pickone" data-pid="' + o.id + '">' + esc(o.name) + '</button>';
+          }).join('') + '</div>' +
+          '<div class="btn-row" style="margin-top:14px">' +
+            (grouped ? '<button class="btn-secondary btn-sm" data-pact="ungroup">Ungroup</button>' : '<button class="btn-primary btn-sm" data-pact="group">Group them</button>') +
+            '<button class="btn-secondary btn-sm" data-pact="dup">Duplicate</button>' +
+            '<button class="btn-secondary btn-sm" data-pact="remove">Remove ' + sel.length + '</button>' +
+          '</div>' +
+          '<p class="empty-note" style="margin-top:12px">Shift-click (or long-press on a phone) to add or take out pieces. Drag a box on empty floor to pick several.</p>';
+        showPane(); placeFloat(); return;
+      }
       var k = state.pieceSel, nCh = chairsOf(pc).length, rm = pieceRoom(pc);
+      var partners = groupPartners(k);
       var probs = conflicts().filter(function (c) { return c.a === k || c.b === k; }).map(function (c) { return conflictText(c, k); });
       var checks = pieceChecks(k), round = pc.shape === 'round' && Math.round(pc.w) === Math.round(pc.d);
       bar.innerHTML = '<input class="detail-name" id="pcName" value="' + esc(pc.name) + '" maxlength="30" aria-label="Piece name">' +
@@ -1223,6 +1430,8 @@
         (pc.role === 'media' ? '<label class="field"><span>TV screen size, inches (optional)</span><input id="pcTV" value="' + (pc.tv ? Math.round(pc.tv) : '') + '" placeholder="65" inputmode="decimal" autocomplete="off"></label>' : '') +
         '<p class="section-label">Spacing</p>' +
         (checks ? '<div class="space-list">' + checks + '</div>' : '<p class="empty-note">Open floor on every side, at least 8 feet.</p>') +
+        (partners.length ? '<button class="btn-secondary btn-sm group-hint" data-pact="groupnear">Group with the ' + esc(listNames(partners)) + '</button>' : '') +
+        (pc.gid ? '<p class="empty-note" style="margin-top:12px">Part of a group. <button class="link-btn" data-pact="pickgroup">Pick the whole group</button></p>' : '') +
         '<div class="btn-row" style="margin-top:14px">' +
           '<button class="btn-secondary btn-sm" data-pact="dup">Duplicate</button>' +
           '<button class="btn-secondary btn-sm" data-pact="remove">' + (nCh ? 'Remove with chairs' : 'Remove') + '</button>' +
@@ -1266,19 +1475,21 @@
     }
     // A copy 12" down and to the right; a table brings copies of its chairs
     function duplicatePiece() {
-      var pc = state.pieces[state.pieceSel];
-      if (!pc) return;
+      var sel = selList();
+      if (!sel.length) return;
       pushUndo();
-      var off = 1 / state.scale.ftPerPx, dx = off / state.W * 100, dy = off / state.H * 100, kids = chairsOf(pc);
-      var copy = JSON.parse(JSON.stringify(pc));
-      copy.id = state.nextId++; copy.x += dx; copy.y += dy;
-      state.pieces.push(copy);
-      kids.forEach(function (c) {
-        var cc = JSON.parse(JSON.stringify(c));
-        cc.id = state.nextId++; cc.group = copy.id; cc.x += dx; cc.y += dy;
-        state.pieces.push(cc);
+      var off = 1 / state.scale.ftPerPx, dx = off / state.W * 100, dy = off / state.H * 100;
+      var ids = {}, gids = {}, copies = [];
+      movingSet(sel).forEach(function (pc) {
+        var cc = JSON.parse(JSON.stringify(pc));
+        ids[pc.id] = cc.id = state.nextId++; cc.x += dx; cc.y += dy;
+        if (pc.gid) cc.gid = gids[pc.gid] = gids[pc.gid] || 'g' + (state.nextId++);   // a copied group is its own new group
+        copies.push(cc);
       });
-      state.pieceSel = state.pieces.indexOf(copy);
+      copies.forEach(function (cc) { if (cc.group && ids[cc.group]) cc.group = ids[cc.group]; state.pieces.push(cc); });
+      var first = copies.filter(function (cc) { return cc.id === ids[sel[0].id]; })[0];
+      state.pieceSel = state.pieces.indexOf(first);
+      state.extra = sel.slice(1).map(function (o) { return ids[o.id]; });
       renderPieceBar(); renderSpacing(); draw();
     }
 
@@ -1297,7 +1508,7 @@
       if (q.length > 1) ctx.lineTo(q[q.length - 1].x, q[q.length - 1].y);
       ctx.stroke();
     }
-    function drawWalkways(ctx, forExport) {
+    function drawWalkways(ctx, forExport, part) {
       if (!forExport && (!walkRoutesShown() || (state.drag && state.drag.moved))) return;
       var wk = walkways();
       if (!wk) return;
@@ -1313,6 +1524,7 @@
         if (shown[key]) return false;
         shown[key] = 1; return true;
       });
+      if (part === 'routes') {
       ctx.save();
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.setLineDash([5 * r, 5 * r]);
@@ -1322,6 +1534,8 @@
         routeCurve(ctx, rt.path.map(function (p) { return { x: p.x / f, y: p.y / f }; }));
       });
       ctx.restore();
+      return;
+      }
       var seen = {};
       list.forEach(function (rt) {
         if (rt.status === 'ok' || !rt.pinch) return;
@@ -1339,13 +1553,14 @@
        small on screen to hold handles keep the typed sizes in the panel. */
     var ROT_STEP = 15;
     function rotHandle(pc) {
-      var q = piecePx(pc), bb = FURNITURE.bounds(pc, q.cx, q.cy, q.k), r = displayRatio(), stalk = 30 * r;
+      var q = piecePx(pc), bb = multi() ? selBounds(selList()) : FURNITURE.bounds(pc, q.cx, q.cy, q.k), r = displayRatio(), stalk = 30 * r;
       var above = bb.y - stalk - 12 * r > 0;
       return { x: bb.x + bb.w / 2, y: above ? bb.y - stalk : bb.y + bb.h + stalk, from: { x: bb.x + bb.w / 2, y: above ? bb.y : bb.y + bb.h }, above: above, bb: bb };
     }
     // The stretch handles in canvas px: sx, sy say which side (-1, 0 or +1 across the width and depth)
     function stretchHandles(pc) {
       var q = piecePx(pc), r = displayRatio(), out = [];
+      if (multi()) return out;   // several pieces turn together; sizes are one piece at a time
       var wCss = q.w / r, dCss = q.d / r;
       if (Math.min(wCss, dCss) < 30) return out;
       [[-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [1, 0], [0, 1], [-1, 0]].forEach(function (s) {
@@ -1374,8 +1589,20 @@
       return best;
     }
     function drawPieceHandles(ctx) {
+      var r0 = displayRatio(), dg = state.drag;
+      if (dg && dg.mode === 'box' && dg.moved) {   // the selection box being drawn
+        ctx.save();
+        ctx.fillStyle = 'rgba(166,190,71,0.10)'; ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 1.5 * r0; ctx.setLineDash([5 * r0, 4 * r0]);
+        ctx.beginPath(); ctx.rect(dg.start.x, dg.start.y, dg.cur.x - dg.start.x, dg.cur.y - dg.start.y); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
       var pc = handlesOn();
       if (!pc) return;
+      if (multi()) {   // a dashed frame around everything picked
+        var bx = selBounds(selList()), pad = 6 * r0;
+        ctx.save(); ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 1.5 * r0; ctx.setLineDash([6 * r0, 5 * r0]);
+        ctx.strokeRect(bx.x - pad, bx.y - pad, bx.w + 2 * pad, bx.h + 2 * pad); ctx.restore();
+      }
       var r = displayRatio(), rh = rotHandle(pc), d = state.drag;
       var busy = d && (d.mode === 'rotate' || d.mode === 'stretch') && d.moved;
       ctx.save();
@@ -1434,11 +1661,12 @@
     }
     // Start turning or stretching the selected piece from a handle
     function startHandleDrag(e, h, p) {
-      var pc = state.pieces[state.pieceSel], q = piecePx(pc);
+      var pc = state.pieces[state.pieceSel], q = piecePx(pc), sel = selList(), cen = h.type === 'rot' ? selCenter(sel) : { x: q.cx, y: q.cy };
       state.drag = { mode: h.type === 'rot' ? 'rotate' : 'stretch', sx: h.sx, sy: h.sy, start: p, snap: snap(), piece: pc,
-                     orig: { x: pc.x, y: pc.y, w: pc.w, d: pc.d, rot: pc.rot, cx: q.cx, cy: q.cy },
-                     a0: Math.atan2(p.y - q.cy, p.x - q.cx),
-                     chairs: chairsOf(pc).map(function (c) { return { c: c, x: c.x, y: c.y, rot: c.rot }; }) };
+                     orig: { x: pc.x, y: pc.y, w: pc.w, d: pc.d, rot: pc.rot, cx: cen.x, cy: cen.y },
+                     a0: Math.atan2(p.y - cen.y, p.x - cen.x),
+                     chairs: chairsOf(pc).map(function (c) { return { c: c, x: c.x, y: c.y, rot: c.rot }; }),
+                     moving: movingSet(sel).map(function (o) { return { c: o, x: o.x, y: o.y, rot: o.rot }; }) };
       try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
       e.preventDefault();
     }
@@ -1450,9 +1678,8 @@
         var deg = (Math.atan2(p.y - o.cy, p.x - o.cx) - d.a0) * 180 / Math.PI;
         var rot = ((Math.round((o.rot + deg) / ROT_STEP) * ROT_STEP) % 360 + 360) % 360;
         if (rot === pc.rot) return;
-        pc.rot = rot;
         var turn = rot - o.rot;
-        d.chairs.forEach(function (s) {   // the chairs go round with their table
+        d.moving.forEach(function (s) {   // the chairs (and any other picked pieces) go round with it
           var c = GEO.place([{ x: s.x / 100 * state.W - o.cx, y: s.y / 100 * state.H - o.cy }], o.cx, o.cy, turn, 1)[0];
           s.c.x = c.x / state.W * 100; s.c.y = c.y / state.H * 100; s.c.rot = ((s.rot + turn) % 360 + 360) % 360;
         });
@@ -1493,14 +1720,16 @@
       var pc = state.pieces[state.pieceSel], dr = state.doors[state.doorSel];
       if (state.mode !== 'furnish' || !state.scale || (!pc && !dr) || state.tool || (state.drag && state.drag.moved)) { fb.classList.add('hidden'); return; }
       var bb, key;
-      if (pc) { var q = piecePx(pc); bb = FURNITURE.bounds(pc, q.cx, q.cy, q.k); key = 'p' + pc.id + pc.shape; }
+      var many = pc && multi(), grouped = many && selList().every(function (o) { return o.gid && o.gid === pc.gid; });
+      if (pc) { var q = piecePx(pc); bb = many ? selBounds(selList()) : FURNITURE.bounds(pc, q.cx, q.cy, q.k); key = 'p' + pc.id + pc.shape + (many ? 'm' + (grouped ? 'g' : '') : ''); }
       else { bb = PLAN.bounds(doorGeomPx(dr).sector); key = 'd' + dr.id; }
       if (fb.getAttribute('data-key') !== key) {
         fb.innerHTML = pc
           ? '<button data-fact="rotL" title="Turn left 15&deg;" aria-label="Turn left 15 degrees">' + ICON.left + '</button>' +
             '<button data-fact="rotR" title="Turn right 15&deg;" aria-label="Turn right 15 degrees">' + ICON.right + '</button>' +
             '<button data-fact="turn90" title="Turn 90&deg;">90&deg;</button>' +
-            (pc.shape === 'L' ? '<button data-fact="mirror" title="Put the chaise on the other side">Flip</button>' : '') +
+            (pc.shape === 'L' && !many ? '<button data-fact="mirror" title="Put the chaise on the other side">Flip</button>' : '') +
+            (many ? (grouped ? '<button data-fact="ungroup" title="Ungroup">Ungroup</button>' : '<button data-fact="group" title="Group these so they move together">Group</button>') : '') +
             '<button data-fact="dup" title="Duplicate" aria-label="Duplicate">' + ICON.copy + '</button>' +
             '<button data-fact="remove" class="danger" title="Remove" aria-label="Remove">' + ICON.trash + '</button>'
           : '<button data-fact="swing">Flip swing</button><button data-fact="hinge">Flip hinge</button>' +
@@ -1516,6 +1745,20 @@
         var rh = rotHandle(pc), hr = 10 * displayRatio();
         top = rh.above ? oy + (rh.y - hr) * sx - fb.offsetHeight - 8 : oy + (rh.y + hr) * sx + 8;
         if (rh.above && top < 4) top = oy + (bb.y + bb.h) * sx + 14;
+        else if (rh.above) {
+          // Above or below the piece, whichever covers less of the other furniture (a coffee table just in front, say)
+          var below = oy + (bb.y + bb.h) * sx + 14, picked = movingSet(selList());
+          var cover = function (t) {
+            var x0 = (clamp(left, 4, sr.width - fb.offsetWidth - 4) - ox) / sx, y0 = (t - oy) / sx, x1 = x0 + fb.offsetWidth / sx, y1 = y0 + fb.offsetHeight / sx, sum = 0;
+            state.pieces.forEach(function (o) {
+              if (picked.indexOf(o) > -1) return;
+              var q = piecePx(o), ob = FURNITURE.bounds(o, q.cx, q.cy, q.k);
+              sum += Math.max(0, Math.min(x1, ob.x + ob.w) - Math.max(x0, ob.x)) * Math.max(0, Math.min(y1, ob.y + ob.h) - Math.max(y0, ob.y));
+            });
+            return sum;
+          };
+          if (below + fb.offsetHeight < sr.height - 4 && cover(below) < cover(top)) top = below;
+        }
       } else if (top < 4) top = oy + (bb.y + bb.h) * sx + 10;
       fb.style.left = clamp(left, 4, sr.width - fb.offsetWidth - 4) + 'px';
       fb.style.top = clamp(top, 4, sr.height - fb.offsetHeight - 4) + 'px';
@@ -1528,6 +1771,8 @@
       else if (a === 'rotR') turnPiece(15);
       else if (a === 'turn90') turnPiece(90);
       else if (a === 'mirror') mirrorPiece();
+      else if (a === 'group') groupSel();
+      else if (a === 'ungroup') ungroupSel();
       else if (a === 'dup') duplicatePiece();
       else if (a === 'remove') removePiece();
       else if (a === 'dremove') removeDoor();
@@ -1566,6 +1811,15 @@
       if (cat) { state.cat = cat; renderCatalog(); return; }
       if (btn.getAttribute('data-door') != null) { state.doorSel = +btn.getAttribute('data-door'); state.pieceSel = -1; renderPieceBar(); renderDoorBar(); draw(); return; }
       if (act === 'done') { deselect(); return; }
+      if (act === 'group') { groupSel(); return; }
+      if (act === 'ungroup') { ungroupSel(); return; }
+      if (act === 'groupnear') { groupWithPartners(); return; }
+      if (act === 'pickone') {
+        var pid = +btn.getAttribute('data-pid'), o = state.pieces.filter(function (q) { return q.id === pid; })[0];
+        if (o) { state.pieceSel = state.pieces.indexOf(o); state.extra = []; renderPieceBar(); renderDoorBar(); draw(); }
+        return;
+      }
+      if (act === 'pickgroup') { pickPiece(state.pieceSel, false); renderPieceBar(); draw(); return; }
       if (act === 'dup') { duplicatePiece(); return; }
       if (id) addPiece(FURNITURE.get(id));
       else if (act === 'turn15') turnPiece(15);
@@ -2040,6 +2294,7 @@
       if (state.tool === 'scale') endScaleTool();
       if (state.tool === 'door') endDoorTool();
       state.mode = m; state.drag = null;
+      $('planCanvas').classList.toggle('furnishing', m === 'furnish');   // Furnish takes every touch on the plan (pinch, drag, long press)
       var tabs = document.querySelectorAll('.mode');
       for (var i = 0; i < tabs.length; i++) {
         var on = tabs[i].getAttribute('data-mode') === m;
@@ -2156,20 +2411,29 @@
     }
     // Furnish: grab a rug to move it, or tap a room to pick it
     function furnishDown(e) {
-      var p = toCanvas(e), hh = hitPieceHandle(p);
+      var p = toCanvas(e), hh = e.shiftKey || e.metaKey || e.ctrlKey ? null : hitPieceHandle(p);   // a modifier click always means 'add this piece'
       if (hh) { startHandleDrag(e, hh, p); return; }
-      var pk = hitPiece(p);
+      var pk = state.space || e.button === 1 ? -1 : hitPiece(p);
       if (pk > -1) {
-        state.pieceSel = pk; state.doorSel = -1;
-        var pc = state.pieces[pk];
-        state.drag = { mode: 'piece', start: p, snap: snap(), orig: { x: pc.x, y: pc.y },
-                       chairs: chairsOf(pc).map(function (c) { return { c: c, x: c.x, y: c.y }; }) };
+        // Shift, Cmd or Ctrl: add the piece to the selection (or take it out)
+        if (e.shiftKey || e.metaKey || e.ctrlKey) { pickPiece(pk, true); e.preventDefault(); renderPieceBar(); renderDoorBar(); draw(); return; }
+        // On a phone with something already picked, wait: a long press adds this piece, a tap or drag picks it alone
+        var touch = e.pointerType === 'touch', pend = !isSel(pk) && touch && state.pieceSel > -1;
+        if (!isSel(pk) && !pend) pickPiece(pk, false);
+        state.drag = { mode: 'piece', start: p, snap: snap(), pk: pk, pending: pend, list: pend ? null : dragList() };
+        if (pend) state.drag.press = setTimeout(function () {
+          var d = state.drag;
+          if (!d || d.moved || d.mode !== 'piece') return;
+          pickPiece(d.pk, true); state.drag = null;
+          if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) {}
+          renderPieceBar(); renderDoorBar(); draw();
+        }, 500);
         try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
         e.preventDefault();
         renderPieceBar(); renderDoorBar(); draw();
         return;
       }
-      if (state.pieceSel > -1) { state.pieceSel = -1; renderPieceBar(); }
+      if (state.pieceSel > -1 && !state.space && e.button !== 1) { state.pieceSel = -1; state.extra = []; renderPieceBar(); }
       var dk = hitDoor(p);
       if (dk > -1) {
         state.doorSel = dk;
@@ -2189,8 +2453,14 @@
         e.preventDefault();
         return;
       }
-      select(hitRoom(p), false);
+      // Empty floor: a tap picks the room; a drag pans (touch, Space, or the middle button) or draws a selection box
+      var pan = e.pointerType === 'touch' || state.space || e.button === 1;
+      state.drag = { mode: pan ? 'pan' : 'box', start: p, cur: p, client: { x: e.clientX, y: e.clientY }, pan0: { x: state.view.px, y: state.view.py } };
+      try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
     }
+    // The pieces a drag moves: the selection and its tables' chairs, where each started
+    function dragList() { return movingSet(selList()).map(function (o) { return { c: o, x: o.x, y: o.y }; }); }
     function startDrag(e, mode, corner, p) {
       var r = state.rooms[state.selected];
       state.drag = { mode: mode, corner: corner, start: p, snap: snap(), orig: { x: r.bbox.x, y: r.bbox.y, w: r.bbox.w, h: r.bbox.h },
@@ -2217,14 +2487,25 @@
       if (state.mode === 'furnish') {
         if (state.drag && (state.drag.mode === 'rotate' || state.drag.mode === 'stretch')) {
           moveHandleDrag(p);
+        } else if (state.drag && state.drag.mode === 'pan') {
+          var dp = state.drag, cx = e.clientX - dp.client.x, cy = e.clientY - dp.client.y;
+          if (!dp.moved && Math.hypot(cx, cy) < 5) return;
+          dp.moved = true;
+          state.view.px = dp.pan0.x + cx; state.view.py = dp.pan0.y + cy;
+          draw();
+        } else if (state.drag && state.drag.mode === 'box') {
+          var db = state.drag;
+          if (!db.moved && Math.hypot(p.x - db.start.x, p.y - db.start.y) < 5 * displayRatio()) return;
+          db.moved = true; db.cur = p;
+          draw();
         } else if (state.drag && state.drag.mode === 'piece') {
-          var pp = state.pieces[state.pieceSel], pd = state.drag;
+          var pd = state.drag;
           if (!pd.moved && Math.hypot(p.x - pd.start.x, p.y - pd.start.y) < 3 * displayRatio()) return;
+          if (pd.press) { clearTimeout(pd.press); pd.press = null; }
+          if (pd.pending) { pickPiece(pd.pk, false); pd.pending = false; pd.list = dragList(); renderPieceBar(); }
           pd.moved = true;
-          pp.x = clamp(pd.orig.x + (p.x - pd.start.x) / state.W * 100, 0, 100);
-          pp.y = clamp(pd.orig.y + (p.y - pd.start.y) / state.H * 100, 0, 100);
-          var mx = pp.x - pd.orig.x, my = pp.y - pd.orig.y;
-          pd.chairs.forEach(function (o) { o.c.x = o.x + mx; o.c.y = o.y + my; });
+          var mx = (p.x - pd.start.x) / state.W * 100, my = (p.y - pd.start.y) / state.H * 100;
+          pd.list.forEach(function (o) { o.c.x = clamp(o.x + mx, 0, 100); o.c.y = clamp(o.y + my, 0, 100); });
           draw();
         } else if (state.drag && state.drag.mode === 'door') {
           if (!state.drag.moved && Math.hypot(p.x - state.drag.start.x, p.y - state.drag.start.y) < 4 * displayRatio()) return;
@@ -2297,8 +2578,31 @@
         try { inp.focus({ preventScroll: true }); } catch (err) { inp.focus(); }
         return;
       }
+      if (state.drag && (state.drag.mode === 'pan' || state.drag.mode === 'box')) {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        var dz = state.drag;
+        state.drag = null;
+        if (!dz.moved) { select(hitRoom(dz.start), false); return; }   // a tap: pick the room
+        if (dz.mode === 'box') {
+          var x0 = Math.min(dz.start.x, dz.cur.x), x1 = Math.max(dz.start.x, dz.cur.x), y0 = Math.min(dz.start.y, dz.cur.y), y1 = Math.max(dz.start.y, dz.cur.y);
+          var inBox = [];
+          state.pieces.forEach(function (pc, k) {
+            var q = piecePx(pc);
+            if (q.cx < x0 || q.cx > x1 || q.cy < y0 || q.cy > y1) return;
+            if (pc.group && state.pieces.some(function (t) { return t.id === pc.group; })) return;   // chairs come with their table
+            inBox.push(k);
+          });
+          state.pieceSel = -1; state.extra = [];
+          inBox.forEach(function (k, n) { pickPiece(k, n > 0); });
+          renderPieceBar(); renderDoorBar();
+        }
+        draw();
+        return;
+      }
       if (state.drag && (state.drag.mode === 'piece' || state.drag.mode === 'door' || state.drag.mode === 'rotate' || state.drag.mode === 'stretch')) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        if (state.drag.press) clearTimeout(state.drag.press);
+        if (state.drag.mode === 'piece' && state.drag.pending && !state.drag.moved) pickPiece(state.drag.pk, false);   // a tap picks it alone
         if (state.drag.moved) pushUndo(state.drag.snap);
         state.drag = null;
         renderSpacing(); renderDoorBar(); renderPieceBar();
@@ -2329,6 +2633,11 @@
     }
     // Double-click a corner to remove it
     function onDblClick(e) {
+      if (state.mode === 'furnish' && !state.tool) {
+        var dk = hitPiece(toCanvas(e));
+        if (dk > -1 && state.pieces[dk].gid) { state.pieceSel = dk; state.extra = []; renderPieceBar(); draw(); }
+        return;
+      }
       if (state.tool || state.mode !== 'measure' || state.selected < 0) return;
       var h = hitHandle(toCanvas(e));
       if (h && h.type === 'pt' && state.rooms[state.selected].shape) removePoint(state.selected, h.k);
@@ -2833,7 +3142,8 @@
     function reset() {
       state.img = null; state.rooms = []; state.selected = -1; state.sendB64 = '';
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
-      state.pieces = []; state.pieceSel = -1; state.doors = []; state.doorSel = -1;
+      state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
+      state.view = { z: 1, px: 0, py: 0 };
       UNDO = []; $('undoBtn').disabled = true;
       endScaleTool(); endDoorTool();
       setMode('measure');
@@ -2864,6 +3174,10 @@
         handleFile(e.dataTransfer.files[0]);
       });
 
+      c.addEventListener('pointerdown', pinchDown);
+      c.addEventListener('pointermove', pinchMove);
+      c.addEventListener('pointerup', pinchUp);
+      c.addEventListener('pointercancel', pinchUp);
       c.addEventListener('pointerdown', onDown);
       c.addEventListener('pointermove', onMove);
       c.addEventListener('pointerup', onUp);
@@ -2898,6 +3212,12 @@
       fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && /^pc[NWDT]/.test(e.target.id || '')) e.target.blur(); });
       $('floatBar').addEventListener('click', onFloatClick);
       $('undoBtn').addEventListener('click', undo);
+      $('stage').addEventListener('wheel', onWheel, { passive: false });
+      $('zoomIn').addEventListener('click', function () { zoomAt(state.view.z * 1.5); });
+      $('zoomOut').addEventListener('click', function () { zoomAt(state.view.z / 1.5); });
+      $('zoomFit').addEventListener('click', zoomFit);
+      document.addEventListener('keyup', function (e) { if (e.key === ' ') state.space = false; });
+      window.addEventListener('blur', function () { state.space = false; });
       $('doorTool').addEventListener('click', function () { if (state.tool === 'door') endDoorTool(); else { setTab('doors'); startDoorTool(); } });
       grid.addEventListener('focusin', function (e) { if (e.target.tagName === 'INPUT') state.editSnap = snap(); });
       $('customAdd').addEventListener('click', addCustom);
@@ -2917,6 +3237,8 @@
 
       document.addEventListener('keydown', function (e) {
         var typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+        if (e.key === ' ' && !typing && state.img) { state.space = true; e.preventDefault(); return; }
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'g' || e.key === 'G') && !typing && state.mode === 'furnish') { if (e.shiftKey) ungroupSel(); else groupSel(); e.preventDefault(); return; }
         if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && !typing) { undo(); e.preventDefault(); return; }
         if (state.mode === 'furnish' && state.pieceSel > -1 && !typing && (e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) { turnPiece(e.shiftKey ? -15 : 15); e.preventDefault(); return; }
         if (state.tool === 'scale') { if (e.key === 'Escape' && !/INPUT/.test(document.activeElement.tagName)) endScaleTool(); return; }
@@ -3021,8 +3343,8 @@
       <button class="tool-btn hidden" id="doorTool" title="Mark a door on a wall">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V4M4 4a16 16 0 0 1 16 16M4 20h16"/></svg>Add a door
       </button>
-      <button class="tool-btn" id="undoBtn" title="Undo (Ctrl or Cmd + Z)" disabled>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo
+      <button class="tool-btn" id="undoBtn" title="Undo (Ctrl or Cmd + Z)" aria-label="Undo" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg><span class="undo-label">Undo</span>
       </button>
     </div>
 
@@ -3032,6 +3354,11 @@
           <div class="tool-msg hidden" id="toolMsg"></div>
           <div class="print" id="print"><canvas id="planCanvas"></canvas></div>
           <div class="float-bar hidden" id="floatBar"></div>
+          <div class="zoom-box hidden" id="zoomBox" role="group" aria-label="Zoom">
+            <button id="zoomOut" title="Zoom out" aria-label="Zoom out">&minus;</button>
+            <button id="zoomFit" title="Fit the plan" aria-label="Fit the plan">Fit</button>
+            <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+          </div>
         </div>
         <div class="scale-bar" id="scaleBar">
           <div class="scale-row">
