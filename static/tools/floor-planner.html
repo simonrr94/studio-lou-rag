@@ -2177,19 +2177,9 @@
       other: 'Leave at least 12" of floor between the rug and the walls.'
     };
     var STATUS_TEXT = { fits: 'Fits', tight: 'Tight', big: 'Too big' };
-    var STYLE_ADVICE = {
-      allOn: 'All legs on: the rug holds the whole seating group, with about 6" of rug past the legs.',
-      frontLegs: 'Front legs on: the front legs of the sofa and chairs sit at least 6" onto the rug, and the coffee table sits fully on it.',
-      floating: 'Floating: the rug sits under the coffee table only, and the seating stays off it.',
-      bed: 'Under the bed: the rug runs 18" to 24" past each side and past the foot, under the lower two thirds of the bed so the nightstands stay off it.',
-      dining: 'Under the table: the rug reaches at least 24" past the table on every side so the chairs stay on it when pulled out.'
-    };
-
-    // The rug style picked for a room, if the room's furniture allows it
-    function rugStyle(r, group) {
-      var st = r.rugStyle || 'walls';
-      return RUGSTYLE.available(group || groupFor(r)).indexOf(st) > -1 ? st : 'walls';
-    }
+    // Rugs are judged on one thing: how much floor they leave at the walls (Lauren, Nov 18).
+    // The engine's rug styles (legs on, floating) are no longer used on this page.
+    function rugStyle() { return 'walls'; }
     // Every size checked against the selected room. Rechecked only when the room's
     // outline, the scale, the style or the furniture that style looks at changes.
     function rugCheckFor(r) {
@@ -2205,34 +2195,10 @@
       if (RUG.status(c) === 'big') return 'Only ' + fmtGap(c) + ' of floor at the closest wall';
       return 'Leaves ' + fmtGap(c) + ' at the closest wall';
     }
-    // What holds a size back for a style (the measurement RUGSTYLE reports as worst)
-    function styleDetail(t) {
-      var v = t.val, g = fmtGap(Math.max(0, v));
-      switch (t.name) {
-        case 'allOn': return v < 0 ? 'Too small to hold every leg' : 'Legs only ' + g + ' from the edge';
-        case 'front': return v < 0 ? "Doesn't reach the front legs" : 'Front legs only ' + g + ' on';
-        case 'coffee': return v < 0 ? 'The coffee table hangs off it' : 'Coffee table only ' + g + ' from the edge';
-        case 'seatOff': return v < 0 ? 'Runs under the seating' : 'Nearly touches the seating';
-        case 'bedSide': return v < 0 ? 'Narrower than the bed' : 'Only ' + g + ' past the sides of the bed';
-        case 'bedFoot': return v < 0 ? "Doesn't reach the foot of the bed" : 'Only ' + g + ' past the foot';
-        case 'bedHead': return 'Runs up under the nightstands';
-        case 'dining': return v < 0 ? 'Smaller than the table' : 'Only ' + g + ' past the table';
-      }
-      return '';
-    }
-    // A size held back by the furniture is usually too small to reach it, not too big
-    function statusWord(it, style) {
-      var w = it.spot && it.spot.worst;
-      if (it.status === 'big' && style !== 'walls' && w && w.name !== 'seatOff' && w.name !== 'bedHead') return 'Too small';
-      return STATUS_TEXT[it.status];
-    }
-    // Card text for one size: the style's limit if it has one, otherwise the walls
-    function sizeDetail(it, style) {
+    // Card text for one size: the floor it leaves at the walls
+    function sizeDetail(it) {
       var sp = it.spot;
-      if (!sp) return 'Larger than the room';
-      if (style !== 'walls' && sp.worst) return styleDetail(sp.worst);
-      if (style !== 'walls' && sp.clearance < 0) return 'Would run into the walls to reach the furniture';
-      return rugDetail(sp.clearance);
+      return sp ? rugDetail(sp.clearance) : 'Larger than the room';
     }
 
     function renderFurnish() {
@@ -2251,24 +2217,15 @@
         body.innerHTML = '<p class="rug-empty">Pick a room on the plan or from the list.</p>';
         return;
       }
-      var group = groupFor(r), style = rugStyle(r, group), avail = RUGSTYLE.available(group);
       var res = rugCheckFor(r), type = RUG.roomType(r.name);
       var bestLabel = res && res.best ? RUG.get(res.best).label : null;
-      $('rugSub').innerHTML = style === 'walls'
-        ? (bestLabel ? 'The largest rug that fits <b>' + esc(r.name) + '</b> comfortably is <b>' + bestLabel + '</b>.'
-                     : 'None of the standard sizes leave 12" of floor in <b>' + esc(r.name) + '</b>.')
-        : (bestLabel ? 'The largest rug that works <b>' + RUGSTYLE.NAMES[style].toLowerCase() + '</b> in <b>' + esc(r.name) + '</b> is <b>' + bestLabel + '</b>.'
-                     : 'None of the standard sizes work <b>' + RUGSTYLE.NAMES[style].toLowerCase() + '</b> with the furniture as it sits in <b>' + esc(r.name) + '</b>.');
-      var styles = avail.length > 1
-        ? '<div class="piece-group style-row"><span class="piece-group-name">Rug style</span>' + avail.map(function (st) {
-            return '<button class="piece-chip' + (st === style ? ' on' : '') + '" data-style="' + st + '">' + RUGSTYLE.NAMES[st] + '</button>';
-          }).join('') + '</div>'
-        : '<p class="rug-empty small">Place seating, a bed, or a dining table in this room to check rug styles like front legs on.</p>';
+      $('rugSub').innerHTML = bestLabel ? 'The largest rug that fits <b>' + esc(r.name) + '</b> comfortably is <b>' + bestLabel + '</b>.'
+                                        : 'None of the standard sizes leave 12" of floor in <b>' + esc(r.name) + '</b>.';
       var cards = res.list.map(function (it) {
         var on = r.rug && r.rug.size === it.size.id;
         return '<button class="rug-card' + (on ? ' on' : '') + '" data-rug="' + it.size.id + '">' +
-          '<span class="rug-top"><b>' + it.size.label + '</b><span class="badge ' + it.status + '">' + statusWord(it, style) + '</span></span>' +
-          '<span class="rug-detail">' + sizeDetail(it, style) + '</span>' +
+          '<span class="rug-top"><b>' + it.size.label + '</b><span class="badge ' + it.status + '">' + STATUS_TEXT[it.status] + '</span></span>' +
+          '<span class="rug-detail">' + sizeDetail(it) + '</span>' +
           (it.size.id === res.best ? '<span class="best">Best fit</span>' : '') +
         '</button>';
       }).join('');
@@ -2282,7 +2239,7 @@
             '<button class="btn-secondary btn-sm" data-act="remove">Remove</button>' +
           '</div></div>';
       }
-      body.innerHTML = styles + '<p class="rug-advice">' + (style === 'walls' ? RUG_ADVICE[type] : STYLE_ADVICE[style] + ' Rugs still keep 12" of floor at the walls.') +
+      body.innerHTML = '<p class="rug-advice">' + RUG_ADVICE[type] +
         ' Tap a size to lay it on the plan, then drag it into place.</p>' +
         '<div class="rug-grid">' + cards + '</div>' + placed;
     }
@@ -2302,7 +2259,6 @@
       var r = state.rooms[state.selected], btn = e.target.closest('button');
       if (!btn || !r) return;
       if (btn.getAttribute('data-rug')) { placeRug(btn.getAttribute('data-rug')); return; }
-      if (btn.getAttribute('data-style')) { r.rugStyle = btn.getAttribute('data-style'); renderFurnish(); draw(); return; }
       var act = btn.getAttribute('data-act');
       if (!r.rug) return;
       if (act === 'turn') { pushUndo(); r.rug.rot = ((r.rug.rot || 0) + 90) % 360; renderFurnish(); draw(); }
@@ -2310,19 +2266,10 @@
       else if (act === 'remove') { pushUndo(); r.rug = null; renderFurnish(); draw(); }
     }
     // The rug where it sits now, judged on the walls and on the room's rug style
-    function rugJudge(r) {
-      var group = groupFor(r), style = rugStyle(r, group), c = rugCenterFt(r);
-      return { style: style, j: RUGSTYLE.judge(r.ftShape, style, RUG.get(r.rug.size), r.rug.rot, c.x, c.y, group) };
-    }
     function placedMsg(r) {
       var info = rugInfo(r), s = RUG.get(r.rug.size);
       var msg = 'Your <b>' + s.label + '</b> rug ' + (info.clearance < 0 ? 'runs past the walls. Drag it back inside the room, or tap <b>Center it</b>.'
         : 'leaves <b>' + fmtGap(info.clearance) + '</b> of floor at the closest wall (' + STATUS_TEXT[RUG.status(info.clearance)].toLowerCase() + ').');
-      var rj = rugJudge(r);
-      if (rj.style !== 'walls' && info.clearance >= 0) {
-        msg += rj.j.worst ? ' ' + RUGSTYLE.NAMES[rj.style] + ': ' + styleDetail(rj.j.worst).toLowerCase() + '.'
-          : ' ' + RUGSTYLE.NAMES[rj.style] + ' works here.';
-      }
       return msg;
     }
     // Updates just the sentence under the sizes while a rug is dragged
@@ -3049,8 +2996,7 @@
           doc.rect(margin, y, contentW, 20, 'F');
           doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
           doc.text(ascii(r.name).slice(0, 30), rc[0], y + 13);
-          var rjs = rugJudge(r).style;
-          doc.text(ascii(RUG.get(r.rug.size).label + (rjs !== 'walls' ? ', ' + RUGSTYLE.NAMES[rjs].toLowerCase() : '')), rc[1], y + 13);
+          doc.text(ascii(RUG.get(r.rug.size).label), rc[1], y + 13);
           doc.text(info.clearance < 0 ? 'Runs past the walls' : ascii(fmtGap(info.clearance)), rc[2], y + 13);
           if (st === 'big') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
           doc.text(STATUS_TEXT[st], rc[3], y + 13, { align: 'right' });
@@ -3163,8 +3109,7 @@
             shape_ft: r.shape && r.ftShape ? r.ftShape.map(function (q) { return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) : null,
             rug: rugOK(r) ? (function () {
               var info = rugInfo(r), c = rugCenterFt(r);
-              var rj = rugJudge(r);
-              return { size: r.rug.size, label: RUG.get(r.rug.size).label, turned_deg: r.rug.rot || 0, style: RUGSTYLE.NAMES[rj.style], style_result: rj.j.status,
+              return { size: r.rug.size, label: RUG.get(r.rug.size).label, turned_deg: r.rug.rot || 0,
                        center_ft: [+c.x.toFixed(2), +c.y.toFixed(2)], floor_at_closest_wall_in: Math.round(info.clearance * 12) };
             })() : null
           };
