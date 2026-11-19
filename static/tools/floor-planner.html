@@ -115,6 +115,9 @@
     .zoom-box button:hover:not(:disabled) { background: #f5f0e8; }
     .zoom-box button:disabled { color: #c4bdb2; cursor: default; }
     .zoom-box #zoomFit { font-size: 12px; letter-spacing: 0.04em; }
+    .door-wfield { display: inline-flex; align-items: center; gap: 4px; border: 1.5px solid #d0c9bc; border-radius: 50px; background: #ffffff; padding: 0 14px 0 12px; height: 36px; font-size: 14px; color: #6b6560; }
+    .door-wfield input { border: none; outline: none; width: 44px; font: 600 14px 'DM Sans', sans-serif; color: #433E3C; background: transparent; text-align: right; }
+    .door-wfield input.bad { color: #582b36; }
     .seg-row { display: inline-flex; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 3px; gap: 3px; background: #ffffff; margin: 6px 0 12px; }
     .seg-row button { border: none; background: transparent; border-radius: 50px; padding: 7px 16px; font: 600 13px 'DM Sans', sans-serif; color: #433E3C; cursor: pointer; }
     .seg-row button.on { background: #582b36; color: #FAF9F6; }
@@ -2273,6 +2276,35 @@
       }).join('') + '</div>';
     }
     function moveDoor(d, p) { var sn = snapToWall(p); if (sn) setDoorOn(d, sn); }
+    // Stretching a door or window: a handle at each end of the opening (canvas px)
+    var DOOR_MIN = 12, DOOR_MAX = 192;
+    function doorHandles(d) { return doorGeomPx(d).jambs; }
+    function hitDoorHandle(p) {
+      var d = state.doors[state.doorSel];
+      if (!d || state.mode !== 'furnish' || state.tool) return -1;
+      var hs = doorHandles(d), reach = (window.matchMedia && matchMedia('(pointer: coarse)').matches ? 16 : 10) * displayRatio();
+      for (var k = 0; k < 2; k++) if (Math.hypot(p.x - hs[k].x, p.y - hs[k].y) <= reach) return k;
+      return -1;
+    }
+    function startDoorStretch(e, k, p) {
+      var d = state.doors[state.doorSel], hs = doorHandles(d), fixed = hs[1 - k];
+      var L = Math.hypot(hs[k].x - fixed.x, hs[k].y - fixed.y) || 1;
+      state.drag = { mode: 'dstretch', start: p, snap: snap(), fixed: fixed, dir: { x: (hs[k].x - fixed.x) / L, y: (hs[k].y - fixed.y) / L } };
+      try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    }
+    function moveDoorStretch(p) {
+      var dg = state.drag, d = state.doors[state.doorSel];
+      if (!dg.moved && Math.hypot(p.x - dg.start.x, p.y - dg.start.y) < 3 * displayRatio()) return;
+      dg.moved = true;
+      // How far the pointer is along the wall from the end that stays put, in whole inches
+      var along = (p.x - dg.fixed.x) * dg.dir.x + (p.y - dg.fixed.y) * dg.dir.y, f = state.scale.ftPerPx;
+      var w = clamp(Math.round(along * f * 12), DOOR_MIN, DOOR_MAX), half = w / 12 / f / 2;
+      if (w === d.w) return;
+      d.w = w;
+      d.x = (dg.fixed.x + dg.dir.x * half) / state.W * 100; d.y = (dg.fixed.y + dg.dir.y * half) / state.H * 100;
+      draw();
+    }
     // What a door or window's check says, in a word: { bad, word, value } (null when there's nothing to check)
     function doorStatus(d, pcs) {
       if (!state.scale) return null;
@@ -2293,6 +2325,23 @@
       }
       return -1;
     }
+    // The end handles of the picked door or window, and its width while it's being stretched
+    function drawDoorHandles(ctx, d, g) {
+      var r = displayRatio();
+      ctx.save(); ctx.setLineDash([]);
+      g.jambs.forEach(function (q) {
+        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 2 * r;
+        ctx.beginPath(); ctx.rect(q.x - 5 * r, q.y - 5 * r, 10 * r, 10 * r); ctx.fill(); ctx.stroke();
+      });
+      if (state.drag && state.drag.mode === 'dstretch' && state.drag.moved) {
+        var m = { x: (g.jambs[0].x + g.jambs[1].x) / 2 + d.nx * 22 * r, y: (g.jambs[0].y + g.jambs[1].y) / 2 + d.ny * 22 * r }, text = d.w + '" wide';
+        ctx.font = '600 ' + (12 * r) + 'px "DM Sans", sans-serif';
+        var w = ctx.measureText(text).width + 16 * r, h = 24 * r;
+        ctx.fillStyle = '#433E3C'; roundRect(ctx, m.x - w / 2, m.y - h / 2, w, h, h / 2); ctx.fill();
+        ctx.fillStyle = '#FAF9F6'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, m.x, m.y + 0.5 * r);
+      }
+      ctx.restore();
+    }
     function drawDoors(ctx, forExport) {
       if (!state.doors.length) return;
       var ratio = displayRatio(), pcs = piecesFt(), f = state.scale.ftPerPx;
@@ -2311,6 +2360,7 @@
           ctx.lineWidth = (sel ? 2.4 : 1.6) * ratio;
           ctx.beginPath(); ctx.moveTo(a.x + n.x * t / 2, a.y + n.y * t / 2); ctx.lineTo(b.x + n.x * t / 2, b.y + n.y * t / 2); ctx.stroke();
           if (hit || sel) { tracePath(ctx, g.zones[0]); ctx.fillStyle = hit ? 'rgba(88,43,54,0.14)' : 'rgba(166,190,71,0.14)'; ctx.fill(); }
+          if (sel) drawDoorHandles(ctx, d, g);
           ctx.restore();
           return;
         }
@@ -2338,6 +2388,7 @@
         ctx.setLineDash([4 * ratio, 3 * ratio]); ctx.lineWidth = 1.8 * ratio; ctx.strokeStyle = g.type === 'pocket' ? '#d6e3a1' : col;
         g.dashed.forEach(function (sl) { ctx.beginPath(); ctx.moveTo(sl[0].x, sl[0].y); ctx.lineTo(sl[1].x, sl[1].y); ctx.stroke(); });
         ctx.setLineDash([]);
+        if (sel) drawDoorHandles(ctx, d, g);
         if (sel && !g.leaves.length) {   // a door with no swing still shows it's picked: its opening
           ctx.lineWidth = 1.5 * ratio; ctx.strokeStyle = '#7f9433';
           ctx.beginPath(); ctx.moveTo(g.jambs[0].x, g.jambs[0].y); ctx.lineTo(g.jambs[1].x, g.jambs[1].y); ctx.stroke();
@@ -2364,15 +2415,15 @@
       if (widths.indexOf(d.w) < 0) { widths.push(d.w); widths.sort(function (a, b) { return a - b; }); }
       var msg = st ? st.value + '.' : '';
       bar.classList.remove('hidden');
+      var tip = 'Type a width, or drag the handles at its ends along the wall.';
       bar.innerHTML = '<p class="detail-name" style="border:none">' + doorName(d) + '</p>' +
-        '<p class="detail-meta">' + d.w + '" wide' + (win ? '' : ', ' + DOOR.TYPES[t].name.toLowerCase()) + '. ' + (msg ? esc(msg) + ' ' : '') + DOOR_NOTE[t] + ' Drag it along the walls to move it.</p>' +
+        '<p class="detail-meta">' + d.w + '" wide' + (win ? '' : ', ' + DOOR.TYPES[t].name.toLowerCase()) + '. ' + (msg ? esc(msg) + ' ' : '') + DOOR_NOTE[t] + ' Drag it along the walls to move it. ' + tip + '</p>' +
         '<div class="btn-row">' +
           (win ? '' : '<select class="room-select door-w" style="min-width:0" data-dact="type" aria-label="Door type">' + DOOR.ORDER.map(function (k) {
             return '<option value="' + k + '"' + (k === t ? ' selected' : '') + '>' + DOOR.TYPES[k].name + '</option>';
           }).join('') + '</select>') +
-          '<select class="room-select door-w" style="min-width:0" data-dact="width" aria-label="Width">' + widths.map(function (w) {
-            return '<option value="' + w + '"' + (w === d.w ? ' selected' : '') + '>' + w + '" wide</option>';
-          }).join('') + '</select>' +
+          '<label class="door-wfield"><input data-dact="width" value="' + d.w + '" inputmode="decimal" list="doorWidths" autocomplete="off" aria-label="Width in inches"><span>" wide</span></label>' +
+          '<datalist id="doorWidths">' + widths.map(function (w) { return '<option value="' + w + '">'; }).join('') + '</datalist>' +
           (fl[0] ? '<button class="btn-secondary btn-sm" data-dact="swing">' + fl[0] + '</button>' : '') +
           (fl[1] ? '<button class="btn-secondary btn-sm" data-dact="hinge">' + fl[1] + '</button>' : '') +
           '<button class="btn-secondary btn-sm" data-dact="remove">Remove</button>' +
@@ -2409,9 +2460,14 @@
       pushUndo();
       if (act === 'type') {
         d.type = e.target.value;
-        var ws = DOOR.TYPES[d.type].widths;   // a width that suits the new type
-        if (ws.indexOf(d.w) < 0) d.w = ws.reduce(function (best, w) { return Math.abs(w - d.w) < Math.abs(best - d.w) ? w : best; }, ws[0]);
-      } else d.w = +e.target.value;
+        // Keep the width unless it's outside what the new type comes in (a 30" double door, say)
+        var ws = DOOR.TYPES[d.type].widths;
+        if (d.w < ws[0] || d.w > ws[ws.length - 1]) d.w = ws.reduce(function (best, w) { return Math.abs(w - d.w) < Math.abs(best - d.w) ? w : best; }, ws[0]);
+      } else {
+        var v = FURNITURE.parseInches(e.target.value);
+        if (!v || v < DOOR_MIN || v > DOOR_MAX) { e.target.classList.add('bad'); UNDO.pop(); return; }
+        d.w = Math.round(v);
+      }
       // Keep the wider door on its wall
       var sn = snapToWall({ x: d.x / 100 * state.W, y: d.y / 100 * state.H });
       if (sn) setDoorOn(d, sn);
@@ -2653,6 +2709,8 @@
     // Furnish: grab a rug to move it, or tap a room to pick it
     function furnishDown(e) {
       var p = toCanvas(e), hh = e.shiftKey || e.metaKey || e.ctrlKey ? null : hitPieceHandle(p);   // a modifier click always means 'add this piece'
+      var dh = hitDoorHandle(p);
+      if (dh > -1) { startDoorStretch(e, dh, p); return; }
       if (hh) { startHandleDrag(e, hh, p); return; }
       var pk = state.space || e.button === 1 ? -1 : hitPiece(p);
       if (pk > -1) {
@@ -2739,7 +2797,9 @@
       }
       if (state.tool === 'erase') { c.style.cursor = 'none'; eraseMove(p); return; }
       if (state.mode === 'furnish') {
-        if (state.drag && (state.drag.mode === 'rotate' || state.drag.mode === 'stretch')) {
+        if (state.drag && state.drag.mode === 'dstretch') {
+          moveDoorStretch(p);
+        } else if (state.drag && (state.drag.mode === 'rotate' || state.drag.mode === 'stretch')) {
           moveHandleDrag(p);
         } else if (state.drag && state.drag.mode === 'pan') {
           var dp = state.drag, cx = e.clientX - dp.client.x, cy = e.clientY - dp.client.y;
@@ -2773,6 +2833,8 @@
           rr.rug.y = clamp(dd.orig.y + (p.y - dd.start.y) / state.H * 100, 0, 100);
           draw(); updatePlacedMsg();
         } else {
+          var dhv = state.tool ? -1 : hitDoorHandle(p);
+          if (dhv > -1) { var dd0 = state.doors[state.doorSel]; c.style.cursor = Math.abs(dd0.ux) > Math.abs(dd0.uy) ? 'ew-resize' : 'ns-resize'; return; }
           var hv = state.tool ? null : hitPieceHandle(p);
           if (hv) { c.style.cursor = hv.type === 'rot' ? 'grab' : handleCursor(hv); return; }
           c.style.cursor = state.tool === 'door' ? 'crosshair' : hitPiece(p) > -1 || hitDoor(p) > -1 || hitRug(p) > -1 ? 'move' : hitRoom(p) > -1 ? 'pointer' : 'default';
@@ -2863,7 +2925,7 @@
         draw();
         return;
       }
-      if (state.drag && (state.drag.mode === 'piece' || state.drag.mode === 'door' || state.drag.mode === 'rotate' || state.drag.mode === 'stretch')) {
+      if (state.drag && (state.drag.mode === 'piece' || state.drag.mode === 'door' || state.drag.mode === 'rotate' || state.drag.mode === 'stretch' || state.drag.mode === 'dstretch')) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
         if (state.drag.press) clearTimeout(state.drag.press);
         if (state.drag.mode === 'piece' && state.drag.pending && !state.drag.moved) pickPiece(state.drag.pk, false);   // a tap picks it alone
@@ -3479,7 +3541,7 @@
         onPieceClick(e); onDoorClick(e);
       });
       fp.addEventListener('change', function (e) { onDoorChange(e); onDetailChange(e); });
-      fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && /^pc[NWDT]/.test(e.target.id || '')) e.target.blur(); });
+      fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (/^pc[NWDT]/.test(e.target.id || '') || e.target.getAttribute('data-dact') === 'width')) e.target.blur(); });
       $('floatBar').addEventListener('click', onFloatClick);
       $('undoBtn').addEventListener('click', undo);
       $('stage').addEventListener('wheel', onWheel, { passive: false });
