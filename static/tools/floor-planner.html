@@ -2305,8 +2305,10 @@
           // A window: a thin frame set in the wall, with the glass line through it
           var a = g.jambs[0], b = g.jambs[1], n = { x: -d.nx, y: -d.ny }, t = 5 / 12 / f;   // into the wall, away from the room
           var box = [a, b, { x: b.x + n.x * t, y: b.y + n.y * t }, { x: a.x + n.x * t, y: a.y + n.y * t }];
+          // White box, then green (burgundy when blocked) frame and glass line, so it reads on dark wall ink
           tracePath(ctx, box); ctx.fillStyle = '#ffffff'; ctx.fill();
-          ctx.lineWidth = (sel ? 2.4 : 1.4) * ratio; ctx.strokeStyle = sel ? '#7f9433' : hit ? '#582b36' : '#433E3C'; ctx.stroke();
+          ctx.lineWidth = (sel ? 3 : 2) * ratio; ctx.strokeStyle = col; ctx.stroke();
+          ctx.lineWidth = (sel ? 2.4 : 1.6) * ratio;
           ctx.beginPath(); ctx.moveTo(a.x + n.x * t / 2, a.y + n.y * t / 2); ctx.lineTo(b.x + n.x * t / 2, b.y + n.y * t / 2); ctx.stroke();
           if (hit || sel) { tracePath(ctx, g.zones[0]); ctx.fillStyle = hit ? 'rgba(88,43,54,0.14)' : 'rgba(166,190,71,0.14)'; ctx.fill(); }
           ctx.restore();
@@ -2325,11 +2327,15 @@
           if (g.type !== 'bifold') { ctx.lineWidth = (sel ? 3.5 : 2.5) * ratio; ctx.beginPath(); ctx.moveTo(l.hinge.x, l.hinge.y); ctx.lineTo(l.open.x, l.open.y); ctx.stroke(); }
           ctx.fillStyle = col; ctx.beginPath(); ctx.arc(l.hinge.x, l.hinge.y, (sel ? 4 : 3) * ratio, 0, Math.PI * 2); ctx.fill();
         });
-        // Panels: a pocket door closed, barn and bypass slabs, bifold panels half folded
-        ctx.lineWidth = (sel ? 3.5 : 2.6) * ratio; ctx.strokeStyle = g.type === 'bifold' || hit ? col : '#433E3C';
-        g.slabs.forEach(function (sl) { ctx.beginPath(); ctx.moveTo(sl[0].x, sl[0].y); ctx.lineTo(sl[1].x, sl[1].y); ctx.stroke(); });
+        // Panels: a pocket door closed, barn and bypass slabs, bifold panels half folded. Green (burgundy
+        // when something's in the way) over a white edge, so they read on dark wall ink
+        var lw = (sel ? 3.5 : 2.6) * ratio;
+        [['#ffffff', lw + 3 * ratio], [col, lw]].forEach(function (pass) {
+          ctx.lineWidth = pass[1]; ctx.strokeStyle = pass[0];
+          g.slabs.forEach(function (sl) { ctx.beginPath(); ctx.moveTo(sl[0].x, sl[0].y); ctx.lineTo(sl[1].x, sl[1].y); ctx.stroke(); });
+        });
         // (a pocket sits inside the wall, so it's drawn light enough to show on dark wall ink)
-        ctx.setLineDash([4 * ratio, 3 * ratio]); ctx.lineWidth = 1.6 * ratio; ctx.strokeStyle = g.type === 'barn' ? col : g.type === 'pocket' ? '#d0c9bc' : '#6b6560';
+        ctx.setLineDash([4 * ratio, 3 * ratio]); ctx.lineWidth = 1.8 * ratio; ctx.strokeStyle = g.type === 'pocket' ? '#d6e3a1' : col;
         g.dashed.forEach(function (sl) { ctx.beginPath(); ctx.moveTo(sl[0].x, sl[0].y); ctx.lineTo(sl[1].x, sl[1].y); ctx.stroke(); });
         ctx.setLineDash([]);
         if (sel && !g.leaves.length) {   // a door with no swing still shows it's picked: its opening
