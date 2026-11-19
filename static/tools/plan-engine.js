@@ -818,6 +818,24 @@ var FURNITURE = (function () {
     return out;
   }
 
+  // How many chairs a dining table of this size takes, in the same form as
+  // a catalog item's chairs. Rectangles and ovals: about 24" of edge per seat
+  // along each long side, less 6" at each corner when there are end chairs
+  // (so the end chairs and the side chairs don't knock knees); the end chairs
+  // stay as the table came. Round tables follow the usual seating guide
+  // (48" seats 4, 60" seats 6, 72" seats 8). Catalog sizes come out as listed.
+  var SEAT = 24, CORNER = 6;
+  function fitChairs(t) {
+    if (!t || !t.chairs) return null;
+    if (t.chairs.around) {
+      var D = Math.max(t.w, t.d);
+      var n = D < 36 ? 2 : D < 42 ? 3 : D < 54 ? 4 : D < 60 ? 5 : D < 66 ? 6 : D < 72 ? 7 : D < 84 ? 8 : Math.floor(Math.PI * D / 30);
+      return { around: n };
+    }
+    var ends = t.chairs[1] || 0;
+    return [Math.max(1, Math.floor((t.w - (ends ? 2 * CORNER : 0)) / SEAT)), ends];
+  }
+
   // The outline split into pieces with no inward corners (a sectional is two boxes),
   // in the piece's own frame, inches. Used to measure how much two pieces overlap.
   function parts(pc) {
@@ -842,7 +860,7 @@ var FURNITURE = (function () {
   function bounds(pc, cx, cy, k) { return PLAN.bounds(shapeAt(pc, cx, cy, k)); }
 
   return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, outline: outline, legs: legs, parts: parts,
-           chairLayout: chairLayout, shapeAt: shapeAt, toLocal: toLocal, contains: contains, bounds: bounds };
+           chairLayout: chairLayout, fitChairs: fitChairs, shapeAt: shapeAt, toLocal: toLocal, contains: contains, bounds: bounds };
 })();
 
 /* =====================================================================

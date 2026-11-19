@@ -86,7 +86,7 @@
       border-radius: 50px; padding: 6px 16px; cursor: pointer;
     }
     .mode:hover:not(:disabled) { border-color: #582b36; color: #582b36; }
-    .mode.active { background: #582b36; border-color: #582b36; color: #FAF9F6; }
+    .mode.active, .mode.active:hover:not(:disabled) { background: #582b36; border-color: #582b36; color: #FAF9F6; }
     .mode:disabled { color: #a39d92; cursor: default; background: rgba(255,255,255,0.6); }
     .mode small { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-left: 4px; }
     .tool-spacer { flex: 1; }
@@ -275,7 +275,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=9"></script>
+  <script src="/static/tools/plan-engine.js?v=10"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -676,6 +676,8 @@
           ctx.restore();
         }
       }
+
+      if (!forExport && state.scale) { drawPieceHandles(ctx); drawHandleTag(ctx); }
 
       if (!forExport) {
         if (state.tool === 'scale' && state.scaleLine) drawScaleLine(ctx, state.scaleLine.p1, state.scaleLine.p2);
@@ -1155,7 +1157,9 @@
       var checks = pieceChecks(k), round = pc.shape === 'round' && Math.round(pc.w) === Math.round(pc.d);
       bar.innerHTML = '<input class="detail-name" id="pcName" value="' + esc(pc.name) + '" maxlength="30" aria-label="Piece name">' +
         '<p class="detail-meta">' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (pc.rot ? ', turned ' + pc.rot + '&deg;' : '') +
-          (rm ? ', in ' + esc(rm.name) : '') + '. Drag it on the plan to move it' + (nCh ? '; the chairs come along.' : '.') +
+          (rm ? ', in ' + esc(rm.name) : '') + '. Drag it on the plan to move it' + (nCh ? '; the chairs come along' : '') +
+          (stretchHandles(pc).length ? '. The handle on top turns it; the handles on its edges stretch it' + (nCh ? ', adding chairs as it grows.' : '.')
+            : '. The handle on top turns it. Type a new size below to resize it' + (nCh ? '; longer tables get more chairs.' : '.')) +
           (probs.length ? ' <span class="warn-text">It ' + esc(probs.join(' and ')) + '.</span>' : '') + '</p>' +
         '<div class="field-row">' +
           '<label class="field"><span>' + (round ? 'Diameter' : 'Width') + ', inches</span><input id="pcW" value="' + Math.round(pc.w) + '" inputmode="decimal" autocomplete="off"></label>' +
@@ -1192,13 +1196,15 @@
       } else return;
       renderPieceBar(); renderSpacing(); draw();
     }
-    // A resized table sets its chairs out again around its new edge
+    // A resized table sets its chairs out again around its new edge, with as many
+    // as the new size seats (about 24" of edge per chair; see FURNITURE.fitChairs)
     function relayoutChairs(t) {
       var spec = FURNITURE.get(t.type);
       if (!spec || !spec.chairs) return;
       state.pieces = state.pieces.filter(function (o) { return o.group !== t.id; });
       var k = 1 / 12 / state.scale.ftPerPx, cx = t.x / 100 * state.W, cy = t.y / 100 * state.H, chair = FURNITURE.get('chair');
-      FURNITURE.chairLayout({ w: t.w, d: t.d, shape: t.shape, chairs: spec.chairs }).forEach(function (c) {
+      var fit = FURNITURE.fitChairs({ w: t.w, d: t.d, chairs: spec.chairs });
+      FURNITURE.chairLayout({ w: t.w, d: t.d, shape: t.shape, chairs: fit }).forEach(function (c) {
         var p = GEO.place([{ x: c.x * k, y: c.y * k }], cx, cy, t.rot, 1)[0];
         state.pieces.push(makePiece(chair, p.x / state.W * 100, p.y / state.H * 100, (c.rot + t.rot) % 360, t.id));
       });
@@ -1220,6 +1226,155 @@
       });
       state.pieceSel = state.pieces.indexOf(copy);
       renderPieceBar(); renderSpacing(); draw();
+    }
+
+    /* ---------- Handles on the selected piece ----------
+       A rotate handle above the piece (drag to turn, in 15° steps) and stretch
+       handles on its sides and corners, which turn with it. A side handle
+       changes the width or depth in whole inches with the far side held still;
+       a corner scales the piece evenly from the opposite corner. Pieces too
+       small on screen to hold handles keep the typed sizes in the panel. */
+    var ROT_STEP = 15;
+    function rotHandle(pc) {
+      var q = piecePx(pc), bb = FURNITURE.bounds(pc, q.cx, q.cy, q.k), r = displayRatio(), stalk = 30 * r;
+      var above = bb.y - stalk - 12 * r > 0;
+      return { x: bb.x + bb.w / 2, y: above ? bb.y - stalk : bb.y + bb.h + stalk, from: { x: bb.x + bb.w / 2, y: above ? bb.y : bb.y + bb.h }, above: above, bb: bb };
+    }
+    // The stretch handles in canvas px: sx, sy say which side (-1, 0 or +1 across the width and depth)
+    function stretchHandles(pc) {
+      var q = piecePx(pc), r = displayRatio(), out = [];
+      var wCss = q.w / r, dCss = q.d / r;
+      if (Math.min(wCss, dCss) < 30) return out;
+      [[-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [1, 0], [0, 1], [-1, 0]].forEach(function (s) {
+        var sx = s[0], sy = s[1];
+        if (sx === 0 && wCss < 56) return;   // room along that edge for a handle and the piece itself
+        if (sy === 0 && dCss < 56) return;
+        var p = GEO.place([{ x: sx * q.w / 2, y: sy * q.d / 2 }], q.cx, q.cy, pc.rot, 1)[0];
+        out.push({ type: sx && sy ? 'corner' : 'side', sx: sx, sy: sy, x: p.x, y: p.y });
+      });
+      return out;
+    }
+    function handlesOn() {
+      var pc = state.pieces[state.pieceSel];
+      return state.mode === 'furnish' && state.scale && pc && !state.tool && (!state.drag || state.drag.mode !== 'piece' || !state.drag.moved) ? pc : null;
+    }
+    function hitPieceHandle(p) {
+      var pc = handlesOn();
+      if (!pc) return null;
+      var r = displayRatio(), rh = rotHandle(pc), reach = (window.matchMedia && matchMedia('(pointer: coarse)').matches ? 16 : 11) * r;
+      if (Math.hypot(p.x - rh.x, p.y - rh.y) <= reach) return { type: 'rot' };
+      var best = null;
+      stretchHandles(pc).forEach(function (h) {
+        var dd = Math.hypot(p.x - h.x, p.y - h.y);
+        if (dd <= reach && (!best || dd < best.dist)) best = { type: h.type, sx: h.sx, sy: h.sy, dist: dd };
+      });
+      return best;
+    }
+    function drawPieceHandles(ctx) {
+      var pc = handlesOn();
+      if (!pc) return;
+      var r = displayRatio(), rh = rotHandle(pc), d = state.drag;
+      var busy = d && (d.mode === 'rotate' || d.mode === 'stretch') && d.moved;
+      ctx.save();
+      if (!busy || d.mode === 'rotate') {
+        ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 1.5 * r;
+        ctx.beginPath(); ctx.moveTo(rh.from.x, rh.from.y); ctx.lineTo(rh.x, rh.y); ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.lineWidth = 2 * r;
+        ctx.beginPath(); ctx.arc(rh.x, rh.y, 8 * r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // a small turning arrow inside
+        ctx.lineWidth = 1.6 * r; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(rh.x, rh.y, 4 * r, -Math.PI * 0.9, Math.PI * 0.45); ctx.stroke();
+        var ax = rh.x + Math.cos(Math.PI * 0.45) * 4 * r, ay = rh.y + Math.sin(Math.PI * 0.45) * 4 * r;
+        ctx.beginPath(); ctx.moveTo(ax - 2.6 * r, ay - 0.4 * r); ctx.lineTo(ax, ay); ctx.lineTo(ax + 0.6 * r, ay - 2.8 * r); ctx.stroke();
+      }
+      if (!busy || d.mode === 'stretch') {
+        stretchHandles(pc).forEach(function (h) {
+          if (busy && !(h.sx === d.sx && h.sy === d.sy)) return;
+          ctx.save();
+          ctx.translate(h.x, h.y); ctx.rotate(pc.rot * Math.PI / 180);
+          ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 2 * r;
+          if (h.type === 'corner') { ctx.beginPath(); ctx.rect(-5 * r, -5 * r, 10 * r, 10 * r); }
+          else { var lw = (h.sx ? 6 : 16) * r, lh = (h.sx ? 16 : 6) * r; roundRect(ctx, -lw / 2, -lh / 2, lw, lh, 3 * r); }
+          ctx.fill(); ctx.stroke();
+          ctx.restore();
+        });
+      }
+      ctx.restore();
+    }
+    // While a handle is dragged: the live size (or angle) in a tag beside the piece
+    function drawHandleTag(ctx) {
+      var d = state.drag, pc = state.pieces[state.pieceSel];
+      if (!d || !d.moved || !pc || (d.mode !== 'rotate' && d.mode !== 'stretch')) return;
+      var r = displayRatio(), q = piecePx(pc), kids = chairsOf(pc), all = FURNITURE.shapeAt(pc, q.cx, q.cy, q.k);
+      kids.forEach(function (c) { var qc = piecePx(c); all = all.concat(FURNITURE.shapeAt(c, qc.cx, qc.cy, qc.k)); });
+      var bb = PLAN.bounds(all);   // clear of the table's chairs too
+      var text = d.mode === 'rotate' ? pc.rot + '°' : pieceSize(pc);
+      var n = kids.length;
+      if (d.mode === 'stretch' && n) text += ', ' + n + ' chairs';
+      ctx.save();
+      ctx.font = '600 ' + (12 * r) + 'px "DM Sans", sans-serif';
+      var tw = ctx.measureText(text).width, w = tw + 16 * r, h = 24 * r;
+      var x = clamp(bb.x + bb.w / 2 - w / 2, 2, state.W - w - 2), y = bb.y + bb.h + 10 * r;
+      if (y + h > state.H - 2) y = Math.max(2, bb.y - h - 10 * r);
+      ctx.shadowColor = 'rgba(67,62,60,0.22)'; ctx.shadowBlur = 6 * r;
+      ctx.fillStyle = '#433E3C'; roundRect(ctx, x, y, w, h, h / 2); ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#FAF9F6'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + w / 2, y + h / 2 + 0.5 * r);
+      ctx.restore();
+    }
+    // The resize cursor that points the way a handle pulls, on screen
+    function handleCursor(h) {
+      var pc = state.pieces[state.pieceSel], v = GEO.turn({ x: h.sx, y: h.sy }, pc.rot);
+      var a = ((Math.atan2(v.y, v.x) * 180 / Math.PI) % 180 + 180) % 180;   // 0 to 180
+      return a < 22.5 || a >= 157.5 ? 'ew-resize' : a < 67.5 ? 'nwse-resize' : a < 112.5 ? 'ns-resize' : 'nesw-resize';
+    }
+    // Start turning or stretching the selected piece from a handle
+    function startHandleDrag(e, h, p) {
+      var pc = state.pieces[state.pieceSel], q = piecePx(pc);
+      state.drag = { mode: h.type === 'rot' ? 'rotate' : 'stretch', sx: h.sx, sy: h.sy, start: p, snap: snap(), piece: pc,
+                     orig: { x: pc.x, y: pc.y, w: pc.w, d: pc.d, rot: pc.rot, cx: q.cx, cy: q.cy },
+                     a0: Math.atan2(p.y - q.cy, p.x - q.cx),
+                     chairs: chairsOf(pc).map(function (c) { return { c: c, x: c.x, y: c.y, rot: c.rot }; }) };
+      try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    }
+    function moveHandleDrag(p) {
+      var d = state.drag, pc = d.piece, o = d.orig;
+      if (!d.moved && Math.hypot(p.x - d.start.x, p.y - d.start.y) < 3 * displayRatio()) return;
+      d.moved = true;
+      if (d.mode === 'rotate') {
+        var deg = (Math.atan2(p.y - o.cy, p.x - o.cx) - d.a0) * 180 / Math.PI;
+        var rot = ((Math.round((o.rot + deg) / ROT_STEP) * ROT_STEP) % 360 + 360) % 360;
+        if (rot === pc.rot) return;
+        pc.rot = rot;
+        var turn = rot - o.rot;
+        d.chairs.forEach(function (s) {   // the chairs go round with their table
+          var c = GEO.place([{ x: s.x / 100 * state.W - o.cx, y: s.y / 100 * state.H - o.cy }], o.cx, o.cy, turn, 1)[0];
+          s.c.x = c.x / state.W * 100; s.c.y = c.y / state.H * 100; s.c.rot = ((s.rot + turn) % 360 + 360) % 360;
+        });
+        draw();
+        return;
+      }
+      // Stretch: the pointer in the piece's own frame, in inches from the original center
+      var k = piecePx(pc).k, loc = FURNITURE.toLocal(p, o.cx, o.cy, o.rot), lx = loc.x / k, ly = loc.y / k;
+      var w = o.w, dd = o.d, MIN = 4, MAX = 360;
+      if (d.sx && d.sy) {
+        // Evenly, from the opposite corner: the best fit of the pointer along the diagonal
+        var s = ((d.sx * lx + o.w / 2) * o.w + (d.sy * ly + o.d / 2) * o.d) / (o.w * o.w + o.d * o.d);
+        s = clamp(s, MIN / Math.min(o.w, o.d), MAX / Math.max(o.w, o.d));
+        w = Math.round(o.w * s); dd = Math.round(o.d * s);
+      } else if (d.sx) w = clamp(Math.round(d.sx * lx + o.w / 2), MIN, MAX);
+      else dd = clamp(Math.round(d.sy * ly + o.d / 2), MIN, MAX);
+      if (w === pc.w && dd === pc.d) return;
+      // The far side (or corner) stays where it was: shift the center by half the change
+      var shift = GEO.place([{ x: (d.sx || 0) * (w - o.w) / 2 * k, y: (d.sy || 0) * (dd - o.d) / 2 * k }], 0, 0, o.rot, 1)[0];
+      pc.w = w; pc.d = dd;
+      pc.x = o.x + shift.x / state.W * 100; pc.y = o.y + shift.y / state.H * 100;
+      if (pc.role === 'dining') relayoutChairs(pc);
+      else d.chairs.forEach(function (s) { s.c.x = s.x + (pc.x - o.x); s.c.y = s.y + (pc.y - o.y); });
+      state.pieceSel = state.pieces.indexOf(pc);
+      draw();
     }
 
     /* ---------- The toolbar that floats over the selected piece or door ---------- */
@@ -1253,7 +1408,12 @@
       var sx = c.clientWidth / state.W, cr = c.getBoundingClientRect(), sr = $('stage').getBoundingClientRect();
       var ox = cr.left - sr.left, oy = cr.top - sr.top;
       var left = ox + (bb.x + bb.w / 2) * sx - fb.offsetWidth / 2, top = oy + bb.y * sx - fb.offsetHeight - 10;
-      if (top < 4) top = oy + (bb.y + bb.h) * sx + 10;
+      if (pc) {
+        // Clear of the rotate handle: above it, or below the piece when the handle has moved below
+        var rh = rotHandle(pc), hr = 10 * displayRatio();
+        top = rh.above ? oy + (rh.y - hr) * sx - fb.offsetHeight - 8 : oy + (rh.y + hr) * sx + 8;
+        if (rh.above && top < 4) top = oy + (bb.y + bb.h) * sx + 14;
+      } else if (top < 4) top = oy + (bb.y + bb.h) * sx + 10;
       fb.style.left = clamp(left, 4, sr.width - fb.offsetWidth - 4) + 'px';
       fb.style.top = clamp(top, 4, sr.height - fb.offsetHeight - 4) + 'px';
     }
@@ -1836,7 +1996,9 @@
     }
     // Furnish: grab a rug to move it, or tap a room to pick it
     function furnishDown(e) {
-      var p = toCanvas(e), pk = hitPiece(p);
+      var p = toCanvas(e), hh = hitPieceHandle(p);
+      if (hh) { startHandleDrag(e, hh, p); return; }
+      var pk = hitPiece(p);
       if (pk > -1) {
         state.pieceSel = pk; state.doorSel = -1;
         var pc = state.pieces[pk];
@@ -1893,7 +2055,9 @@
         return;
       }
       if (state.mode === 'furnish') {
-        if (state.drag && state.drag.mode === 'piece') {
+        if (state.drag && (state.drag.mode === 'rotate' || state.drag.mode === 'stretch')) {
+          moveHandleDrag(p);
+        } else if (state.drag && state.drag.mode === 'piece') {
           var pp = state.pieces[state.pieceSel], pd = state.drag;
           if (!pd.moved && Math.hypot(p.x - pd.start.x, p.y - pd.start.y) < 3 * displayRatio()) return;
           pd.moved = true;
@@ -1914,6 +2078,8 @@
           rr.rug.y = clamp(dd.orig.y + (p.y - dd.start.y) / state.H * 100, 0, 100);
           draw(); updatePlacedMsg();
         } else {
+          var hv = state.tool ? null : hitPieceHandle(p);
+          if (hv) { c.style.cursor = hv.type === 'rot' ? 'grab' : handleCursor(hv); return; }
           c.style.cursor = state.tool === 'door' ? 'crosshair' : hitPiece(p) > -1 || hitDoor(p) > -1 || hitRug(p) > -1 ? 'move' : hitRoom(p) > -1 ? 'pointer' : 'default';
         }
         return;
@@ -1971,7 +2137,7 @@
         try { inp.focus({ preventScroll: true }); } catch (err) { inp.focus(); }
         return;
       }
-      if (state.drag && (state.drag.mode === 'piece' || state.drag.mode === 'door')) {
+      if (state.drag && (state.drag.mode === 'piece' || state.drag.mode === 'door' || state.drag.mode === 'rotate' || state.drag.mode === 'stretch')) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
         if (state.drag.moved) pushUndo(state.drag.snap);
         state.drag = null;
