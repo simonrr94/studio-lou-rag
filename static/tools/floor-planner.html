@@ -275,7 +275,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=11"></script>
+  <script src="/static/tools/plan-engine.js?v=12"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -896,14 +896,24 @@
         try {
           WALK_CACHE.res = WALK.routes({ pieces: piecesFtRaw(), rooms: wallsFt(), wallTest: wallTestFt(),
                                          doors: state.doors.map(doorFt) });
+          // the rooms the engine was given, in the same order, to name rooms and openings
+          if (WALK_CACHE.res) WALK_CACHE.res.roomList = state.rooms.filter(function (r) { return r.ftShape; });
         } catch (e) { if (window.console) console.warn('Walkways skipped:', e); WALK_CACHE.res = null; }
       }
       return WALK_CACHE.res;
     }
     // A route's end, in words: "the bed's left side", "the sofa", "door 2"
     var SIDE_WORD = { left: 'left side', right: 'right side', front: 'front', back: 'back' };
+    function nodeName(n) {
+      var wk = walkways(), nd = wk && wk.nodes[n];
+      if (!nd) return 'a door';
+      if (nd.type === 'door') return 'door ' + (nd.k + 1);
+      var rl = wk.roomList, A = rl[nd.rooms[0]], B = rl[nd.rooms[1]];
+      return 'the opening between the ' + (A ? A.name : 'room') + ' and the ' + (B ? B.name : 'room');
+    }
     function routeEnd(rt) {
-      if (rt.to.door != null) return 'door ' + (rt.to.door + 1);
+      if (rt.to.node != null) return nodeName(rt.to.node);
+      if (rt.to.room != null) { var rr = walkways().roomList[rt.to.room]; return 'the ' + (rr ? rr.name : 'room'); }
       var nm = nameOf(rt.to.piece).toLowerCase(), role = state.pieces[rt.to.piece] && state.pieces[rt.to.piece].role;
       return role === 'bed' ? 'the ' + nm + '\u2019s ' + SIDE_WORD[rt.to.side] : role === 'dresser' ? 'the ' + nm + ' drawers' : 'the ' + nm;
     }
@@ -1292,7 +1302,17 @@
       var wk = walkways();
       if (!wk) return;
       var f = state.scale.ftPerPx, r = displayRatio();
-      var list = wk.routes.filter(function (rt) { return rt.path.length > 1 && (!forExport || rt.status !== 'ok'); });
+      // Routes to and from openings only draw when they have a problem: the routes from the doors already show the way through
+      var viaOpening = function (rt) { var n = wk.nodes; return (rt.to.node != null && n[rt.to.node].type === 'passage') || (rt.from > -1 && n[rt.from].type === 'passage'); };
+      var list = wk.routes.filter(function (rt) { return rt.path.length > 1 && (rt.status !== 'ok' || (!forExport && !viaOpening(rt))); });
+      // One route per narrow spot is enough when it only comes from an opening
+      var shown = {};
+      list = list.filter(function (rt) {
+        if (rt.status === 'ok' || !viaOpening(rt) || !rt.pinch) return true;
+        var key = Math.round((rt.pinch.a.x + rt.pinch.b.x) * 4) + ',' + Math.round((rt.pinch.a.y + rt.pinch.b.y) * 4);
+        if (shown[key]) return false;
+        shown[key] = 1; return true;
+      });
       ctx.save();
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.setLineDash([5 * r, 5 * r]);
@@ -1612,7 +1632,10 @@
         if (rt.status === 'ok') return;
         var at = rt.pinch ? { x: (rt.pinch.a.x + rt.pinch.b.x) / 2, y: (rt.pinch.a.y + rt.pinch.b.y) / 2 } : null;
         if (room) {
+          var nd = rt.to.node != null ? wk.nodes[rt.to.node] : null;
           var mine = (rt.to.piece != null && pieceRoom(state.pieces[rt.to.piece]) === room) ||
+                     (rt.to.room != null && wk.roomList[rt.to.room] === room) ||
+                     (nd && nd.type === 'passage' && nd.rooms.some(function (i) { return wk.roomList[i] === room; })) ||
                      (at && PLAN.pointInPoly({ x: at.x / f, y: at.y / f }, ptsPx(room)));
           if (!mine) return;
         }
@@ -1624,14 +1647,25 @@
         }
         row.routes.push(rt);
       });
+      // An opening the pinch sits on, if any (within 18" of it)
+      function openingAt(pt) {
+        if (!pt) return -1;
+        for (var n = 0; n < wk.nodes.length; n++) { var nd = wk.nodes[n]; if (nd.type === 'passage' && GEO.segDist(pt, nd.a, nd.b) <= 1.5) return n; }
+        return -1;
+      }
       return rows.map(function (rw) {
-        var ends = [], bedSides = {};
+        var ends = [], bedSides = {}, pt = rw.pinch ? { x: (rw.pinch.a.x + rw.pinch.b.x) / 2, y: (rw.pinch.a.y + rw.pinch.b.y) / 2 } : null;
+        var on = openingAt(pt);
+        // Say where the routes lead: furniture and rooms first, then doors, then openings
+        var rank = function (rt) { return rt.to.node == null ? 0 : wk.nodes[rt.to.node].type === 'door' && (rt.from < 0 || wk.nodes[rt.from].type === 'door') ? 1 : 2; };
+        var top = Math.min.apply(null, rw.routes.map(rank));
+        rw.routes = rw.routes.filter(function (rt) { return rank(rt) === top; });
         rw.routes.forEach(function (rt) {
           if (rt.to.piece != null && state.pieces[rt.to.piece].role === 'bed') (bedSides[rt.to.piece] = bedSides[rt.to.piece] || []).push(rt);
         });
         rw.routes.forEach(function (rt) {
           var bs = rt.to.piece != null ? bedSides[rt.to.piece] : null;
-          var e = rt.to.door != null && rt.from > -1 ? 'between door ' + (rt.from + 1) + ' and ' + routeEnd(rt)
+          var e = rt.to.node != null && rt.from > -1 ? 'between ' + nodeName(rt.from) + ' and ' + routeEnd(rt)
             : bs && bs.length > 1 ? 'to both sides of the ' + nameOf(rt.to.piece).toLowerCase()
             : 'to ' + routeEnd(rt);
           if (ends.indexOf(e) < 0) ends.push(e);
@@ -1639,7 +1673,8 @@
         var way = ends.length > 2 ? ends.slice(0, 2).join(', ') + ' and ' + (ends.length - 2) + ' more' : ends.join(' and ');
         if (!rw.pinch) return { label: 'No clear way ' + way, value: 'Blocked', status: 'close', word: 'No way through' };
         var between = rw.pinch.between.map(routeWhat), same = between[0] === between[1];
-        return { label: 'Walkway ' + (same ? 'past ' + between[0] : 'between ' + between[0] + ' and ' + between[1]) + ', on the way ' + way,
+        var where = top === 2 && on > -1 ? 'at ' + nodeName(on) : 'on the way ' + way;
+        return { label: 'Walkway ' + (same ? 'past ' + between[0] : 'between ' + between[0] + ' and ' + between[1]) + ', ' + where,
                  value: inchText(rw.width), status: rw.blocked ? 'close' : rw.status, word: rw.blocked ? 'No way through' : spaceWord('walk', rw.status, rw.width) };
       });
     }
@@ -2742,7 +2777,7 @@
           var wk = walkways();
           if (!wk) return null;
           return wk.routes.map(function (rt) {
-            return { from: rt.from > -1 ? 'Door ' + (rt.from + 1) : null, to: routeEnd(rt), narrowest_in: rt.open ? null : rt.width,
+            return { from: rt.from > -1 ? nodeName(rt.from) : null, to: routeEnd(rt), narrowest_in: rt.open ? null : rt.width,
                      status: rt.blocked || rt.from < 0 ? 'blocked' : rt.status,
                      pinch_between: rt.pinch ? rt.pinch.between.map(routeWhat) : null };
           });

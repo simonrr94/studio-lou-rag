@@ -1581,6 +1581,40 @@ var WALK = (function () {
     // Clear width at each square, whole inches, capped
     var dist = edt(free, nx, ny), wide = new Int16Array(N);
     for (i = 0; i < N; i++) wide[i] = free[i] ? Math.min(CAP, Math.max(0, Math.round((2 * dist[i] - 1) * c * 12))) : 0;
+    // Openings: stretches of a room outline with no wall drawn and another room right across
+    // (a living room open to a kitchen). Each becomes a passage, like a door with no swing.
+    // Doorways already marked as doors are left to the doors.
+    var passages = [], SAMPLE = 2 / 12, MIN_OPEN = 18 / 12;
+    function nearDoor(p) { return doors.some(function (d) { return Math.hypot(p.x - d.cx, p.y - d.cy) <= d.w / 24 + 1; }); }
+    function noInk(p, u) { for (var t = -10; t <= 10; t++) if (wallTest({ x: p.x + u.x * t / 12, y: p.y + u.y * t / 12 })) return false; return true; }
+    function across(p, ri) {
+      for (var rj = 0; rj < rooms.length; rj++) if (rj !== ri && (PLAN.pointInPoly(p, rooms[rj]) || GEO.edgeDist(p, rooms[rj]) <= 1)) return rj;
+      return -1;
+    }
+    rooms.forEach(function (poly, ri) {
+      for (var e = 0; e < poly.length; e++) {
+        var A = poly[e], Bv = poly[(e + 1) % poly.length], L = Math.hypot(Bv.x - A.x, Bv.y - A.y);
+        if (L < MIN_OPEN) continue;
+        var u = { x: -(Bv.y - A.y) / L, y: (Bv.x - A.x) / L }, n = Math.max(2, Math.round(L / SAMPLE)), run0 = -1;
+        for (var k = 0; k <= n; k++) {
+          var t = k / n, p = { x: A.x + (Bv.x - A.x) * t, y: A.y + (Bv.y - A.y) * t };
+          var rj = k < n ? across(p, ri) : -1, open = rj > -1 && noInk(p, u) && !nearDoor(p);
+          if (open && run0 < 0) run0 = k;
+          if ((!open || k === n) && run0 > -1) {
+            var t0 = run0 / n, t1 = (open ? k : k - 1) / n;
+            if ((t1 - t0) * L >= MIN_OPEN) {
+              var a = { x: A.x + (Bv.x - A.x) * t0, y: A.y + (Bv.y - A.y) * t0 }, b = { x: A.x + (Bv.x - A.x) * t1, y: A.y + (Bv.y - A.y) * t1 };
+              var mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+              // The same opening seen from the room on the other side: keep one
+              var nb = across(mid, ri);   // named from its middle: a corner can touch a third room
+              if (nb > -1 && !passages.some(function (q) { return GEO.segDist(mid, q.a, q.b) <= 1; }))
+                passages.push({ a: a, b: b, cx: mid.x, cy: mid.y, w: Math.round((t1 - t0) * L * 12), rooms: [ri, nb] });
+            }
+            run0 = -1;
+          }
+        }
+      }
+    });
     // Doorways: the squares around each door, which are where routes start
     var doorCells = doors.map(function (d) {
       var R = (d.w / 2 + DOOR_PAD) / 12, list = [];
@@ -1591,7 +1625,22 @@ var WALK = (function () {
         }
       return list;
     });
+    // ...and the squares on each opening
+    var passCells = passages.map(function (q) {
+      var R = 6 / 12, b = PLAN.bounds([q.a, q.b]), list = [];
+      for (y = Math.max(0, Math.floor((b.y - R - y0) / c)); y <= Math.min(ny - 1, Math.floor((b.y + b.h + R - y0) / c)); y++)
+        for (x = Math.max(0, Math.floor((b.x - R - x0) / c)); x <= Math.min(nx - 1, Math.floor((b.x + b.w + R - x0) / c)); x++) {
+          var j = y * nx + x;
+          if (free[j] && GEO.segDist(at(j), q.a, q.b) <= R) list.push(j);
+        }
+      return list;
+    });
+    // Doors and openings are the places routes start from and run between
+    var nodes = doors.map(function (d, k) { return { type: 'door', k: k, cells: doorCells[k], at: { x: d.cx, y: d.cy } }; })
+      .concat(passages.map(function (q, k) { return { type: 'passage', k: k, cells: passCells[k], seg: q }; }));
     var inDoor = new Uint8Array(N);
+    // Doorways are left out of the pinch (a door is as wide as it is); openings are not, so
+    // furniture crowding an open edge between rooms still counts
     doorCells.forEach(function (l) { l.forEach(function (j) { inDoor[j] = 1; }); });
     function cellsNear(e, lo, hi, depth0, depth1) {
       var L = Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y), reach = depth1 / 12, list = [];
@@ -1631,11 +1680,12 @@ var WALK = (function () {
 
     // From each door: the widest way to every square (then the shortest of those, kept to the middle)
     var NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
-    function run(src, d) {
-      function start(j) { var q = at(j); return Math.hypot(q.x - d.cx, q.y - d.cy) / c; }
+    function run(src, nd) {
+      function start(j) { var q = at(j); return nd.at ? Math.hypot(q.x - nd.at.x, q.y - nd.at.y) / c : GEO.segDist(q, nd.seg.a, nd.seg.b) / c; }
       var B = new Int16Array(N).fill(-1), cost = new Float64Array(N).fill(Infinity), par = new Int32Array(N).fill(-1), done = new Uint8Array(N), h = new Heap();
-      src.forEach(function (j) { if (!inside[j]) return; B[j] = CAP; cost[j] = start(j); h.push(cost[j], j); });
-      if (!h.v.length) src.forEach(function (j) { B[j] = CAP; cost[j] = start(j); h.push(cost[j], j); });
+      function b0(j) { return inDoor[j] ? CAP : wide[j]; }   // on an opening, its own width counts from the start
+      src.forEach(function (j) { if (!inside[j]) return; B[j] = b0(j); cost[j] = start(j); h.push((CAP - B[j]) * 1e7 + cost[j], j); });
+      if (!h.v.length) src.forEach(function (j) { B[j] = b0(j); cost[j] = start(j); h.push((CAP - B[j]) * 1e7 + cost[j], j); });
       while (h.v.length) {
         var j = h.pop();
         if (done[j]) continue;
@@ -1653,13 +1703,19 @@ var WALK = (function () {
       }
       return { B: B, cost: cost, par: par };
     }
-    var runs = doorCells.map(function (l, k) { return run(l, doors[k]); });
+    var runs = nodes.map(function (nd) { return run(nd.cells, nd); });
     // Best way into a place: from a square next to it (the place itself is left out of the pinch)
     function reach(rn, dest) {
       var mark = {}, best = -1;
+      if (dest.through) {   // an opening: reached once the route is on it, its own width counted
+        dest.cells.forEach(function (j) {
+          if (rn.B[j] > -1 && (best < 0 || rn.B[j] > rn.B[best] || (rn.B[j] === rn.B[best] && rn.cost[j] < rn.cost[best]))) best = j;
+        });
+        return best;
+      }
       dest.cells.forEach(function (j) { mark[j] = 1; });
       dest.cells.forEach(function (j) {
-        if (rn.par[j] < 0 && rn.B[j] === CAP) { best = j; return; }   // a door opens right onto it
+        if (rn.par[j] < 0 && rn.B[j] > -1) { best = j; return; }   // a door or opening is right on it
         var jx = j % nx, jy = (j - jx) / nx;
         for (var m = 0; m < 8; m++) {
           var ax = jx + NB[m][0], ay = jy + NB[m][1], q = ay * nx + ax;
@@ -1700,9 +1756,29 @@ var WALK = (function () {
     }
 
     var out = [];
-    // Every pair of doors, once
-    for (var da = 0; da < doors.length; da++) for (var db = da + 1; db < doors.length; db++)
-      dests.push({ door: db, only: da, cells: doorCells[db], stand: { x: doors[db].cx, y: doors[db].cy } });
+    // Each room: its most open spot (furthest from anything in the way), so open rooms
+    // like a kitchen get a route too. Arriving means getting within 18" of it.
+    rooms.forEach(function (poly, r) {
+      var b = PLAN.bounds(poly), best = -1;
+      for (y = Math.max(0, Math.floor((b.y - y0) / c)); y <= Math.min(ny - 1, Math.floor((b.y + b.h - y0) / c)); y++)
+        for (x = Math.max(0, Math.floor((b.x - x0) / c)); x <= Math.min(nx - 1, Math.floor((b.x + b.w - x0) / c)); x++) {
+          var j = y * nx + x;
+          if (free[j] && !inDoor[j] && (best < 0 || dist[j] > dist[best]) && PLAN.pointInPoly(at(j), poly)) best = j;
+        }
+      if (best < 0) return;
+      var st = at(best), zone = [], R = 18 / 12;
+      for (y = Math.max(0, Math.floor((st.y - R - y0) / c)); y <= Math.min(ny - 1, Math.floor((st.y + R - y0) / c)); y++)
+        for (x = Math.max(0, Math.floor((st.x - R - x0) / c)); x <= Math.min(nx - 1, Math.floor((st.x + R - x0) / c)); x++) {
+          var q = y * nx + x;
+          if (free[q] && Math.hypot(at(q).x - st.x, at(q).y - st.y) <= R) zone.push(q);
+        }
+      dests.push({ room: r, cells: zone, stand: st, quiet: true });
+    });
+    // Every pair of doors and openings, once. A pair that can't be reached is only
+    // flagged between two doors (an opening into a room with no marked door is normal).
+    for (var na = 0; na < nodes.length; na++) for (var nb = na + 1; nb < nodes.length; nb++)
+      dests.push({ node: nb, only: na, cells: nodes[nb].cells, stand: nodes[nb].at || null, through: nodes[nb].type === 'passage',
+                   quiet: nodes[na].type !== 'door' || nodes[nb].type !== 'door' });
     // For drawing: the last stretch inside the place being reached, from where the route
     // enters it to where you'd stand (the shortest way through its own squares)
     function finish(dest, j) {
@@ -1710,7 +1786,7 @@ var WALK = (function () {
       dest.cells.forEach(function (q) { mark[q] = 1; });
       seen[j] = 1;
       while (queue.length) {
-        var q = queue.shift(), pq = at(q), dd = Math.hypot(pq.x - dest.stand.x, pq.y - dest.stand.y);
+        var q = queue.shift(), pq = at(q), dd = dest.stand ? Math.hypot(pq.x - dest.stand.x, pq.y - dest.stand.y) : 0;
         if (dd < bd) { bd = dd; best = q; }
         var qx = q % nx, qy = (q - qx) / nx;
         for (var m = 0; m < 8; m++) {
@@ -1722,21 +1798,22 @@ var WALK = (function () {
       var tail = [];
       for (var t = best; t !== j && t != null; t = par[t]) tail.push(at(t));
       tail.reverse();
-      if (dest.door != null) tail.push(dest.stand);
+      if (dest.node != null && dest.stand) tail.push(dest.stand);
       return tail;
     }
     dests.forEach(function (dest) {
       if (!dest.cells.length) return;
       var pick = null;
       runs.forEach(function (rn, k) {
-        if (dest.door === k || (dest.only != null && dest.only !== k)) return;
+        if (dest.node === k || (dest.only != null && dest.only !== k)) return;
+        if (dest.only == null && nodes[k].type !== 'door') return;   // furniture and rooms are reached from the doors
         var j = reach(rn, dest);
         if (j < 0) return;
         if (!pick || rn.B[j] > pick.rn.B[pick.j] || (rn.B[j] === pick.rn.B[pick.j] && rn.cost[j] < pick.rn.cost[pick.j])) pick = { k: k, rn: rn, j: j };
       });
+      var to = dest.node != null ? { node: dest.node } : dest.room != null ? { room: dest.room } : { piece: dest.piece, side: dest.side };
       if (!pick) {
-        out.push({ to: dest.door != null ? { door: dest.door } : { piece: dest.piece, side: dest.side }, from: dest.only != null ? dest.only : -1,
-                   blocked: true, width: 0, status: 'close', path: [] });
+        if (!dest.quiet) out.push({ to: to, from: dest.only != null ? dest.only : -1, blocked: true, width: 0, status: 'close', path: [] });
         return;
       }
       var cells = trace(pick.rn, pick.j), width = pick.rn.B[pick.j], pinch = null;
@@ -1747,8 +1824,8 @@ var WALK = (function () {
         // Measured across the pinch, edge to edge. No far side within reach: it's open floor after all.
         width = pinch ? Math.min(CAP, Math.round(Math.hypot(pinch.a.x - pinch.b.x, pinch.a.y - pinch.b.y) * 12)) : CAP;
       }
-      out.push({ to: dest.door != null ? { door: dest.door } : { piece: dest.piece, side: dest.side }, from: pick.k,
-                 path: [{ x: doors[pick.k].cx, y: doors[pick.k].cy }].concat(cells.map(at), finish(dest, pick.j)), cells: cells, width: width, open: width >= CAP, status: status(width),
+      out.push({ to: to, from: pick.k,
+                 path: (nodes[pick.k].at ? [nodes[pick.k].at] : []).concat(cells.map(at), finish(dest, pick.j)), cells: cells, width: width, open: width >= CAP, status: status(width),
                  blocked: width < 12, pinch: width < CAP ? pinch : null });
     });
     // Dining sides that a route passes behind (people walk behind seated guests there)
@@ -1765,7 +1842,8 @@ var WALK = (function () {
       });
     });
     out.forEach(function (r) { delete r.cells; });
-    return { routes: out, behind: behind, cell: c };
+    return { routes: out, behind: behind, cell: c,
+             nodes: nodes.map(function (nd) { return nd.type === 'door' ? { type: 'door', k: nd.k } : { type: 'passage', k: nd.k, rooms: nd.seg.rooms, a: nd.seg.a, b: nd.seg.b, w: nd.seg.w }; }) };
   }
 
   return { RULE: RULE, CAP: CAP, routes: routes, status: status };
