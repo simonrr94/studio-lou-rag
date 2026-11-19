@@ -1255,30 +1255,94 @@ var SPACE = (function () {
    which end of the opening the hinge is at) }.
    ===================================================================== */
 var DOOR = (function () {
-  var WIDTHS = [24, 28, 30, 32, 36];
-  function geom(d) {
-    var r = d.w / 12;
-    var h = { x: d.cx + d.ux * d.hinge * r / 2, y: d.cy + d.uy * d.hinge * r / 2 };   // hinge
-    var e = { x: d.cx - d.ux * d.hinge * r / 2, y: d.cy - d.uy * d.hinge * r / 2 };   // latch side, door closed
-    var ex = -d.ux * d.hinge, ey = -d.uy * d.hinge, arc = [];
+  // Door types, and windows (marked the same way, on a wall). Widths are inches.
+  var TYPES = {
+    swing:  { name: 'Single swing', widths: [24, 28, 30, 32, 36] },
+    double: { name: 'Double (French)', widths: [48, 60, 72] },
+    pocket: { name: 'Pocket', widths: [24, 28, 30, 32, 36] },
+    barn:   { name: 'Barn', widths: [30, 32, 36, 42] },
+    bypass: { name: 'Sliding (bypass)', widths: [48, 60, 72, 96] },
+    bifold: { name: 'Bifold', widths: [24, 30, 36, 48, 60, 72] },
+    window: { name: 'Window', widths: [24, 30, 36, 48, 60, 72, 96] }
+  };
+  var ORDER = ['swing', 'double', 'pocket', 'barn', 'bypass', 'bifold'];
+  var WIDTHS = TYPES.swing.widths;
+  var BARN_GAP = 5;      // inches off the wall a barn door hangs and slides (door and track)
+  var WINDOW_FRONT = 12; // inches in front of a window that count as standing in front of it
+  var WINDOW_TALL = 40;  // inches: a piece this tall in front of a window blocks it
+  // One leaf swinging on hinge h from closed (toward dir e) to open (toward the room, n), radius r feet
+  function leaf(h, e, n, r) {
+    var arc = [];
     for (var k = 0; k <= 12; k++) {
       var t = k / 12 * Math.PI / 2, c = Math.cos(t), s = Math.sin(t);
-      arc.push({ x: h.x + (ex * c + d.nx * s) * r, y: h.y + (ey * c + d.ny * s) * r });
+      arc.push({ x: h.x + (e.x * c + n.x * s) * r, y: h.y + (e.y * c + n.y * s) * r });
     }
-    return { hinge: h, latch: e, open: arc[arc.length - 1], arc: arc, sector: [h].concat(arc) };
+    return { hinge: h, open: arc[arc.length - 1], arc: arc, sector: [h].concat(arc) };
   }
-  // Does the door hit anything as it swings? pieces: [{ poly }] in feet.
-  // Returns { hits: [indices], nearest: { i, gap (ft) } or null }
+  // The shape of a door on the plan, in feet. d: { cx, cy, ux, uy (along the wall), nx, ny (into the
+  // room it opens into), w (inches), hinge (+1/-1, the end it hinges, slides or folds toward), type }.
+  //   jambs   the two ends of the opening, hinge end first
+  //   leaves  swinging leaves (swing, double, bifold), each with its arc
+  //   zones   the space the door needs clear: swing sectors, or a barn door's run along the wall
+  //   slabs   straight door panels to draw: [[from, to], ...]
+  function geom(d) {
+    var type = d.type || 'swing', r = d.w / 12, hs = d.hinge || 1, u = { x: d.ux * hs, y: d.uy * hs }, n = { x: d.nx, y: d.ny };
+    var a = { x: d.cx + u.x * r / 2, y: d.cy + u.y * r / 2 }, b = { x: d.cx - u.x * r / 2, y: d.cy - u.y * r / 2 };
+    var back = { x: -u.x, y: -u.y }, out = { type: type, jambs: [a, b], leaves: [], zones: [], slabs: [], dashed: [] };
+    function off(p, k) { return { x: p.x + n.x * k / 12, y: p.y + n.y * k / 12 }; }
+    function along(p, k) { return { x: p.x + u.x * k, y: p.y + u.y * k }; }
+    if (type === 'swing') out.leaves.push(leaf(a, back, n, r));
+    else if (type === 'double') { out.leaves.push(leaf(a, back, n, r / 2)); out.leaves.push(leaf(b, u, n, r / 2)); }
+    else if (type === 'bifold') {
+      // Panels fold back against the jamb: a pair (48" and up) folds to both sides
+      if (d.w >= 48) { out.leaves.push(leaf(a, back, n, r / 4)); out.leaves.push(leaf(b, u, n, r / 4)); }
+      else out.leaves.push(leaf(a, back, n, r / 2));
+      out.leaves.forEach(function (l) {
+        // Drawn half folded: two panels in a V, the far one's end sliding along the opening
+        var R = Math.hypot(l.arc[0].x - l.hinge.x, l.arc[0].y - l.hinge.y), e = { x: (l.arc[0].x - l.hinge.x) / R, y: (l.arc[0].y - l.hinge.y) / R }, k = Math.SQRT1_2;
+        var apex = { x: l.hinge.x + (e.x * k + n.x * k) * R / 2, y: l.hinge.y + (e.y * k + n.y * k) * R / 2 };
+        var foot = { x: l.hinge.x + e.x * R * k, y: l.hinge.y + e.y * R * k };
+        out.slabs.push([l.hinge, apex], [apex, foot]);
+      });
+    }
+    else if (type === 'pocket') {
+      out.slabs.push([off(b, -2), off(a, -2)]);                  // the door, closed, in the doorway
+      out.dashed.push([off(a, -2), off(along(a, r), -2)]);       // its pocket, inside the wall beside the hinge end
+    }
+    else if (type === 'barn') {
+      // Hangs on the room side and slides past the hinge end: that stretch of wall must be clear
+      out.slabs.push([off(b, 2), off(a, 2)]);
+      out.dashed.push([off(a, 2), off(along(a, r), 2)]);
+      out.zones.push([a, along(a, r), off(along(a, r), BARN_GAP), off(a, BARN_GAP)]);
+    }
+    else if (type === 'bypass') {
+      // Two panels on two tracks, overlapping a little in the middle
+      var c = { x: d.cx, y: d.cy };
+      out.slabs.push([off(a, -1), off(along(c, -r * 0.06), -1)]);
+      out.slabs.push([off(b, 1), off(along(c, r * 0.06), 1)]);
+    }
+    else if (type === 'window') {
+      out.zones.push([a, b, off(b, WINDOW_FRONT), off(a, WINDOW_FRONT)]);
+    }
+    out.leaves.forEach(function (l) { out.zones.push(l.sector); });
+    // The single-swing fields the older page reads
+    if (type === 'swing') { var L = out.leaves[0]; out.hinge = L.hinge; out.latch = b; out.open = L.open; out.arc = L.arc; out.sector = L.sector; }
+    return out;
+  }
+  // Does the door hit anything as it opens (swings, folds, or slides)? pieces: [{ poly, h }] in feet.
+  // A window's 'hits' are tall pieces standing in front of it; 'under' are low ones (a bed, a desk).
+  // Returns { hits: [indices], under: [indices], nearest: { i, gap (ft) } or null, moves: false for doors with nothing to hit }
   function check(d, pieces) {
-    var g = geom(d), hits = [], nearest = null;
+    var g = geom(d), hits = [], under = [], nearest = null, win = g.type === 'window';
+    if (!g.zones.length) return { hits: hits, under: under, nearest: null, moves: false };
     pieces.forEach(function (pc, j) {
-      var dist = GEO.polyDist(g.sector, pc.poly);
-      if (dist <= 1e-6) hits.push(j);
+      var dist = Math.min.apply(null, g.zones.map(function (z) { return GEO.polyDist(z, pc.poly); }));
+      if (dist <= 1e-6) { if (win && !(pc.h >= WINDOW_TALL)) under.push(j); else hits.push(j); }
       else if (!nearest || dist < nearest.gap) nearest = { i: j, gap: dist };
     });
-    return { hits: hits, nearest: nearest };
+    return { hits: hits, under: under, nearest: nearest, moves: true };
   }
-  return { WIDTHS: WIDTHS, geom: geom, check: check };
+  return { TYPES: TYPES, ORDER: ORDER, WIDTHS: WIDTHS, WINDOW_TALL: WINDOW_TALL, geom: geom, check: check };
 })();
 
 /* =====================================================================
