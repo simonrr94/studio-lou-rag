@@ -481,7 +481,15 @@ var RUG = (function () {
   // Footprint in feet on the plan: rot 90 turns a rectangle on its side
   function footprint(s, rot) {
     if (s.d) return { w: s.d, h: s.d, round: true };
-    return rot === 90 ? { w: s.h, h: s.w } : { w: s.w, h: s.h };
+    return ((rot || 0) % 180 + 180) % 180 === 90 ? { w: s.h, h: s.w } : { w: s.w, h: s.h };
+  }
+  // A rug turned to any angle (not just straight or a quarter turn), the way it sits in a
+  // turned seating group: true when the rug is square to the plan, so the exact boxed math applies
+  function square(rot) { return ((rot || 0) % 90 + 90) % 90 === 0; }
+  // Its outline in feet, corners going clockwise
+  function outline(s, rot, cx, cy) {
+    if (s.d) { var o = []; for (var i = 0; i < 32; i++) { var a = i / 32 * Math.PI * 2; o.push({ x: cx + Math.cos(a) * s.d / 2, y: cy + Math.sin(a) * s.d / 2 }); } return o; }
+    return GEO.place([{ x: -s.w / 2, y: -s.h / 2 }, { x: s.w / 2, y: -s.h / 2 }, { x: s.w / 2, y: s.h / 2 }, { x: -s.w / 2, y: s.h / 2 }], cx, cy, rot || 0, 1);
   }
 
   // Room type from its name, for the advice shown with the sizes
@@ -531,6 +539,14 @@ var RUG = (function () {
       if (!PLAN.pointInPoly(c, poly)) return -r;
       for (i = 0; i < n; i++) d = Math.min(d, ptSegDist(c, poly[i], poly[(i + 1) % n]));
       return d - r;
+    }
+    if (!square(rot)) {
+      // Turned: the rug's corners against the room's walls, and the room's corners against the rug's edges
+      var rp = outline(s, rot, cx, cy), out = rp.some(function (p) { return !PLAN.pointInPoly(p, poly); }) ||
+        poly.some(function (v) { return PLAN.pointInPoly(v, rp); });
+      rp.forEach(function (p) { d = Math.min(d, GEO.edgeDist(p, poly)); });
+      poly.forEach(function (v) { d = Math.min(d, GEO.edgeDist(v, rp)); });
+      return out ? -Math.max(d, 0.01) : d;
     }
     var rect = { x0: cx - f.w / 2, y0: cy - f.h / 2, x1: cx + f.w / 2, y1: cy + f.h / 2 };
     var outside = rectCorners(rect).some(function (p) { return !PLAN.pointInPoly(p, poly); });
@@ -600,6 +616,21 @@ var RUG = (function () {
   // room is caught. Returns [{ from, to, gap }] in feet.
   function gaps(poly, s, rot, cx, cy) {
     var f = footprint(s, rot), out = [];
+    if (!f.round && !square(rot)) {
+      // Turned: straight out from each side, square to it
+      [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(function (n) {
+        var bestG = null, bestP = null, dir = GEO.turn({ x: n[0], y: n[1] }, rot);
+        [0, -0.2, 0.2, -0.45, 0.45].forEach(function (t) {
+          var loc = n[0] ? { x: n[0] * s.w / 2, y: t * s.h } : { x: t * s.w, y: n[1] * s.h / 2 };
+          var p = GEO.place([loc], cx, cy, rot, 1)[0];
+          if (!PLAN.pointInPoly(p, poly)) return;
+          var g = rayToPoly(p, dir.x, dir.y, poly);
+          if (g != null && (bestG == null || g < bestG)) { bestG = g; bestP = p; }
+        });
+        if (bestG != null) out.push({ from: bestP, to: { x: bestP.x + dir.x * bestG, y: bestP.y + dir.y * bestG }, gap: bestG });
+      });
+      return out;
+    }
     var dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
     dirs.forEach(function (dir) {
       var bestG = null, bestP = null, samples = f.round ? [0] : [0, -0.2, 0.2, -0.45, 0.45]; // middle first, so it wins ties
@@ -619,7 +650,7 @@ var RUG = (function () {
 
   return {
     SIZES: SIZES, COMFORT: COMFORT, TIGHT: TIGHT,
-    get: get, footprint: footprint, roomType: roomType,
+    get: get, footprint: footprint, square: square, outline: outline, roomType: roomType,
     clearanceAt: clearanceAt, bestSpot: bestSpot, status: status, check: check, gaps: gaps
   };
 })();
@@ -1287,12 +1318,14 @@ var RUGSTYLE = (function () {
       for (var i = 0; i < 32; i++) { var a = i / 32 * Math.PI * 2; poly.push({ x: cx + Math.cos(a) * f.w / 2, y: cy + Math.sin(a) * f.w / 2 }); }
       return { round: true, cx: cx, cy: cy, r: f.w / 2, poly: poly };
     }
+    if (!RUG.square(rot)) return { turned: true, cx: cx, cy: cy, rot: rot, hw: s.w / 2, hh: s.h / 2, poly: RUG.outline(s, rot, cx, cy) };
     var x0 = cx - f.w / 2, y0 = cy - f.h / 2, x1 = cx + f.w / 2, y1 = cy + f.h / 2;
     return { x0: x0, y0: y0, x1: x1, y1: y1, poly: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }] };
   }
   // How far inside the rug a point is (feet); negative when it's off the rug
   function inside(rg, p) {
     if (rg.round) return rg.r - Math.hypot(p.x - rg.cx, p.y - rg.cy);
+    if (rg.turned) { var q = FURNITURE.toLocal(p, rg.cx, rg.cy, rg.rot); return Math.min(rg.hw - Math.abs(q.x), rg.hh - Math.abs(q.y)); }
     return Math.min(p.x - rg.x0, rg.x1 - p.x, p.y - rg.y0, rg.y1 - p.y);
   }
   function onPlan(pc, pts) { return GEO.place(pts, pc.cx, pc.cy, pc.rot, 1 / 12); }
