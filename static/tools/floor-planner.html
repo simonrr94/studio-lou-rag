@@ -115,6 +115,11 @@
     .zoom-box button:hover:not(:disabled) { background: #f5f0e8; }
     .zoom-box button:disabled { color: #c4bdb2; cursor: default; }
     .zoom-box #zoomFit { font-size: 12px; letter-spacing: 0.04em; }
+    .seg-row { display: inline-flex; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 3px; gap: 3px; background: #ffffff; margin: 6px 0 12px; }
+    .seg-row button { border: none; background: transparent; border-radius: 50px; padding: 7px 16px; font: 600 13px 'DM Sans', sans-serif; color: #433E3C; cursor: pointer; }
+    .seg-row button.on { background: #582b36; color: #FAF9F6; }
+    .brush-field input { width: 100%; accent-color: #582b36; }
+    .erase-open { margin: 0 0 12px; }
     .member-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .group-hint { margin-top: 12px; }
     .member-rug { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 50px; background: #f5f0e8; color: #6b6560; font-size: 13px; font-weight: 600; }
@@ -324,7 +329,7 @@
       img: null, W: 0, H: 0,
       rooms: [], selected: -1,
       sendB64: '', sendType: 'image/jpeg',
-      drag: null, nextId: 1, extra: [], extraRugs: [], view: { z: 1, px: 0, py: 0 }, space: false,
+      drag: null, nextId: 1, extra: [], extraRugs: [], erase: [], eraseVer: 0, eraseMode: 'erase', brush: 28, view: { z: 1, px: 0, py: 0 }, space: false,
       walls: null,   // SNAP's wall map and found words, kept for Furnish and 3D
       scale: null,   // { ftPerPx, source: 'auto' | 'manual', rooms, line }
       tool: null,    // 'scale' while the person is drawing a scale line
@@ -537,6 +542,7 @@
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null; endScaleTool();
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
       state.view = { z: 1, px: 0, py: 0 };
+      state.erase = []; state.eraseVer++; state.floorCol = floorColorOf(img); ERASE.mask = ERASE.layer = null;
       UNDO = []; $('undoBtn').disabled = true;
       setMode('measure');
       // Find walls and printed room names while the model reads the plan
@@ -619,7 +625,8 @@
       var d = state.drag;
       if (d) {
         if (d.press) clearTimeout(d.press);
-        if (d.moved && d.snap) pushUndo(d.snap);
+        if (d.mode === 'erase') { state.erase.pop(); state.eraseVer++; }   // that was the start of a pinch, not a stroke
+        else if (d.moved && d.snap) pushUndo(d.snap);
         state.drag = null;
       }
       var a = PINCH.ptrs[ids[0]], b = PINCH.ptrs[ids[1]];
@@ -663,6 +670,8 @@
       ctx.clearRect(0, 0, state.W, state.H);
       ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, state.W, state.H);
       ctx.drawImage(state.img, 0, 0, state.W, state.H);
+      var clean = cleanLayer();   // furniture cleared off the plan with the eraser
+      if (clean) ctx.drawImage(clean, 0, 0);
 
       // Boxes first, labels on top so they never get covered
       state.rooms.forEach(function (r, i) {
@@ -778,6 +787,7 @@
 
       if (state.scale) drawWalkways(ctx, forExport, 'pinches');
       if (!forExport && state.scale) { drawPieceHandles(ctx); drawHandleTag(ctx); }
+      if (!forExport) drawBrush(ctx);
 
       if (!forExport) {
         if (state.tool === 'scale' && state.scaleLine) drawScaleLine(ctx, state.scaleLine.p1, state.scaleLine.p2);
@@ -1392,13 +1402,15 @@
 
     /* ---------- The Furnish panel: tabs, or the selected piece or door ---------- */
     function showPane() {
-      var detail = state.pieceSel > -1 || state.doorSel > -1;
-      ['add', 'rugs', 'doors', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', detail || state.ptab !== t); });
+      var erasing = state.tool === 'erase', detail = !erasing && (state.pieceSel > -1 || state.doorSel > -1);
+      ['add', 'rugs', 'doors', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', erasing || detail || state.ptab !== t); });
       $('pane-detail').classList.toggle('hidden', !detail);
+      $('pane-erase').classList.toggle('hidden', !erasing);
       var tabs = document.querySelectorAll('.ptab');
       for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('on', !detail && tabs[i].getAttribute('data-ptab') === state.ptab);
     }
     function setTab(t) {
+      if (state.tool === 'erase') endEraseTool();
       state.ptab = t; state.pieceSel = -1; state.doorSel = -1;
       if (state.tool === 'door') endDoorTool();
       renderPieceBar(); renderDoorBar();
@@ -1534,6 +1546,160 @@
       state.pieceSel = state.pieces.indexOf(first);
       state.extra = sel.slice(1).map(function (o) { return ids[o.id]; });
       renderPieceBar(); renderSpacing(); draw();
+    }
+
+    /* ---------- Clearing furniture off the plan (the eraser) ----------
+       Paint over furniture drawn on an uploaded plan and it's covered with the plan's own
+       floor color. Walls are protected (the wall lines found when the plan was read), and the
+       rooms and scale were read from the original image, so nothing measured changes. Each
+       stroke is kept as points in state.erase ({ type: 'erase' or 'restore', r, pts } or
+       { type: 'clear', pts: a room outline }), so Undo steps back stroke by stroke. */
+    var ERASE = { mask: null, layer: null, protect: null, walls: null, ver: -1 };
+    // The floor color: the most common light color in the plan
+    function floorColorOf(img) {
+      try {
+        var k = Math.min(1, 300 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+        var x = c.getContext('2d'); x.drawImage(img, 0, 0, c.width, c.height);
+        var d = x.getImageData(0, 0, c.width, c.height).data, count = {}, sum = {}, best = null;
+        for (var i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 200 || 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] < 170) continue;
+          var key = (d[i] >> 3) + ',' + (d[i + 1] >> 3) + ',' + (d[i + 2] >> 3);
+          count[key] = (count[key] || 0) + 1;
+          var sm = sum[key] = sum[key] || [0, 0, 0]; sm[0] += d[i]; sm[1] += d[i + 1]; sm[2] += d[i + 2];
+          if (!best || count[key] > count[best]) best = key;
+        }
+        if (!best) return '#ffffff';
+        // the average of the most common color, so the cleared floor matches the floor around it
+        return 'rgb(' + sum[best].map(function (v) { return Math.round(v / count[best]); }).join(',') + ')';
+      } catch (e) { return '#ffffff'; }
+    }
+    // Wall ink, kept safe from the eraser: wall cores from the plan reader, grown back out to the
+    // edge of the ink around them
+    function protectMask() {
+      var a = state.walls && state.walls.map;
+      if (!a || !a.wall) return null;
+      if (ERASE.walls === a) return ERASE.protect;
+      var w = a.w, h = a.h, grow = Math.ceil((a.k || 6) / 2) + 1, near = new Uint8Array(w * h), x, y;
+      for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+        if (!a.wall[y * w + x]) continue;
+        for (var dy = -grow; dy <= grow; dy++) for (var dx = -grow; dx <= grow; dx++) {
+          var xx = x + dx, yy = y + dy;
+          if (xx >= 0 && yy >= 0 && xx < w && yy < h) near[yy * w + xx] = 1;
+        }
+      }
+      var src = a.canvas.getContext('2d').getImageData(0, 0, w, h).data, c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      var cx = c.getContext('2d'), out = cx.createImageData(w, h);
+      for (var i = 0; i < w * h; i++) {
+        var lum = 0.299 * src[i * 4] + 0.587 * src[i * 4 + 1] + 0.114 * src[i * 4 + 2];
+        if (near[i] && lum < 140) out.data[i * 4 + 3] = 255;
+      }
+      cx.putImageData(out, 0, 0);
+      ERASE.walls = a; ERASE.protect = c;
+      return c;
+    }
+    function pctPt(p) { return { x: p.x / state.W * 100, y: p.y / state.H * 100 }; }
+    function paintOp(ctx, op, from) {
+      var P = function (q) { return { x: q.x / 100 * state.W, y: q.y / 100 * state.H }; };
+      ctx.save();
+      ctx.globalCompositeOperation = op.type === 'restore' ? 'destination-out' : 'source-over';
+      ctx.fillStyle = '#000000'; ctx.strokeStyle = '#000000';
+      if (op.type === 'clear') { tracePath(ctx, op.pts.map(P)); ctx.fill(); ctx.restore(); return; }
+      ctx.lineWidth = op.r * 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      var pts = op.pts.slice(Math.max(0, (from || 0) - 1)).map(P);
+      if (pts.length === 1) { ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, op.r, 0, Math.PI * 2); ctx.fill(); }
+      else { ctx.beginPath(); pts.forEach(function (q, i) { if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }); ctx.stroke(); }
+      ctx.restore();
+    }
+    function newCanvas() { var c = document.createElement('canvas'); c.width = state.W; c.height = state.H; return c; }
+    // The cleared floor, ready to lay over the plan (null when nothing has been erased)
+    function cleanLayer() {
+      if (!state.erase.length || !state.W) return null;
+      if (ERASE.ver !== state.eraseVer || !ERASE.mask || ERASE.mask.width !== state.W) {
+        ERASE.mask = newCanvas();
+        var m = ERASE.mask.getContext('2d');
+        state.erase.forEach(function (op) { paintOp(m, op); });
+        buildLayer(); ERASE.ver = state.eraseVer;
+      }
+      return ERASE.layer;
+    }
+    function buildLayer() {
+      ERASE.layer = ERASE.layer && ERASE.layer.width === state.W ? ERASE.layer : newCanvas();
+      var c = ERASE.layer.getContext('2d');
+      c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, state.W, state.H);
+      c.fillStyle = state.floorCol || '#ffffff'; c.fillRect(0, 0, state.W, state.H);
+      c.globalCompositeOperation = 'destination-in'; c.drawImage(ERASE.mask, 0, 0);
+      var pm = protectMask();
+      if (pm) { c.globalCompositeOperation = 'destination-out'; c.imageSmoothingEnabled = false; c.drawImage(pm, 0, 0, state.W, state.H); c.imageSmoothingEnabled = true; }
+      c.globalCompositeOperation = 'source-over';
+    }
+    function startEraseTool() {
+      if (!state.img) return;
+      if (state.tool === 'door') endDoorTool();
+      state.tool = 'erase'; state.pieceSel = -1; state.doorSel = -1; state.extra = []; state.extraRugs = [];
+      $('planCanvas').classList.add('editing');
+      renderErasePane(); renderPieceBar(); renderDoorBar(); draw();
+    }
+    function endEraseTool() {
+      if (state.tool !== 'erase') return;
+      state.tool = null; state.erasePos = null;
+      $('planCanvas').style.cursor = '';
+      showPane(); draw();
+    }
+    function renderErasePane() {
+      var r = state.rooms[state.selected];
+      var b = document.querySelectorAll('[data-eact="erase"],[data-eact="restore"]');
+      for (var i = 0; i < b.length; i++) b[i].classList.toggle('on', b[i].getAttribute('data-eact') === state.eraseMode);
+      $('clearRoomBtn').disabled = !r;
+      $('clearRoomBtn').textContent = r ? 'Clear the ' + r.name + ' floor' : 'Pick a room above to clear its floor';
+      $('restoreAllBtn').disabled = !state.erase.length;
+      $('brushSize').value = state.brush;
+      $('eraseNoWalls').classList.toggle('hidden', !!protectMask());
+      showPane();
+    }
+    function onEraseClick(e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      var a = b.getAttribute('data-eact');
+      if (a === 'erase' || a === 'restore') { state.eraseMode = a; renderErasePane(); }
+      else if (a === 'clear') {
+        var r = state.rooms[state.selected];
+        if (!r) return;
+        pushUndo(); state.erase.push({ type: 'clear', pts: pts(r).map(function (q) { return { x: q.x, y: q.y }; }) }); state.eraseVer++;
+        renderErasePane(); draw();
+      }
+      else if (a === 'all') { if (!state.erase.length) return; pushUndo(); state.erase = []; state.eraseVer++; renderErasePane(); draw(); }
+      else if (a === 'done') endEraseTool();
+    }
+    // A stroke: started on pointer down, grown on move, saved for Undo on release
+    function eraseDown(e) {
+      var p = toCanvas(e), before = snap();
+      var op = { type: state.eraseMode, r: state.brush / 2 * displayRatio(), pts: [pctPt(p)] };
+      state.erase.push(op); state.eraseVer++;
+      state.drag = { mode: 'erase', op: op, snap: before, moved: true };
+      try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+      draw();
+    }
+    function eraseMove(p) {
+      state.erasePos = p;
+      var d = state.drag;
+      if (d && d.mode === 'erase') {
+        d.op.pts.push(pctPt(p));
+        if (ERASE.mask && ERASE.ver === state.eraseVer) { paintOp(ERASE.mask.getContext('2d'), d.op, d.op.pts.length - 1); buildLayer(); }
+        else state.eraseVer++;
+      }
+      draw();
+    }
+    function drawBrush(ctx) {
+      if (state.tool !== 'erase' || !state.erasePos) return;
+      var r = state.brush / 2 * displayRatio(), q = state.erasePos;
+      ctx.save();
+      ctx.lineWidth = 1.5 * displayRatio(); ctx.strokeStyle = state.eraseMode === 'restore' ? '#7f9433' : '#582b36';
+      ctx.setLineDash([4 * displayRatio(), 3 * displayRatio()]);
+      ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
     }
 
     /* ---------- Walking routes on the plan ----------
@@ -1830,7 +1996,7 @@
     /* ---------- Undo ----------
        A snapshot of everything the person can change, taken just before each change. */
     var UNDO = [];
-    function snap() { return JSON.stringify({ rooms: state.rooms, pieces: state.pieces, doors: state.doors, scale: state.scale }); }
+    function snap() { return JSON.stringify({ rooms: state.rooms, pieces: state.pieces, doors: state.doors, scale: state.scale, erase: state.erase }); }
     function pushUndo(s) {
       UNDO.push(s || snap());
       if (UNDO.length > 60) UNDO.shift();
@@ -1842,6 +2008,7 @@
       if (!s) return;
       var o = JSON.parse(s);
       state.rooms = o.rooms; state.pieces = o.pieces; state.doors = o.doors; state.scale = o.scale;
+      state.erase = o.erase || []; state.eraseVer++;
       state.pieceSel = -1; state.doorSel = -1; state.ptSel = -1; state.rugCheck = null; state.drag = null;
       if (state.selected >= state.rooms.length) state.selected = -1;
       renderAll(); renderPieceBar(); renderDoorBar();
@@ -2359,6 +2526,7 @@
     function setMode(m) {
       if (state.tool === 'scale') endScaleTool();
       if (state.tool === 'door') endDoorTool();
+      if (state.tool === 'erase') endEraseTool();
       state.mode = m; state.drag = null;
       $('planCanvas').classList.toggle('furnishing', m === 'furnish');   // Furnish takes every touch on the plan (pinch, drag, long press)
       var tabs = document.querySelectorAll('.mode');
@@ -2444,6 +2612,7 @@
         return;
       }
       if (state.tool === 'door') { placeDoorAt(toCanvas(e)); e.preventDefault(); return; }
+      if (state.tool === 'erase') { eraseDown(e); return; }
       if (state.mode === 'furnish') { furnishDown(e); return; }
       var p = toCanvas(e), xb = removeBtn();
       if (xb && Math.hypot(p.x - xb.x, p.y - xb.y) <= xb.r * 1.3) { removePoint(state.selected, state.ptSel); e.preventDefault(); return; }
@@ -2562,6 +2731,7 @@
         }
         return;
       }
+      if (state.tool === 'erase') { c.style.cursor = 'none'; eraseMove(p); return; }
       if (state.mode === 'furnish') {
         if (state.drag && (state.drag.mode === 'rotate' || state.drag.mode === 'stretch')) {
           moveHandleDrag(p);
@@ -2654,6 +2824,11 @@
         var inp = $('scaleLen');
         inp.value = ''; inp.classList.remove('bad');
         try { inp.focus({ preventScroll: true }); } catch (err) { inp.focus(); }
+        return;
+      }
+      if (state.drag && state.drag.mode === 'erase') {
+        try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+        pushUndo(state.drag.snap); state.drag = null; renderErasePane();
         return;
       }
       if (state.drag && (state.drag.mode === 'pan' || state.drag.mode === 'box')) {
@@ -3285,7 +3460,10 @@
 
       var modeBtns = document.querySelectorAll('.mode');
       for (var mb = 0; mb < modeBtns.length; mb++) modeBtns[mb].addEventListener('click', function () { if (!this.disabled) setMode(this.getAttribute('data-mode')); });
-      $('rugRoom').addEventListener('change', function () { select(+this.value, false); });
+      $('rugRoom').addEventListener('change', function () { select(+this.value, false); if (state.tool === 'erase') renderErasePane(); });
+      $('pane-erase').addEventListener('click', onEraseClick);
+      $('brushSize').addEventListener('input', function () { state.brush = +this.value; draw(); });
+      $('eraseOpen').addEventListener('click', startEraseTool);
       $('rugBody').addEventListener('click', onFurnishClick);
       renderCatalog();
       var fp = $('furnishPanel');
@@ -3329,6 +3507,7 @@
         if (state.mode === 'furnish' && state.pieceSel > -1 && !typing && (e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) { turnPiece(e.shiftKey ? -15 : 15); e.preventDefault(); return; }
         if (state.tool === 'scale') { if (e.key === 'Escape' && !/INPUT/.test(document.activeElement.tagName)) endScaleTool(); return; }
         if (state.tool === 'door') { if (e.key === 'Escape') endDoorTool(); return; }
+        if (state.tool === 'erase') { if (e.key === 'Escape') endEraseTool(); else if (e.key === '[' || e.key === ']') { state.brush = clamp(state.brush + (e.key === ']' ? 6 : -6), 8, 120); renderErasePane(); draw(); } return; }
         if (state.mode === 'furnish' && state.doorSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
           if (e.key === 'Delete' || e.key === 'Backspace') { removeDoor(); e.preventDefault(); }
           if (e.key === 'Escape') deselect();
@@ -3489,8 +3668,23 @@
             <button class="ptab" data-ptab="checks">Checks<span class="count hidden" id="checkCount"></span></button>
           </div>
 
+          <div class="pane hidden" id="pane-erase">
+            <p class="detail-name" style="border:none;padding-left:0">Clear the plan</p>
+            <p class="pane-sub">Paint over furniture drawn on the plan to clear the floor. Walls stay put, and your rooms and scale don't change.</p>
+            <div class="seg-row"><button data-eact="erase">Erase</button><button data-eact="restore">Restore</button></div>
+            <label class="field brush-field"><span>Brush size</span><input type="range" id="brushSize" min="8" max="120" step="2"></label>
+            <div class="btn-row" style="margin-top:10px">
+              <button class="btn-secondary btn-sm" data-eact="clear" id="clearRoomBtn">Clear the floor</button>
+              <button class="btn-secondary btn-sm" data-eact="all" id="restoreAllBtn">Restore everything</button>
+            </div>
+            <div class="btn-row" style="margin-top:10px"><button class="btn-primary btn-sm" data-eact="done">Done</button></div>
+            <p class="hint">Clearing a room also clears its printed name and dimensions; paint them back with Restore if you want them. Pinch or use the zoom buttons for small areas. Undo steps back one stroke at a time.</p>
+            <p class="hint warn-text hidden" id="eraseNoWalls">The walls on this plan weren't found when it was read, so the eraser can't protect them here. Go carefully near walls.</p>
+          </div>
+
           <div class="pane" id="pane-add">
             <p class="pane-sub" id="pieceSub"></p>
+            <button class="btn-secondary btn-sm erase-open" id="eraseOpen">Plan has furniture drawn on it? Clear it off</button>
             <div class="cats" id="catTabs"></div>
             <div class="cat-grid" id="pieceChips"></div>
             <div class="own hidden" id="ownForm">
