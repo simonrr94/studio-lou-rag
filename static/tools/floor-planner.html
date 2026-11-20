@@ -215,7 +215,7 @@
       color: #433E3C; transition: border-color 0.15s;
     }
     .piece-card:hover { border-color: #582b36; }
-    .piece-card svg { display: block; width: 100%; height: 46px; margin-bottom: 6px; }
+    .piece-card svg, .piece-card .piece-art { display: block; width: 100%; height: 46px; margin-bottom: 6px; object-fit: contain; }
     .piece-card b { display: block; font-size: 13px; font-weight: 600; line-height: 1.3; }
     .piece-card small { font-size: 12px; color: #6b6560; }
     .own { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 12px; }
@@ -302,7 +302,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=14"></script>
+  <script src="/static/tools/plan-engine.js?v=15"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -1008,7 +1008,7 @@
       var f = state.scale.ftPerPx, cx = pc.x / 100 * state.W * f, cy = pc.y / 100 * state.H * f;
       return { id: pc.id, role: pc.role || 'other', group: pc.group || null, shape: pc.shape, flip: pc.flip, arm: pc.arm,
                w: pc.w, d: pc.d, rot: pc.rot, cx: cx, cy: cy, poly: FURNITURE.shapeAt(pc, cx, cy, 1 / 12),
-               tv: pc.tv || null, h: pc.h || null, room: (pieceRoom(pc) || { id: 0 }).id };
+               tv: pc.tv || null, h: pc.role === 'decor' ? 0 : pc.h || null, room: (pieceRoom(pc) || { id: 0 }).id };
     }
     function piecesFtRaw() { return state.scale ? state.pieces.map(pieceFt) : []; }
     // With the dining sides a walking route passes behind, so those sides are judged at 44"
@@ -1105,30 +1105,17 @@
         ctx.save();
         ctx.translate(q.cx, q.cy);
         ctx.rotate(pc.rot * Math.PI / 180);
-        ctx.shadowColor = 'rgba(67,62,60,0.22)'; ctx.shadowBlur = 4 * ratio; ctx.shadowOffsetY = 1 * ratio;
-        ctx.fillStyle = bad[k] ? '#f6e6e9' : '#f5f0e8';
-        tracePath(ctx, loc); ctx.fill();
-        ctx.shadowColor = 'transparent';
-        // The back of seating and the headboard of a bed, so you can tell which way it faces
-        if (pc.kind === 'seat' || pc.kind === 'bed') {
-          ctx.save();
-          tracePath(ctx, loc); ctx.clip();
-          var band = Math.min(q.d * (pc.kind === 'bed' ? 0.08 : 0.24), 8 * q.k);
-          ctx.fillStyle = '#d0c9bc';
-          ctx.fillRect(-q.w / 2, -q.d / 2, q.w, band);
-          if (pc.shape === 'L') ctx.fillRect(pc.flip ? q.w / 2 - band : -q.w / 2, -q.d / 2, band, q.d);   // back of the return
-          ctx.restore();
-          if (pc.kind === 'bed') { // two pillows
-            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#d0c9bc'; ctx.lineWidth = 1 * ratio;
-            var pw = q.w * 0.4, ph = q.d * 0.12, py = -q.d / 2 + band + q.d * 0.03;
-            [-q.w / 4, q.w / 4].forEach(function (x) { roundRect(ctx, x - pw / 2, py, pw, ph, ph / 3); ctx.fill(); ctx.stroke(); });
-          }
-        }
+        // The drawing (FURNART); the finest lines only once a piece is big enough on screen to show them
+        var onScreen = q.k / ratio;   // screen px per inch (the canvas's CSS size already includes the zoom)
+        FURNART.draw(ctx, pc, q.k, { ratio: ratio, detail: forExport || onScreen >= 1.1 });
         tracePath(ctx, loc);
         ctx.lineJoin = 'round';
-        // A piece in a wall or on another piece gets a burgundy outline (green while selected, burgundy dashes over it)
-        ctx.lineWidth = (sel || bad[k] ? 3 : 1.6) * ratio; ctx.strokeStyle = sel ? '#7f9433' : bad[k] ? '#582b36' : '#433E3C'; ctx.stroke();
-        if (sel && bad[k]) { ctx.setLineDash([6 * ratio, 5 * ratio]); ctx.strokeStyle = '#582b36'; ctx.stroke(); ctx.setLineDash([]); }
+        // A piece in a wall or on another piece gets a burgundy wash and outline (green while selected, burgundy dashes over it)
+        if (bad[k]) { ctx.fillStyle = 'rgba(88,43,54,0.12)'; ctx.fill(); }
+        if (sel || bad[k]) {
+          ctx.lineWidth = 3 * ratio; ctx.strokeStyle = sel ? '#7f9433' : '#582b36'; ctx.stroke();
+          if (sel && bad[k]) { ctx.setLineDash([6 * ratio, 5 * ratio]); ctx.strokeStyle = '#582b36'; ctx.stroke(); ctx.setLineDash([]); }
+        }
         // Name and size, kept upright. A sectional's label sits on its long back run.
         var lx = 0, ly = pc.kind === 'bed' ? q.d * 0.12 : 0, room = q.w - 6 * ratio, depth = q.d;
         if (pc.shape === 'L') { var arm = Math.min(pc.arm || 38, pc.w / 2, pc.d / 2) * q.k; ly = -q.d / 2 + arm / 2; depth = arm; }
@@ -1143,7 +1130,11 @@
         ctx.font = '500 ' + (fs * 0.9) + 'px "DM Sans", sans-serif';
         var sw = ctx.measureText(size).width;
         var twoLines = depth > fs * 2.6;
-        if (nw <= room || sel) {
+        if ((nw <= room && pc.role !== 'decor' && !(pc.role === 'chair' && pc.group)) || sel) {   // plants, lamps and chairs at a table go unlabelled unless picked
+          // a soft cream tag so the words read over the drawing
+          var two = twoLines && sw <= room, tw = Math.max(nw, two ? sw : 0) + 10 * ratio, th = two ? fs * 2.5 : fs * 1.55;
+          ctx.fillStyle = 'rgba(250,249,246,0.88)';
+          roundRect(ctx, -tw / 2, -th / 2, tw, th, Math.min(th / 2, 8 * ratio)); ctx.fill();
           ctx.fillStyle = '#433E3C';
           ctx.font = '600 ' + fs + 'px "DM Sans", sans-serif';
           ctx.fillText(pc.name, 0, -(twoLines && sw <= room ? fs * 0.55 : 0));
@@ -1369,28 +1360,8 @@
       return t === 'bedroom' ? 'Bedroom' : t === 'dining' ? 'Dining' : t === 'living' ? 'Living' : null;
     }
     // A small top-down drawing of a catalog piece (with its chairs), as SVG
-    function pieceIcon(it) {
-      var parts = [{ spec: it, x: 0, y: 0, rot: 0 }], chair = FURNITURE.get('chair'), all = [];
-      FURNITURE.chairLayout(it).forEach(function (c) { parts.push({ spec: chair, x: c.x, y: c.y, rot: c.rot }); });
-      parts.forEach(function (p) { p.pts = GEO.place(FURNITURE.outline(p.spec), p.x, p.y, p.rot, 1); all = all.concat(p.pts); });
-      var b = PLAN.bounds(all), pad = Math.max(b.w, b.h) * 0.06, sw = (Math.max(b.w, b.h) / 55).toFixed(2);
-      function poly(pts, fill, stroke) {
-        return '<polygon points="' + pts.map(function (q) { return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ') + '" fill="' + fill + '"' +
-          (stroke ? ' stroke="#433E3C" stroke-width="' + sw + '" stroke-linejoin="round"' : '') + '/>';
-      }
-      var out = '<svg viewBox="' + (b.x - pad).toFixed(1) + ' ' + (b.y - pad).toFixed(1) + ' ' + (b.w + 2 * pad).toFixed(1) + ' ' + (b.h + 2 * pad).toFixed(1) + '" aria-hidden="true">';
-      parts.slice(1).concat(parts.slice(0, 1)).forEach(function (p) {   // chairs first, the table on top
-        var sp = p.spec;
-        out += poly(p.pts, '#f5f0e8', false);
-        if (sp.kind === 'seat' || sp.kind === 'bed') {
-          var band = Math.min(sp.d * (sp.kind === 'bed' ? 0.08 : 0.24), 8), w = sp.w, d = sp.d;
-          out += poly(GEO.place([{ x: -w / 2, y: -d / 2 }, { x: w / 2, y: -d / 2 }, { x: w / 2, y: -d / 2 + band }, { x: -w / 2, y: -d / 2 + band }], p.x, p.y, p.rot, 1), '#d0c9bc', false);
-          if (sp.shape === 'L') out += poly(GEO.place([{ x: -w / 2, y: -d / 2 }, { x: -w / 2 + band, y: -d / 2 }, { x: -w / 2 + band, y: d / 2 }, { x: -w / 2, y: d / 2 }], p.x, p.y, p.rot, 1), '#d0c9bc', false);
-        }
-        out += poly(p.pts, 'none', true);
-      });
-      return out + '</svg>';
-    }
+    // The catalog card's drawing: the piece (and a dining table's chairs) as drawn on the plan
+    function pieceIcon(it) { return '<img class="piece-art" src="' + FURNART.thumb(it, 132, 46) + '" alt="">'; }
     function renderCatalog() {
       var cat = CATS.indexOf(state.cat) > -1 ? state.cat : 'Living';
       $('catTabs').innerHTML = CATS.map(function (c) { return '<button class="cat' + (c === cat ? ' on' : '') + '" data-cat="' + c + '">' + c + '</button>'; }).join('');

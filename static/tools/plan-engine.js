@@ -725,11 +725,10 @@ var GEO = (function () {
    Beds are listed with the frame. At rot 0 a piece faces down the plan:
    its back is at the top. The code only measures; the person places.
 
-   kind  how it is drawn: 'seat' (shaded back), 'bed' (headboard and
-         pillows), 'table' (plain)
+   kind  'seat', 'bed', 'table' or 'decor' (FURNART draws each piece by its id)
    role  what it is for, which decides its spacing checks and rug styles:
          seat, coffee, side, console (behind a sofa), media, storage, dresser
-         (drawers), bed, nightstand, dining, chair, desk
+         (drawers), bed, nightstand, dining, chair, desk, decor (no spacing lines)
    shape 'rect' (default), 'round' (an oval when w and d differ), or 'L'
          (a sectional: back along the top, the return down the left side,
          arm deep; flip mirrors it)
@@ -771,6 +770,16 @@ var FURNITURE = (function () {
       { id: 'desk', name: 'Desk', w: 60, d: 30, h: 30, kind: 'table', role: 'desk' },
       { id: 'deskchair', name: 'Desk chair', w: 26, d: 26, h: 38, kind: 'seat', role: 'chair' },
       { id: 'bookcase', name: 'Bookcase', w: 36, d: 14, h: 72, kind: 'table', role: 'storage' }
+    ] },
+    // Decor: plants, lamps and a pouf. They block walking routes and door swings and are
+    // flagged when they run into a wall or a piece, but they make no spacing lines of their own
+    // and don't count as blocking a window.
+    { group: 'Decor', items: [
+      { id: 'plant', name: 'Floor plant', w: 26, d: 26, h: 48, kind: 'decor', role: 'decor', shape: 'round' },
+      { id: 'plantS', name: 'Small plant', w: 16, d: 16, h: 24, kind: 'decor', role: 'decor', shape: 'round' },
+      { id: 'tree', name: 'Potted tree', w: 34, d: 34, h: 72, kind: 'decor', role: 'decor', shape: 'round' },
+      { id: 'lamp', name: 'Floor lamp', w: 18, d: 18, h: 62, kind: 'decor', role: 'decor', shape: 'round' },
+      { id: 'pouf', name: 'Pouf', w: 20, d: 20, h: 16, kind: 'decor', role: 'decor', shape: 'round' }
     ] }
   ];
   function get(id) {
@@ -892,6 +901,447 @@ var FURNITURE = (function () {
 
   return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, outline: outline, legs: legs, parts: parts,
            chairLayout: chairLayout, fitChairs: fitChairs, shapeAt: shapeAt, toLocal: toLocal, contains: contains, bounds: bounds };
+})();
+
+/* =====================================================================
+   FURNART: the furniture drawings, top-down, in brand colors (cream
+   fills, taupe lines, sage greenery). Each drawing sits exactly inside
+   the piece's footprint (FURNITURE.outline), so it changes how a piece
+   looks and nothing it measures.
+
+   draw(ctx, pc, k, o) draws pc centred on (0, 0), unturned: back toward
+   -y, front toward +y. Turn and place the context first.
+     k  canvas pixels per inch
+     o  { ratio: canvas px per screen px (line widths and shadows scale with it),
+          detail: true for the fine lines (seams, folds, grain), shadow: false to skip it }
+   The fine lines are for pieces big enough on screen to show them.
+   ===================================================================== */
+var FURNART = (function () {
+  var C = {
+    line: '#8a7e72',      // taupe outline
+    fine: '#b5a999',      // taupe detail lines
+    frame: '#ebe3d6',     // sofa frames and arms, headboards
+    cushion: '#FAF9F6',   // seat cushions, sheets, lamp shades
+    back: '#f3ede3',      // back cushions, duvets
+    accent: '#e4d9c7',    // throw pillows, throws, chair backs, books
+    wood: '#efe6d8',      // table and case tops
+    pillow: '#ffffff',
+    screen: '#6b6560',    // a TV seen from above
+    leaf: '#b9c983', leafDark: '#9db25a', vein: '#7f9433',
+    pot: '#e4d9c7', soil: '#d9cdb9'
+  };
+  var K = 1, LW = 1, FINE = true;
+
+  /* ---------- Small drawing helpers (inches; K turns them into pixels) ---------- */
+  function rr(ctx, x, y, w, h, r) {
+    w = Math.max(w, 0.01); h = Math.max(h, 0.01);
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    x *= K; y *= K; w *= K; h *= K; r *= K;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function ell(ctx, x, y, rx, ry) { ctx.beginPath(); ctx.ellipse(x * K, y * K, Math.max(rx, 0.01) * K, Math.max(ry, 0.01) * K, 0, 0, Math.PI * 2); }
+  function circ(ctx, x, y, r) { ell(ctx, x, y, r, r); }
+  function poly(ctx, pts) {
+    ctx.beginPath();
+    pts.forEach(function (p, i) { if (i) ctx.lineTo(p[0] * K, p[1] * K); else ctx.moveTo(p[0] * K, p[1] * K); });
+    ctx.closePath();
+  }
+  function paint(ctx, fill, stroke, lw) {
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = (lw || 1) * LW; ctx.lineJoin = 'round'; ctx.stroke(); }
+  }
+  function line(ctx, x1, y1, x2, y2, col, lw) {
+    ctx.beginPath(); ctx.moveTo(x1 * K, y1 * K); ctx.lineTo(x2 * K, y2 * K);
+    ctx.strokeStyle = col || C.fine; ctx.lineWidth = (lw || 0.55) * LW; ctx.lineCap = 'round'; ctx.stroke();
+  }
+  function turned(ctx, x, y, deg, fn) {
+    ctx.save(); ctx.translate(x * K, y * K); ctx.rotate(deg * Math.PI / 180); fn(); ctx.restore();
+  }
+
+  // A plump pillow: a square with softly pinched sides
+  function pillow(ctx, cx, cy, w, h, rot, fill) {
+    turned(ctx, cx, cy, rot, function () {
+      var a = w / 2 * K, b = h / 2 * K, p = Math.min(w, h) * 0.09 * K;
+      ctx.beginPath();
+      ctx.moveTo(-a, -b);
+      ctx.quadraticCurveTo(0, -b + p, a, -b);
+      ctx.quadraticCurveTo(a - p, 0, a, b);
+      ctx.quadraticCurveTo(0, b - p, -a, b);
+      ctx.quadraticCurveTo(-a + p, 0, -a, -b);
+      ctx.closePath();
+      paint(ctx, fill || C.pillow, C.line, 0.8);
+      if (FINE) {   // a soft crease
+        ctx.beginPath(); ctx.moveTo(-a * 0.55, -b * 0.5); ctx.quadraticCurveTo(0, 0, a * 0.5, b * 0.55);
+        ctx.strokeStyle = C.fine; ctx.lineWidth = 0.5 * LW; ctx.stroke();
+      }
+    });
+  }
+  // A leaf from (x, y) pointing at angle ang (degrees)
+  function leaf(ctx, x, y, ang, len, wid, fill) {
+    turned(ctx, x, y, ang, function () {
+      var L = len * K, W = wid * K;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(L * 0.3, -W, L * 0.75, -W * 0.85, L, 0);
+      ctx.bezierCurveTo(L * 0.75, W * 0.85, L * 0.3, W, 0, 0);
+      ctx.closePath();
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.strokeStyle = C.vein; ctx.lineWidth = 0.55 * LW; ctx.lineJoin = 'round'; ctx.stroke();
+      if (FINE && len * K > 9) { ctx.beginPath(); ctx.moveTo(L * 0.1, 0); ctx.quadraticCurveTo(L * 0.55, -W * 0.08, L * 0.92, 0); ctx.stroke(); }
+    });
+  }
+  // A few stems in a little vase, for table tops
+  function vase(ctx, x, y, r) {
+    for (var i = 0; i < 6; i++) leaf(ctx, x, y, i * 60 + 15, r * 1.25, r * 0.55, i % 2 ? C.leafDark : C.leaf);
+    circ(ctx, x, y, r * 0.42); paint(ctx, C.cushion, C.line, 0.6);
+  }
+  // A lamp shade seen from above
+  function shade(ctx, x, y, r) {
+    circ(ctx, x, y, r); paint(ctx, C.cushion, C.line, 0.8);
+    circ(ctx, x, y, r * 0.45); paint(ctx, C.frame, C.fine, 0.5);
+    circ(ctx, x, y, Math.max(r * 0.12, 0.6)); paint(ctx, C.line, null);
+  }
+  // A short stack of books, turned a little
+  function books(ctx, x, y, w, h, rot) {
+    turned(ctx, x, y, rot, function () {
+      rr(ctx, -w / 2, -h / 2, w, h, 0.6); paint(ctx, C.accent, C.line, 0.6);
+      rr(ctx, -w / 2 + 1, -h / 2 + 0.8, w - 1.6, h - 1.8, 0.5); paint(ctx, C.cushion, C.fine, 0.5);
+    });
+  }
+  // A plain top with a soft bevel line just inside the edge
+  function top(ctx, w, d, fill, r) {
+    rr(ctx, -w / 2, -d / 2, w, d, r == null ? 1.5 : r); paint(ctx, fill || C.wood, C.line, 1);
+    var e = Math.min(1.4, w * 0.06, d * 0.06);
+    if (FINE) { rr(ctx, -w / 2 + e, -d / 2 + e, w - 2 * e, d - 2 * e, Math.max(0, (r == null ? 1.5 : r) - 0.5)); paint(ctx, null, C.fine, 0.5); }
+  }
+  function roundTop(ctx, w, d, fill) {
+    ell(ctx, 0, 0, w / 2, d / 2); paint(ctx, fill || C.wood, C.line, 1);
+    var e = Math.min(2, w * 0.05, d * 0.05);
+    if (FINE) { ell(ctx, 0, 0, w / 2 - e, d / 2 - e); paint(ctx, null, C.fine, 0.5); }
+  }
+
+  /* ---------- Seating ---------- */
+  // Sofa, loveseat and armchair: arms, back cushions, seat cushions and pillows
+  function seat(ctx, w, d) {
+    var arm = Math.min(Math.max(w * 0.085, 4), 7.5, w * 0.2), back = Math.min(d * 0.24, 9);
+    var inner = w - arm * 2, n = Math.max(1, Math.min(4, Math.round(inner / 24)));
+    if (w < 50) n = 1;
+    rr(ctx, -w / 2, -d / 2, w, d, 4); paint(ctx, C.frame, null);
+    var gap = 0.8, bw = (inner - gap * (n - 1)) / n, i;
+    for (i = 0; i < n; i++) { rr(ctx, -w / 2 + arm + i * (bw + gap), -d / 2 + 1.5, bw, back + 2.5, 3); paint(ctx, C.back, C.line, 0.75); }
+    var sy = -d / 2 + back + 2.2, sh = d / 2 - 1.2 - sy;
+    for (i = 0; i < n; i++) {
+      var x0 = -w / 2 + arm + i * (bw + gap);
+      rr(ctx, x0, sy, bw, sh, 2.6); paint(ctx, C.cushion, C.line, 0.75);
+      if (FINE) line(ctx, x0 + 2, d / 2 - 3.6, x0 + bw - 2, d / 2 - 3.6);   // front welt
+    }
+    [-1, 1].forEach(function (s) {
+      rr(ctx, s < 0 ? -w / 2 : w / 2 - arm, -d / 2, arm, d, Math.min(arm / 2, 3.2)); paint(ctx, C.frame, C.line, 0.75);
+      if (FINE) line(ctx, s * (w / 2 - arm / 2), -d / 2 + back + 2, s * (w / 2 - arm / 2), d / 2 - 3);
+    });
+    if (w >= 50) {
+      var ps = Math.min(15, w * 0.17);
+      pillow(ctx, -w / 2 + arm + ps * 0.62, -d / 2 + back + ps * 0.5, ps, ps * 0.9, -14, C.accent);
+      pillow(ctx, w / 2 - arm - ps * 0.62, -d / 2 + back + ps * 0.5, ps, ps * 0.9, 14, C.accent);
+    } else if (inner > 12) {
+      pillow(ctx, 0, -d / 2 + back + 3.5, Math.min(14, inner * 0.6), 7, 0, C.accent);   // lumbar
+    }
+    rr(ctx, -w / 2, -d / 2, w, d, 4); paint(ctx, null, C.line, 1);
+  }
+  // Sectional: back along the top, the return down the left (mirrored for flip)
+  function sectional(ctx, w, d, pc) {
+    var t = Math.min(pc.arm || 38, w / 2, d / 2), arm = Math.min(7, t * 0.2), back = Math.min(t * 0.24, 9);
+    ctx.save();
+    if (pc.flip) ctx.scale(-1, 1);
+    var L = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, -d / 2 + t], [-w / 2 + t, -d / 2 + t], [-w / 2 + t, d / 2], [-w / 2, d / 2]];
+    poly(ctx, L); paint(ctx, C.frame, null);
+    var X0 = -w / 2, Y0 = -d / 2, gap = 0.8, i;
+    // back cushions: along the top run (past the corner) and down the return
+    var runA = w - arm - t, nA = Math.max(1, Math.round(runA / 26)), bwA = (runA - gap * (nA - 1)) / nA;
+    for (i = 0; i < nA; i++) { rr(ctx, X0 + t + i * (bwA + gap), Y0 + 1.5, bwA, back + 2.5, 3); paint(ctx, C.back, C.line, 0.75); }
+    rr(ctx, X0 + 1.5, Y0 + 1.5, t - 1.5, back + 2.5, 3); paint(ctx, C.back, C.line, 0.75);     // corner back
+    rr(ctx, X0 + 1.5, Y0 + 1.5, back + 2.5, t - 1.5, 3); paint(ctx, C.back, C.line, 0.75);
+    var runB = d - arm - t, nB = Math.max(1, Math.round(runB / 26)), bwB = (runB - gap * (nB - 1)) / nB;
+    for (i = 0; i < nB; i++) { rr(ctx, X0 + 1.5, Y0 + t + i * (bwB + gap), back + 2.5, bwB, 3); paint(ctx, C.back, C.line, 0.75); }
+    // seat cushions: the corner square, then each run
+    var s0 = back + 2.2, depth = t - 1.2 - s0;
+    rr(ctx, X0 + s0, Y0 + s0, depth, depth, 2.6); paint(ctx, C.cushion, C.line, 0.75);
+    for (i = 0; i < nA; i++) {
+      var xa = X0 + t + i * (bwA + gap);
+      rr(ctx, xa, Y0 + s0, bwA, depth, 2.6); paint(ctx, C.cushion, C.line, 0.75);
+      if (FINE) line(ctx, xa + 2, Y0 + t - 3.6, xa + bwA - 2, Y0 + t - 3.6);
+    }
+    for (i = 0; i < nB; i++) {
+      var yb = Y0 + t + i * (bwB + gap);
+      rr(ctx, X0 + s0, yb, depth, bwB, 2.6); paint(ctx, C.cushion, C.line, 0.75);
+      if (FINE) line(ctx, X0 + t - 3.6, yb + 2, X0 + t - 3.6, yb + bwB - 2);
+    }
+    // arms at the two open ends
+    rr(ctx, w / 2 - arm, Y0, arm, t, Math.min(arm / 2, 3.2)); paint(ctx, C.frame, C.line, 0.75);
+    rr(ctx, X0, d / 2 - arm, t, arm, Math.min(arm / 2, 3.2)); paint(ctx, C.frame, C.line, 0.75);
+    // pillows in the corner and at the far end
+    var ps = Math.min(15, t * 0.4);
+    pillow(ctx, X0 + s0 + ps * 0.55, Y0 + s0 + ps * 0.55, ps, ps * 0.92, -40, C.accent);
+    pillow(ctx, w / 2 - arm - ps * 0.62, Y0 + s0 + ps * 0.45, ps, ps * 0.9, 14, C.accent);
+    poly(ctx, L); paint(ctx, null, C.line, 1);
+    ctx.restore();
+  }
+  function diningChair(ctx, w, d) {
+    rr(ctx, -w / 2 + 1, -d / 2 + 2.5, w - 2, d - 3, 4); paint(ctx, C.cushion, C.line, 0.85);
+    if (FINE) { rr(ctx, -w / 2 + 3, -d / 2 + 5, w - 6, d - 8.5, 3); paint(ctx, null, C.fine, 0.5); }
+    ctx.beginPath();
+    ctx.moveTo((-w / 2) * K, (-d / 2 + 3.5) * K);
+    ctx.quadraticCurveTo(0, (-d / 2 - 1.5) * K, (w / 2) * K, (-d / 2 + 3.5) * K);
+    ctx.lineTo((w / 2 - 0.5) * K, (-d / 2 + 6) * K);
+    ctx.quadraticCurveTo(0, (-d / 2 + 1.5) * K, (-w / 2 + 0.5) * K, (-d / 2 + 6) * K);
+    ctx.closePath();
+    paint(ctx, C.accent, C.line, 0.85);
+  }
+  // Desk chair: a five-star base peeking out, the seat, arms and a curved back
+  function deskChair(ctx, w, d) {
+    var R = Math.min(w, d) / 2;
+    for (var i = 0; i < 5; i++) {
+      var a = (i / 5 * 360 + 90) * Math.PI / 180, ex = Math.cos(a) * (R - 1.2), ey = Math.sin(a) * (R - 1.2);
+      line(ctx, 0, 0, ex, ey, C.line, 1.4);
+      circ(ctx, ex, ey, 1.1); paint(ctx, C.frame, C.line, 0.6);
+    }
+    var sw = w * 0.7, sd = d * 0.66;
+    rr(ctx, -sw / 2, -d / 2 + d * 0.2, sw, sd, 5); paint(ctx, C.cushion, C.line, 0.85);
+    if (FINE) { rr(ctx, -sw / 2 + 2, -d / 2 + d * 0.2 + 2, sw - 4, sd - 4, 4); paint(ctx, null, C.fine, 0.5); }
+    [-1, 1].forEach(function (s) { rr(ctx, s * (sw / 2 + 0.4) - (s < 0 ? 2.6 : 0), -d / 2 + d * 0.3, 2.6, sd * 0.62, 1.3); paint(ctx, C.accent, C.line, 0.7); });
+    ctx.beginPath();
+    ctx.moveTo((-w * 0.4) * K, (-d / 2 + d * 0.22) * K);
+    ctx.quadraticCurveTo(0, (-d / 2 - 1) * K, (w * 0.4) * K, (-d / 2 + d * 0.22) * K);
+    ctx.lineTo((w * 0.37) * K, (-d / 2 + d * 0.22 + 3) * K);
+    ctx.quadraticCurveTo(0, (-d / 2 + 2.2) * K, (-w * 0.37) * K, (-d / 2 + d * 0.22 + 3) * K);
+    ctx.closePath();
+    paint(ctx, C.accent, C.line, 0.85);
+  }
+
+  /* ---------- Bedroom ---------- */
+  function bed(ctx, w, d) {
+    var hb = Math.min(3.5, d * 0.05);
+    rr(ctx, -w / 2, -d / 2, w, d, 2.5); paint(ctx, C.cushion, null);
+    rr(ctx, -w / 2, -d / 2, w, hb, 1.5); paint(ctx, C.frame, C.line, 0.75);
+    var big = w >= 76, pw = big ? (w - 8) / 2 : Math.min(26, (w - 6) / 2), ph = Math.min(big ? 19 : 17, d * 0.2), py = -d / 2 + hb + 1.5 + ph / 2;
+    if (w < 46) { pw = Math.min(26, w - 6); pillow(ctx, 0, py, pw, ph, 0, C.pillow); }   // a twin takes one
+    else { pillow(ctx, -pw / 2 - 0.8, py, pw, ph, 0, C.pillow); pillow(ctx, pw / 2 + 0.8, py, pw, ph, 0, C.pillow); }
+    pillow(ctx, 0, py + ph / 2 + 2, Math.min(22, w * 0.34), 8, 0, C.accent);
+    var dy = -d / 2 + d * 0.39;
+    rr(ctx, -w / 2 + 0.6, dy, w - 1.2, d / 2 - dy - 0.6, 2); paint(ctx, C.back, C.line, 0.75);
+    rr(ctx, -w / 2 + 0.6, dy, w - 1.2, 7, 1.5); paint(ctx, C.cushion, C.line, 0.75);
+    if (FINE) {
+      [0.28, 0.62].forEach(function (f, i) {
+        var y = dy + 10 + (d / 2 - dy - 10) * f;
+        ctx.beginPath();
+        ctx.moveTo((-w / 2 + 6) * K, y * K);
+        ctx.bezierCurveTo((-w / 6) * K, (y - 2.5 + i * 4) * K, (w / 6) * K, (y + 2.5 - i * 4) * K, (w / 2 - 8) * K, (y - 1) * K);
+        ctx.strokeStyle = C.fine; ctx.lineWidth = 0.5 * LW; ctx.stroke();
+      });
+    }
+    var ty = d / 2 - 17;
+    rr(ctx, -w / 2 + 0.6, ty, w - 1.2, 13, 1.5); paint(ctx, C.accent, C.line, 0.75);
+    if (FINE) { line(ctx, -w / 2 + 2, ty + 3, w / 2 - 2, ty + 3); line(ctx, -w / 2 + 2, ty + 10, w / 2 - 2, ty + 10); }
+    rr(ctx, -w / 2, -d / 2, w, d, 2.5); paint(ctx, null, C.line, 1);
+  }
+  function nightstand(ctx, w, d) {
+    top(ctx, w, d);
+    var r = Math.min(w, d) * 0.3;
+    books(ctx, w / 2 - Math.min(6, w * 0.25), d / 2 - Math.min(5, d * 0.28), Math.min(8, w * 0.33), Math.min(5.6, d * 0.3), -12);
+    shade(ctx, -w / 2 + r + Math.min(2.5, w * 0.08), -d / 2 + r + Math.min(2, d * 0.08), r);
+  }
+  // Dresser: a lamp and a tray on top, and the drawer fronts along the front edge
+  function dresser(ctx, w, d) {
+    top(ctx, w, d);
+    var n = w >= 48 ? 3 : w >= 30 ? 2 : 1, fy = d / 2 - Math.min(2.6, d * 0.14);
+    line(ctx, -w / 2 + 0.8, fy, w / 2 - 0.8, fy, C.line, 0.6);
+    for (var i = 0; i <= n; i++) {
+      var x = -w / 2 + w * i / n;
+      if (i > 0 && i < n) line(ctx, x, fy, x, d / 2, C.line, 0.6);
+      if (i < n) { var cx = -w / 2 + w * (i + 0.5) / n; line(ctx, cx - 2, (fy + d / 2) / 2, cx + 2, (fy + d / 2) / 2, C.line, 1); }
+    }
+    var r = Math.min(d * 0.32, 7);
+    shade(ctx, -w / 2 + r + 2.5, -d / 2 + r + 1.5, r);
+    if (w >= 36) {   // a tray with a small vase
+      rr(ctx, w / 2 - 16, -d / 2 + 3, 12, Math.min(8, d - 8), 1.5); paint(ctx, C.accent, C.line, 0.6);
+      vase(ctx, w / 2 - 10, -d / 2 + 3 + Math.min(8, d - 8) / 2, Math.min(2.6, d * 0.14));
+    }
+  }
+
+  /* ---------- Living tables ---------- */
+  function coffee(ctx, w, d) {
+    top(ctx, w, d, null, 2);
+    books(ctx, -w * 0.22, 0, Math.min(11, w * 0.28), Math.min(8, d * 0.4), -8);
+    vase(ctx, w * 0.2, -d * 0.05, Math.min(3.4, d * 0.15));
+  }
+  function roundCoffee(ctx, w, d) {
+    roundTop(ctx, w, d);
+    books(ctx, -w * 0.12, d * 0.1, Math.min(10, w * 0.3), Math.min(7.5, d * 0.22), 12);
+    vase(ctx, w * 0.16, -d * 0.16, Math.min(3.2, w * 0.1));
+  }
+  // An upholstered ottoman or pouf: piping round the edge and buttons
+  function ottoman(ctx, w, d) {
+    ell(ctx, 0, 0, w / 2, d / 2); paint(ctx, C.cushion, C.line, 1);
+    ell(ctx, 0, 0, w / 2 - 1.6, d / 2 - 1.6); paint(ctx, null, C.fine, 0.6);
+    var n = w >= 26 ? 6 : 4;
+    for (var i = 0; i < n; i++) {
+      var a = i / n * Math.PI * 2, bx = Math.cos(a) * w * 0.24, by = Math.sin(a) * d * 0.24;
+      if (FINE) line(ctx, 0, 0, bx, by, C.fine, 0.5);
+      circ(ctx, bx, by, 0.6); paint(ctx, C.line, null);
+    }
+    circ(ctx, 0, 0, 0.7); paint(ctx, C.line, null);
+  }
+  function side(ctx, w, d) { top(ctx, w, d); vase(ctx, 0, 0, Math.min(w, d) * 0.14); }
+  function roundSide(ctx, w, d) { roundTop(ctx, w, d); vase(ctx, 0, 0, Math.min(w, d) * 0.14); }
+  // Media console: door panels, a TV seen from above, a small plant at one end
+  function media(ctx, w, d) {
+    top(ctx, w, d);
+    var n = w >= 56 ? 3 : 2;
+    if (FINE) for (var i = 1; i < n; i++) line(ctx, -w / 2 + w * i / n, -d / 2 + 1.4, -w / 2 + w * i / n, d / 2 - 1.4);
+    var tw = Math.min(w * 0.72, 58), tx = -w / 2 + Math.max(4, (w - tw) / 2 - 4);
+    rr(ctx, tx, -d / 2 + d * 0.3, tw, Math.max(1.6, d * 0.12), 0.6); paint(ctx, C.screen, null);
+    rr(ctx, tx + tw / 2 - tw * 0.15, -d / 2 + d * 0.42, tw * 0.3, Math.max(2, d * 0.18), 0.8); paint(ctx, C.frame, C.line, 0.6);   // its stand
+    if (w >= 44) vase(ctx, w / 2 - Math.min(6, d * 0.33), d * 0.1, Math.min(3, d * 0.16));
+  }
+  // Console table: a lamp at one end, books and a bowl
+  function consoleTable(ctx, w, d) {
+    top(ctx, w, d);
+    var r = Math.min(d * 0.4, 6.5);
+    shade(ctx, -w / 2 + r + 2.5, 0, r);
+    if (w >= 36) books(ctx, w * 0.08, 0, Math.min(10, w * 0.2), Math.min(7, d * 0.55), 6);
+    if (w >= 48) { circ(ctx, w / 2 - r - 3, 0, Math.min(d * 0.32, 5)); paint(ctx, C.cushion, C.line, 0.7); if (FINE) { circ(ctx, w / 2 - r - 3, 0, Math.min(d * 0.32, 5) * 0.6); paint(ctx, null, C.fine, 0.5); } }
+  }
+
+  /* ---------- Dining ---------- */
+  function roundTable(ctx, w, d) { roundTop(ctx, w, d); vase(ctx, 0, 0, Math.min(w, d) * 0.12); }
+  function rectTable(ctx, w, d) {
+    top(ctx, w, d, null, 2);
+    if (w > 30) { rr(ctx, -w / 2 + 8, -d * 0.16, w - 16, d * 0.32, 0.5); paint(ctx, C.cushion, C.fine, 0.6); }   // a runner
+    vase(ctx, 0, 0, Math.min(w, d) * 0.13);
+  }
+
+  /* ---------- Office ---------- */
+  function desk(ctx, w, d) {
+    top(ctx, w, d);
+    var lw = Math.min(14, w * 0.3), ld = Math.min(9.5, d * 0.36);   // an open laptop
+    rr(ctx, -lw / 2, d * 0.02, lw, ld, 0.8); paint(ctx, C.cushion, C.line, 0.7);
+    rr(ctx, -lw / 2, d * 0.02 - Math.min(1.2, ld * 0.15), lw, Math.min(1.2, ld * 0.15), 0.4); paint(ctx, C.screen, null);
+    if (FINE) { rr(ctx, -lw / 2 + 1, d * 0.02 + 1, lw - 2, ld * 0.5, 0.3); paint(ctx, null, C.fine, 0.5); }
+    var r = Math.min(d * 0.2, 6);
+    shade(ctx, -w / 2 + r + 2.5, -d / 2 + r + 2, r);
+    if (w >= 40) books(ctx, w / 2 - 8, -d / 2 + 6, Math.min(9, w * 0.15), Math.min(6.5, d * 0.22), -8);
+    circ(ctx, w * 0.3, d * 0.18, Math.min(1.8, d * 0.06)); paint(ctx, C.pillow, C.line, 0.6);   // a mug
+  }
+  // Bookcase from above: the top, and a row of book spines along the shelves' front
+  function bookcase(ctx, w, d) {
+    top(ctx, w, d, null, 1);
+    var x = -w / 2 + 1.6, end = w / 2 - 1.6, i = 0, widths = [1.4, 1.1, 1.8, 1, 1.3, 2.2, 1.2, 1.6, 0.9, 1.5];
+    var cols = [C.accent, C.cushion, C.frame, C.accent, C.back];
+    while (x < end - 1) {
+      var bw = Math.min(widths[i % widths.length], end - x), lean = i % 7 === 5;
+      rr(ctx, x, d / 2 - 1.6 - d * 0.42 * (lean ? 0.8 : 1), bw, d * 0.42 * (lean ? 0.8 : 1), 0.2); paint(ctx, cols[i % cols.length], C.fine, 0.5);
+      x += bw + 0.15; i++;
+      if (i % 9 === 0) x += Math.min(4, w * 0.08);   // a gap between runs
+    }
+  }
+
+  /* ---------- Decor ---------- */
+  function plant(ctx, w, d) {
+    var R = Math.min(w, d) / 2;
+    circ(ctx, 0, 0, R * 0.52); paint(ctx, C.pot, C.line, 0.8);
+    circ(ctx, 0, 0, R * 0.42); paint(ctx, C.soil, null);
+    [8, 80, 150, 222, 292].forEach(function (a, i) { leaf(ctx, 0, 0, a, R * (0.96 - (i % 2) * 0.06), R * 0.36, C.leafDark); });
+    [44, 116, 186, 258, 330].forEach(function (a, i) { leaf(ctx, 0, 0, a, R * (0.8 - (i % 2) * 0.08), R * 0.32, C.leaf); });
+    circ(ctx, 0, 0, R * 0.08); paint(ctx, C.vein, null);
+  }
+  // A potted tree: a basket and a full, round canopy of small leaves
+  function tree(ctx, w, d) {
+    var R = Math.min(w, d) / 2;
+    circ(ctx, 0, 0, R * 0.42); paint(ctx, C.pot, C.line, 0.8);
+    if (FINE) { circ(ctx, 0, 0, R * 0.36); paint(ctx, null, C.fine, 0.5); }
+    var rings = [[0.95, 14, 0.3, C.leafDark, 0], [0.75, 12, 0.28, C.leaf, 15], [0.5, 9, 0.26, C.leafDark, 7], [0.28, 6, 0.22, C.leaf, 30]];
+    rings.forEach(function (rg) {
+      for (var i = 0; i < rg[1]; i++) {
+        var a = i / rg[1] * 360 + rg[4], rad = a * Math.PI / 180, base = R * rg[0] * 0.45;
+        leaf(ctx, Math.cos(rad) * base, Math.sin(rad) * base, a + (i % 2 ? 18 : -18), R * rg[0] * 0.55, R * rg[2] * 0.42, rg[3]);
+      }
+    });
+    circ(ctx, 0, 0, R * 0.07); paint(ctx, C.line, null);
+  }
+  // Floor lamp: a weighted base just visible round a wide shade
+  function floorLamp(ctx, w, d) {
+    var R = Math.min(w, d) / 2;
+    circ(ctx, 0, 0, R); paint(ctx, C.frame, C.line, 0.7);
+    shade(ctx, 0, 0, R * 0.82);
+    if (FINE) { circ(ctx, 0, 0, R * 0.64); paint(ctx, null, C.fine, 0.5); }
+  }
+
+  var BY_ID = {
+    sofa: seat, loveseat: seat, armchair: seat, sectional: sectional,
+    coffee: coffee, coffeeR: roundCoffee, ottoman: ottoman, side: side, sideR: roundSide, media: media, console: consoleTable,
+    full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser,
+    chair: diningChair, desk: desk, deskchair: deskChair, bookcase: bookcase,
+    plant: plant, plantS: plant, tree: tree, lamp: floorLamp, pouf: ottoman
+  };
+  // Pieces of your own, and anything not in the catalog, draw by what they are
+  function pick(pc) {
+    if (BY_ID[pc.type]) return BY_ID[pc.type];
+    if (pc.shape === 'L') return sectional;
+    if (pc.role === 'dining') return pc.shape === 'round' ? roundTable : rectTable;
+    if (pc.role === 'bed') return bed;
+    if (pc.role === 'seat') return seat;
+    if (pc.role === 'chair') return diningChair;
+    return pc.shape === 'round' ? function (ctx, w, d) { roundTop(ctx, w, d, C.cushion); } : function (ctx, w, d) { top(ctx, w, d, C.cushion); };
+  }
+
+  function draw(ctx, pc, k, o) {
+    o = o || {};
+    var ratio = o.ratio || 1;
+    K = k; FINE = o.detail !== false;
+    LW = Math.max(0.9, Math.min(1.6, (k / ratio) * 0.55)) * ratio;
+    var fn = pick(pc), round = pc.shape === 'round';
+    ctx.save();
+    // a soft shadow under the footprint (not under chairs, plants and lamps, whose drawings are smaller than their outline)
+    if (o.shadow !== false && ['chair', 'deskchair', 'plant', 'plantS', 'tree', 'lamp'].indexOf(pc.type) < 0) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(67,62,60,0.18)'; ctx.shadowBlur = 5 * ratio; ctx.shadowOffsetY = 1.5 * ratio;
+      if (round) ell(ctx, 0, 0, pc.w / 2, pc.d / 2);
+      else if (pc.shape === 'L') {
+        var t = Math.min(pc.arm || 38, pc.w / 2, pc.d / 2), f = pc.flip ? -1 : 1, w = pc.w, d = pc.d;
+        poly(ctx, [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, -d / 2 + t], [-w / 2 + t, -d / 2 + t], [-w / 2 + t, d / 2], [-w / 2, d / 2]].map(function (p) { return [p[0] * f, p[1]]; }));
+      } else rr(ctx, -pc.w / 2, -pc.d / 2, pc.w, pc.d, 2);
+      ctx.fillStyle = C.frame; ctx.fill();
+      ctx.restore();
+    }
+    fn(ctx, pc.w, pc.d, pc);
+    ctx.restore();
+  }
+  // A thumbnail of a catalog item (with a dining table's chairs) as an image URL
+  var thumbs = {};
+  function thumb(spec, cssW, cssH) {
+    var key = (spec.id || spec.type) + '|' + cssW + 'x' + cssH;
+    if (thumbs[key]) return thumbs[key];
+    var dpr = 2, cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+    cv.width = cssW * dpr; cv.height = cssH * dpr;
+    var parts = [{ pc: Object.assign({ type: spec.id }, spec), x: 0, y: 0, rot: 0 }], all = [], chair = FURNITURE.get('chair');
+    FURNITURE.chairLayout(spec).forEach(function (c) { parts.unshift({ pc: Object.assign({ type: 'chair' }, chair), x: c.x, y: c.y, rot: c.rot }); });
+    parts.forEach(function (p) { all = all.concat(GEO.place(FURNITURE.outline(p.pc), p.x, p.y, p.rot, 1)); });
+    var b = PLAN.bounds(all), pad = 3, k = Math.min((cv.width - 2 * pad * dpr) / b.w, (cv.height - 2 * pad * dpr) / b.h);
+    ctx.translate(cv.width / 2 - (b.x + b.w / 2) * k, cv.height / 2 - (b.y + b.h / 2) * k);
+    parts.forEach(function (p) {
+      ctx.save(); ctx.translate(p.x * k, p.y * k); ctx.rotate(p.rot * Math.PI / 180);
+      draw(ctx, p.pc, k, { ratio: dpr * 0.75, detail: k / dpr >= 1.1 });
+      ctx.restore();
+    });
+    return (thumbs[key] = cv.toDataURL('image/png'));
+  }
+  return { draw: draw, thumb: thumb, COLORS: C };
 })();
 
 /* =====================================================================
@@ -1034,8 +1484,10 @@ var SPACE = (function () {
   function check(pieces, walls, wallTest) {
     var lines = [];
     pieces.forEach(function (pc, i) {
+      if (pc.role === 'decor') return;   // plants, lamps and poufs get no spacing lines
       var skip = function (o, j) {
         if (j === i) return true;
+        if (o.role === 'decor') return true;
         if ((pc.role === 'dining' || pc.role === 'desk') && o.role === 'chair') return true;   // chairs pull out
         if (pc.group && o.group === pc.group) return true;                      // a chair and its own table or neighbors
         if (pc.role === 'chair' && pc.group && o.id === pc.group) return true;
