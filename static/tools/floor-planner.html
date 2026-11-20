@@ -264,6 +264,31 @@
     .space-val { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #6b6560; margin-top: 2px; }
 
     /* ── PHONE AND NARROW SCREENS: plan on top, panel below, page scrolls ── */
+    /* Saved plans */
+    .saved { margin-top: 28px; }
+    .saved.hidden { display: none; }
+    .saved-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+    .saved-card { position: relative; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 8px; text-align: left; cursor: pointer; font-family: 'DM Sans', sans-serif; color: #433E3C; }
+    .saved-card:hover { border-color: #582b36; }
+    .saved-card img { display: block; width: 100%; height: 110px; object-fit: contain; background: #f5f0e8; border-radius: 8px; }
+    .saved-card b { display: block; font-size: 13.5px; font-weight: 600; margin: 8px 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .saved-card small { display: block; font-size: 12px; color: #6b6560; margin: 1px 2px 2px; }
+    .saved-del { position: absolute; top: 12px; right: 12px; border: 1px solid #d0c9bc; background: #FAF9F6; color: #6b6560; border-radius: 50px; font: 600 12px 'DM Sans', sans-serif; padding: 3px 9px; cursor: pointer; }
+    .saved-del:hover, .saved-del.sure { background: #582b36; border-color: #582b36; color: #FAF9F6; }
+    .saved-note { font-size: 12.5px; color: #6b6560; margin: 10px 0 0; }
+    .save-field { display: block; margin: 4px 0 14px; }
+    .save-field span { display: block; font: 600 13px 'DM Sans', sans-serif; color: #433E3C; margin-bottom: 6px; }
+    .save-field input { width: 100%; box-sizing: border-box; border: 1.5px solid #d0c9bc; border-radius: 10px; padding: 10px 12px; font: 400 15px 'DM Sans', sans-serif; color: #433E3C; background: #ffffff; }
+    .save-field input:focus { outline: none; border-color: #582b36; }
+    .save-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+    .save-msg { font: 400 13.5px 'DM Sans', sans-serif; color: #433E3C; line-height: 1.5; margin: 0 0 10px; }
+    .save-msg.err { color: #582b36; font-weight: 600; }
+    .save-replace { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #ece6dc; }
+    .save-replace img { width: 64px; height: 44px; object-fit: contain; background: #f5f0e8; border-radius: 6px; flex: none; }
+    .save-replace div { flex: 1; min-width: 0; font: 400 13.5px 'DM Sans', sans-serif; }
+    .save-replace div b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .save-replace div small { color: #6b6560; font-size: 12px; }
+    #saveBtn.saved-state { color: #6b6560; }
     /* Keys and gestures pop-up */
     .keys-veil { position: fixed; inset: 0; background: rgba(67,62,60,0.35); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
     .keys-veil.hidden { display: none; }
@@ -531,6 +556,7 @@
         showStatus('error', 'That file type is not supported.', 'Upload a PNG, JPG, or WEBP image of the plan.');
         return;
       }
+      state.fileName = (file.name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
       var reader = new FileReader();
       reader.onload = function () {
         var img = new Image();
@@ -544,6 +570,21 @@
     }
 
     function prepareImage(img) {
+      loadImageState(img);
+      state.savedId = null; state.dirty = true; state.planName = ''; updateSaveBtn();
+      // Find walls and printed room names while the model reads the plan
+      state.analysis = new Promise(function (resolve) {
+        setTimeout(function () {
+          try {
+            var a = SNAP.analyze(img);
+            SNAP.ocr(a.canvas).then(function (words) { resolve({ a: a, words: words }); });
+          } catch (e) { resolve(null); }
+        }, 30);
+      });
+      extract();
+    }
+    // A fresh plan image: canvas size, the copy sent to the model, and an empty plan
+    function loadImageState(img) {
       // Display canvas
       var s = Math.min(1, MAX_CANVAS / Math.max(img.naturalWidth, img.naturalHeight));
       state.W = Math.round(img.naturalWidth * s);
@@ -571,16 +612,6 @@
       state.erase = []; state.eraseVer++; state.floorCol = floorColorOf(img); ERASE.mask = ERASE.layer = null;
       UNDO = []; $('undoBtn').disabled = true;
       setMode('measure');
-      // Find walls and printed room names while the model reads the plan
-      state.analysis = new Promise(function (resolve) {
-        setTimeout(function () {
-          try {
-            var a = SNAP.analyze(img);
-            SNAP.ocr(a.canvas).then(function (words) { resolve({ a: a, words: words }); });
-          } catch (e) { resolve(null); }
-        }, 30);
-      });
-      extract();
     }
 
     /* ---------- Drawing ---------- */
@@ -1995,6 +2026,7 @@
     var UNDO = [];
     function snap() { return JSON.stringify({ rooms: state.rooms, pieces: state.pieces, doors: state.doors, scale: state.scale, erase: state.erase }); }
     function pushUndo(s) {
+      state.dirty = true; updateSaveBtn();
       UNDO.push(s || snap());
       if (UNDO.length > 60) UNDO.shift();
       if ($('undoBtn')) $('undoBtn').disabled = false;
@@ -2004,6 +2036,7 @@
       if ($('undoBtn')) $('undoBtn').disabled = !UNDO.length;
       if (!s) return;
       var o = JSON.parse(s);
+      state.dirty = true; updateSaveBtn();
       state.rooms = o.rooms; state.pieces = o.pieces; state.doors = o.doors; state.scale = o.scale;
       state.erase = o.erase || []; state.eraseVer++;
       state.pieceSel = -1; state.doorSel = -1; state.ptSel = -1; state.rugCheck = null; state.drag = null;
@@ -2963,6 +2996,179 @@
       if (h && h.type === 'pt' && state.rooms[state.selected].shape) removePoint(state.selected, h.k);
     }
 
+    /* ---------- Saving and reopening plans ----------
+       Plans are kept in this browser (IndexedDB), up to SAVE_LIMIT of them. A saved
+       plan holds the plan image, the rooms, scale, furniture, rugs, doors, windows and
+       eraser strokes, and the words the wall reader found. The wall map is read again
+       from the image on opening. Saving again updates the same plan. */
+    var SAVE_LIMIT = 5;
+    var SAVES = (function () {
+      var DB = 'studiolou-floorplanner', STORE = 'plans', dbp = null;
+      function db() {
+        if (!dbp) dbp = new Promise(function (res, rej) {
+          if (!window.indexedDB) { rej(new Error('nostore')); return; }
+          var q = indexedDB.open(DB, 1);
+          q.onupgradeneeded = function () { q.result.createObjectStore(STORE, { keyPath: 'id' }); };
+          q.onsuccess = function () { res(q.result); };
+          q.onerror = function () { rej(q.error || new Error('nostore')); };
+        });
+        return dbp;
+      }
+      function run(mode, fn) {
+        return db().then(function (d) {
+          return new Promise(function (res, rej) {
+            var t = d.transaction(STORE, mode), req = fn(t.objectStore(STORE));
+            t.oncomplete = function () { res(req ? req.result : null); };
+            t.onerror = function () { rej(t.error); };
+            t.onabort = function () { rej(t.error || new Error('aborted')); };
+          });
+        });
+      }
+      return {
+        list: function () { return run('readonly', function (st) { return st.getAll(); }).then(function (all) { return (all || []).sort(function (a, b) { return b.savedAt - a.savedAt; }); }); },
+        get: function (id) { return run('readonly', function (st) { return st.get(id); }); },
+        put: function (rec) { return run('readwrite', function (st) { return st.put(rec); }); },
+        remove: function (id) { return run('readwrite', function (st) { return st['delete'](id); }); }
+      };
+    })();
+    function unsavedWork() { return !!(state.img && state.dirty && (UNDO.length || state.pieces.length)); }
+    function updateSaveBtn() {
+      var b = $('saveBtn'); if (!b) return;
+      var clean = state.savedId && !state.dirty;
+      b.textContent = clean ? 'Saved' : state.savedId ? 'Save changes' : 'Save';
+      b.classList.toggle('saved-state', !!clean);
+    }
+    function savedWhen(t) {
+      var d = new Date(t);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    }
+    function defaultName() {
+      if (state.planName) return state.planName;
+      if (state.fileName && !/^(image|img|screenshot|photo|scan)\b/i.test(state.fileName)) return state.fileName.slice(0, 60);
+      var d = new Date();
+      return 'Floor plan, ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+    // The plan as stored: everything needed to put it back the way it was
+    function planRecord(id, name) {
+      var c = document.createElement('canvas'); c.width = state.W; c.height = state.H;
+      var x = c.getContext('2d'); x.fillStyle = '#ffffff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(state.img, 0, 0, state.W, state.H);
+      var image = c.toDataURL('image/png');
+      if (image.length > 3500000) image = c.toDataURL('image/jpeg', 0.92);   // photos keep well as JPEG
+      // a small picture of the plan as it looks now, furniture and all
+      draw(true);
+      var t = document.createElement('canvas'), tw = 360, th = Math.round(360 * state.H / state.W);
+      if (th > 260) { th = 260; tw = Math.round(260 * state.W / state.H); }
+      t.width = tw; t.height = th;
+      var tx = t.getContext('2d'); tx.fillStyle = '#ffffff'; tx.fillRect(0, 0, tw, th); tx.drawImage($('planCanvas'), 0, 0, tw, th);
+      draw();
+      var plan = JSON.parse(snap());
+      return {
+        id: id, name: name, savedAt: Date.now(), version: 1,
+        image: image, thumb: t.toDataURL('image/jpeg', 0.82),
+        W: state.W, H: state.H, fileName: state.fileName || '',
+        rooms: plan.rooms, scale: plan.scale, pieces: plan.pieces, doors: plan.doors, erase: plan.erase || [],
+        words: state.walls && state.walls.words ? state.walls.words.map(function (w) { return { text: w.text, x: w.x, y: w.y, w: w.w, h: w.h }; }) : null,
+        hasWalls: !!(state.walls && state.walls.map), mode: state.mode
+      };
+    }
+    function openSave() {
+      if (!state.img) return;
+      $('saveVeil').classList.remove('hidden');
+      $('saveBody').innerHTML = '<p class="save-msg">One moment...</p>';
+      SAVES.list().then(function (all) { renderSave(all); }, function () { renderSave(null); });
+    }
+    function closeSave() { $('saveVeil').classList.add('hidden'); $('saveBtn').focus(); }
+    function renderSave(all, msg) {
+      state.saveList = all;
+      var body = $('saveBody');
+      if (!all) { body.innerHTML = '<p class="save-msg err">This browser won’t let the planner save plans (private browsing can do this). You can still download the PDF or PNG.</p>'; return; }
+      var mine = state.savedId && all.filter(function (r) { return r.id === state.savedId; })[0];
+      var full = all.length >= SAVE_LIMIT;
+      var html = (msg ? '<p class="save-msg err">' + msg + '</p>' : '') +
+        '<label class="save-field"><span>Name</span><input id="saveName" maxlength="60" autocomplete="off" value="' + esc(mine ? mine.name : defaultName()) + '"></label>';
+      if (mine) {
+        html += '<div class="save-btns"><button class="btn-primary btn-sm" data-save="main" data-act="update">Save changes</button>' +
+          (full ? '' : '<button class="btn-secondary btn-sm" data-act="new">Save as a new plan</button>') + '</div>' +
+          '<p class="save-msg" style="margin-top:12px">Last saved ' + savedWhen(mine.savedAt) + '.</p>';
+      } else if (!full) {
+        html += '<div class="save-btns"><button class="btn-primary btn-sm" data-save="main" data-act="new">Save</button></div>' +
+          '<p class="save-msg" style="margin-top:12px">You can keep up to ' + SAVE_LIMIT + ' plans. ' + (all.length ? 'You have ' + all.length + ' saved.' : '') + '</p>';
+      }
+      if (full && !mine) {
+        html += '<p class="save-msg">You have ' + SAVE_LIMIT + ' saved plans, which is the most you can keep. Pick one to replace with this plan:</p>' +
+          all.map(function (r) {
+            return '<div class="save-replace"><img src="' + r.thumb + '" alt=""><div><b>' + esc(r.name) + '</b><small>Saved ' + savedWhen(r.savedAt) + '</small></div>' +
+              '<button class="btn-secondary btn-sm" data-act="replace" data-id="' + r.id + '">Replace</button></div>';
+          }).join('');
+      }
+      html += '<p class="saved-note">Plans are saved in this browser on this device. Clearing your browsing data removes them.</p>';
+      body.innerHTML = html;
+      var inp = $('saveName'); if (inp) { inp.focus(); inp.select(); }
+    }
+    function onSaveClick(e) {
+      var b = e.target.closest('button[data-act]'); if (!b) return;
+      var name = (($('saveName') || {}).value || '').trim() || defaultName(), act = b.getAttribute('data-act');
+      var id = act === 'update' ? state.savedId : act === 'replace' ? b.getAttribute('data-id') : 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      b.disabled = true; b.textContent = 'Saving...';
+      var rec;
+      try { rec = planRecord(id, name.slice(0, 60)); } catch (err) { renderSave(state.saveList, 'This plan couldn’t be saved.'); return; }
+      var go = act === 'replace' ? SAVES.remove(id).then(function () { return SAVES.put(rec); }) : SAVES.put(rec);
+      go.then(function () {
+        state.savedId = id; state.planName = rec.name; state.dirty = false;
+        updateSaveBtn(); closeSave();
+      }, function (err) {
+        var quota = err && /quota/i.test(err.name + ' ' + err.message);
+        renderSave(state.saveList, quota ? 'Your browser is out of room for saved plans. Delete one from the start screen and try again.' : 'This plan couldn’t be saved. Try again.');
+      });
+    }
+    // The saved plans on the start screen
+    function renderSavedList() {
+      SAVES.list().then(function (all) {
+        $('savedWrap').classList.toggle('hidden', !all.length);
+        $('savedList').innerHTML = all.map(function (r) {
+          return '<div class="saved-card" role="button" tabindex="0" data-open="' + r.id + '"><img src="' + r.thumb + '" alt="">' +
+            '<b>' + esc(r.name) + '</b><small>Saved ' + savedWhen(r.savedAt) + '</small>' +
+            '<button class="saved-del" data-del="' + r.id + '" aria-label="Delete ' + esc(r.name) + '">Delete</button></div>';
+        }).join('');
+      }, function () { $('savedWrap').classList.add('hidden'); });
+    }
+    function onSavedListClick(e) {
+      var del = e.target.closest('[data-del]');
+      if (del) {
+        e.stopPropagation();
+        if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'Delete?'; return; }   // a second tap confirms
+        SAVES.remove(del.getAttribute('data-del')).then(renderSavedList);
+        return;
+      }
+      var card = e.target.closest('[data-open]');
+      if (card) openSaved(card.getAttribute('data-open'));
+    }
+    function openSaved(id) {
+      showStatus('loading', 'Opening your plan...', '');
+      SAVES.get(id).then(function (rec) {
+        if (!rec) throw new Error('missing');
+        var img = new Image();
+        img.onload = function () {
+          loadImageState(img);
+          state.fileName = rec.fileName || '';
+          // the wall map is read again from the image (it was only there if the plan had one when saved)
+          if (rec.hasWalls !== false) { try { state.walls = { map: SNAP.analyze(img), words: rec.words || [] }; } catch (err) { state.walls = null; } }
+          state.rooms = rec.rooms || []; state.scale = rec.scale || null;
+          state.pieces = rec.pieces || []; state.doors = rec.doors || [];
+          state.erase = rec.erase || []; state.eraseVer++;
+          var ids = [0];
+          state.rooms.concat(state.pieces, state.doors).forEach(function (o) { if (typeof o.id === 'number') ids.push(o.id); });
+          state.nextId = Math.max.apply(null, ids) + 1;
+          state.savedId = rec.id; state.planName = rec.name; state.dirty = false;
+          showScreen('result');
+          if (rec.mode === 'furnish' && state.scale) setMode('furnish');
+          renderAll(); renderPieceBar(); renderDoorBar(); updateSaveBtn();
+        };
+        img.onerror = function () { showStatus('error', 'This saved plan couldn’t be opened.', 'Its picture may have been damaged. Try another, or upload the plan again.', false); };
+        img.src = rec.image;
+      }).catch(function () { showStatus('error', 'This saved plan couldn’t be opened.', 'Try another, or upload the plan again.', false); });
+    }
+
     /* ---------- Keys and gestures ----------
        A pop-up listing every shortcut and gesture, opened from the toolbar or with ?.
        Keep it up to date whenever a command is added. It opens on the touch list
@@ -2999,7 +3205,7 @@
           ['Slide along the wall', 'Drag it'],
           ['Make it wider or narrower', 'Drag an end handle, or type the width']
         ]],
-        ['Undo', [['Undo the last change', 'The Undo button']]]
+        ['Undo and save', [['Undo the last change', 'The Undo button'], ['Save the plan', 'Save, at the top']]]
       ];
       return [
         ['Furniture', [
@@ -3045,6 +3251,7 @@
         ]],
         ['Anywhere', [
           ['Undo', k(mod) + '+' + k('Z')],
+          ['Save the plan', k(mod) + '+' + k('S')],
           ['Open or close this list', k('?')]
         ]]
       ];
@@ -3548,6 +3755,7 @@
       var s = document.querySelectorAll('.screen');
       for (var i = 0; i < s.length; i++) s[i].classList.toggle('active', s[i].id === 'screen-' + id);
       $('headActions').classList.toggle('hidden', id !== 'result');
+      if (id === 'upload') renderSavedList();
     }
     function showStatus(kind, msg, sub, retry) {
       if (kind === 'loading') {
@@ -3564,7 +3772,8 @@
     function hideStatus() {}
 
     function reset() {
-      state.img = null; state.rooms = []; state.selected = -1; state.sendB64 = '';
+      if (unsavedWork() && !confirm('Start a new plan? Changes to this one since you last saved will be lost.')) return;
+      state.img = null; state.savedId = null; state.dirty = false; state.planName = ''; state.rooms = []; state.selected = -1; state.sendB64 = '';
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
       state.view = { z: 1, px: 0, py: 0 };
@@ -3662,12 +3871,25 @@
       });
       $('scaleLen').addEventListener('input', function () { this.classList.remove('bad'); });
 
+      $('saveBtn').addEventListener('click', openSave);
+      $('saveClose').addEventListener('click', closeSave);
+      $('saveVeil').addEventListener('click', function (e) { if (e.target === this) closeSave(); });
+      $('saveBody').addEventListener('click', onSaveClick);
+      $('savedList').addEventListener('click', onSavedListClick);
+      window.addEventListener('beforeunload', function (e) { if (unsavedWork()) { e.preventDefault(); e.returnValue = ''; } });
+      renderSavedList();
       $('keysBtn').addEventListener('click', function () { openKeys(); });
       $('keysClose').addEventListener('click', closeKeys);
       $('keysVeil').addEventListener('click', function (e) { if (e.target === this) closeKeys(); });
       $('keysTabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) renderKeys(b.getAttribute('data-keys')); });
       document.addEventListener('keydown', function (e) {
         var typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+        if (!$('saveVeil').classList.contains('hidden')) {
+          if (e.key === 'Escape') { closeSave(); e.preventDefault(); }
+          else if (e.key === 'Enter' && e.target.id === 'saveName') { var b = document.querySelector('#saveBody [data-save="main"]'); if (b) b.click(); e.preventDefault(); }
+          return;
+        }
+        if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); if (state.img && $('screen-result').classList.contains('active')) openSave(); return; }
         if (!$('keysVeil').classList.contains('hidden')) { if (e.key === 'Escape' || e.key === '?') { closeKeys(); e.preventDefault(); } return; }
         if (e.key === '?' && !typing) { openKeys(); e.preventDefault(); return; }
         if (e.key === ' ' && !typing && state.img) { state.space = true; e.preventDefault(); return; }
@@ -3715,6 +3937,7 @@
     <div class="brand"><span class="brand-studio">Studio Lou</span><span class="brand-tool">Floor Planner</span></div>
     <div class="head-actions hidden" id="headActions">
       <button class="btn-primary btn-sm" id="pdfBtn">Download PDF</button>
+      <button class="btn-secondary btn-sm" id="saveBtn">Save</button>
       <button class="btn-secondary btn-sm optional" id="pngBtn">PNG</button>
       <button class="btn-secondary btn-sm optional" id="jsonBtn">JSON</button>
       <button class="btn-secondary btn-sm" id="resetBtn">New plan</button>
@@ -3740,6 +3963,11 @@
         <p class="big">Drop your floor plan here</p>
         <p class="small">Architectural drawings and listing plans read best. Phone photos work too if the plan is flat and well lit. PNG, JPG, or WEBP.</p>
         <span class="btn-primary">Choose a file</span>
+      </div>
+      <div class="saved hidden" id="savedWrap">
+        <p class="eyebrow">Your saved plans</p>
+        <div class="saved-grid" id="savedList"></div>
+        <p class="saved-note">Saved in this browser on this device. Clearing your browsing data removes them.</p>
       </div>
     </div>
   </div>
@@ -3905,6 +4133,14 @@
     </div>
   </div>
 </div>
+
+  <!-- ── SAVE A PLAN ── -->
+  <div class="keys-veil hidden" id="saveVeil">
+    <div class="keys-card" role="dialog" aria-modal="true" aria-labelledby="saveTitle">
+      <div class="keys-top"><h2 id="saveTitle">Save this plan</h2><button class="keys-close" id="saveClose" aria-label="Close">&times;</button></div>
+      <div class="keys-body" id="saveBody"></div>
+    </div>
+  </div>
 
   <!-- ── KEYS AND GESTURES ── -->
   <div class="keys-veil hidden" id="keysVeil">
