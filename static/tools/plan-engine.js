@@ -775,9 +775,10 @@ var FURNITURE = (function () {
     // flagged when they run into a wall or a piece, but they make no spacing lines of their own
     // and don't count as blocking a window.
     { group: 'Decor', items: [
-      { id: 'plant', name: 'Floor plant', w: 26, d: 26, h: 48, kind: 'decor', role: 'decor', shape: 'round' },
-      { id: 'plantS', name: 'Small plant', w: 16, d: 16, h: 24, kind: 'decor', role: 'decor', shape: 'round' },
-      { id: 'tree', name: 'Potted tree', w: 34, d: 34, h: 72, kind: 'decor', role: 'decor', shape: 'round' },
+      { id: 'plant', name: 'Fiddle leaf fig', w: 26, d: 26, h: 60, kind: 'decor', role: 'decor', shape: 'round' },
+      { id: 'palm', name: 'Palm', w: 32, d: 32, h: 60, kind: 'decor', role: 'decor', shape: 'round' },
+      { id: 'tree', name: 'Olive tree', w: 34, d: 34, h: 72, kind: 'decor', role: 'decor', shape: 'round' },
+      { id: 'plantS', name: 'Snake plant', w: 16, d: 16, h: 30, kind: 'decor', role: 'decor', shape: 'round' },
       { id: 'lamp', name: 'Floor lamp', w: 18, d: 18, h: 62, kind: 'decor', role: 'decor', shape: 'round' },
       { id: 'pouf', name: 'Pouf', w: 20, d: 20, h: 16, kind: 'decor', role: 'decor', shape: 'round' }
     ] }
@@ -996,10 +997,14 @@ var FURNART = (function () {
       if (FINE && len * K > 9) { ctx.beginPath(); ctx.moveTo(L * 0.1, 0); ctx.quadraticCurveTo(L * 0.55, -W * 0.08, L * 0.92, 0); ctx.stroke(); }
     });
   }
-  // A few stems in a little vase, for table tops
-  function vase(ctx, x, y, r) {
-    for (var i = 0; i < 6; i++) leaf(ctx, x, y, i * 60 + 15, r * 1.25, r * 0.55, i % 2 ? C.leafDark : C.leaf);
-    circ(ctx, x, y, r * 0.42); paint(ctx, C.cushion, C.line, 0.6);
+  // A shallow bowl, and a candle: table-top styling without greenery
+  function bowl(ctx, x, y, r) {
+    circ(ctx, x, y, r); paint(ctx, C.cushion, C.line, 0.7);
+    if (FINE) { circ(ctx, x, y, r * 0.62); paint(ctx, null, C.fine, 0.5); }
+  }
+  function candle(ctx, x, y, r) {
+    circ(ctx, x, y, r); paint(ctx, C.pillow, C.line, 0.6);
+    circ(ctx, x, y, Math.max(r * 0.22, 0.3)); paint(ctx, C.line, null);
   }
   // A lamp shade seen from above
   function shade(ctx, x, y, r) {
@@ -1170,7 +1175,7 @@ var FURNART = (function () {
     shade(ctx, -w / 2 + r + 2.5, -d / 2 + r + 1.5, r);
     if (w >= 36) {   // a tray with a small vase
       rr(ctx, w / 2 - 16, -d / 2 + 3, 12, Math.min(8, d - 8), 1.5); paint(ctx, C.accent, C.line, 0.6);
-      vase(ctx, w / 2 - 10, -d / 2 + 3 + Math.min(8, d - 8) / 2, Math.min(2.6, d * 0.14));
+      bowl(ctx, w / 2 - 10, -d / 2 + 3 + Math.min(8, d - 8) / 2, Math.min(2.6, d * 0.14));
     }
   }
 
@@ -1178,12 +1183,12 @@ var FURNART = (function () {
   function coffee(ctx, w, d) {
     top(ctx, w, d, null, 2);
     books(ctx, -w * 0.22, 0, Math.min(11, w * 0.28), Math.min(8, d * 0.4), -8);
-    vase(ctx, w * 0.2, -d * 0.05, Math.min(3.4, d * 0.15));
+    bowl(ctx, w * 0.2, -d * 0.05, Math.min(4, d * 0.17));
   }
   function roundCoffee(ctx, w, d) {
     roundTop(ctx, w, d);
     books(ctx, -w * 0.12, d * 0.1, Math.min(10, w * 0.3), Math.min(7.5, d * 0.22), 12);
-    vase(ctx, w * 0.16, -d * 0.16, Math.min(3.2, w * 0.1));
+    bowl(ctx, w * 0.16, -d * 0.16, Math.min(3.6, w * 0.11));
   }
   // An upholstered ottoman or pouf: piping round the edge and buttons
   function ottoman(ctx, w, d) {
@@ -1197,8 +1202,9 @@ var FURNART = (function () {
     }
     circ(ctx, 0, 0, 0.7); paint(ctx, C.line, null);
   }
-  function side(ctx, w, d) { top(ctx, w, d); vase(ctx, 0, 0, Math.min(w, d) * 0.14); }
-  function roundSide(ctx, w, d) { roundTop(ctx, w, d); vase(ctx, 0, 0, Math.min(w, d) * 0.14); }
+  // Side tables carry a table lamp
+  function side(ctx, w, d) { top(ctx, w, d); shade(ctx, 0, 0, Math.min(w, d) * 0.3); }
+  function roundSide(ctx, w, d) { roundTop(ctx, w, d); shade(ctx, 0, 0, Math.min(w, d) * 0.3); }
   // Media console: door panels, a TV seen from above, a small plant at one end
   function media(ctx, w, d) {
     top(ctx, w, d);
@@ -1207,7 +1213,7 @@ var FURNART = (function () {
     var tw = Math.min(w * 0.72, 58), tx = -w / 2 + Math.max(4, (w - tw) / 2 - 4);
     rr(ctx, tx, -d / 2 + d * 0.3, tw, Math.max(1.6, d * 0.12), 0.6); paint(ctx, C.screen, null);
     rr(ctx, tx + tw / 2 - tw * 0.15, -d / 2 + d * 0.42, tw * 0.3, Math.max(2, d * 0.18), 0.8); paint(ctx, C.frame, C.line, 0.6);   // its stand
-    if (w >= 44) vase(ctx, w / 2 - Math.min(6, d * 0.33), d * 0.1, Math.min(3, d * 0.16));
+    if (w >= 44) books(ctx, w / 2 - Math.min(7, w * 0.1), d * 0.12, Math.min(8, w * 0.12), Math.min(5.5, d * 0.32), -6);
   }
   // Console table: a lamp at one end, books and a bowl
   function consoleTable(ctx, w, d) {
@@ -1219,11 +1225,12 @@ var FURNART = (function () {
   }
 
   /* ---------- Dining ---------- */
-  function roundTable(ctx, w, d) { roundTop(ctx, w, d); vase(ctx, 0, 0, Math.min(w, d) * 0.12); }
+  function roundTable(ctx, w, d) { roundTop(ctx, w, d); bowl(ctx, 0, 0, Math.min(w, d) * 0.12); }
   function rectTable(ctx, w, d) {
     top(ctx, w, d, null, 2);
     if (w > 30) { rr(ctx, -w / 2 + 8, -d * 0.16, w - 16, d * 0.32, 0.5); paint(ctx, C.cushion, C.fine, 0.6); }   // a runner
-    vase(ctx, 0, 0, Math.min(w, d) * 0.13);
+    bowl(ctx, 0, 0, Math.min(w, d) * 0.13);
+    if (w >= 56) { candle(ctx, -w * 0.22, 0, 1.6); candle(ctx, w * 0.22, 0, 1.6); }
   }
 
   /* ---------- Office ---------- */
@@ -1251,28 +1258,98 @@ var FURNART = (function () {
     }
   }
 
-  /* ---------- Decor ---------- */
-  function plant(ctx, w, d) {
-    var R = Math.min(w, d) / 2;
-    circ(ctx, 0, 0, R * 0.52); paint(ctx, C.pot, C.line, 0.8);
-    circ(ctx, 0, 0, R * 0.42); paint(ctx, C.soil, null);
-    [8, 80, 150, 222, 292].forEach(function (a, i) { leaf(ctx, 0, 0, a, R * (0.96 - (i % 2) * 0.06), R * 0.36, C.leafDark); });
-    [44, 116, 186, 258, 330].forEach(function (a, i) { leaf(ctx, 0, 0, a, R * (0.8 - (i % 2) * 0.08), R * 0.32, C.leaf); });
-    circ(ctx, 0, 0, R * 0.08); paint(ctx, C.vein, null);
+  /* ---------- Decor: four plants, each with its own leaf ---------- */
+  function pot(ctx, R, f) {
+    circ(ctx, 0, 0, R * f); paint(ctx, C.pot, C.line, 0.8);
+    circ(ctx, 0, 0, R * f * 0.8); paint(ctx, C.soil, null);
   }
-  // A potted tree: a basket and a full, round canopy of small leaves
-  function tree(ctx, w, d) {
-    var R = Math.min(w, d) / 2;
-    circ(ctx, 0, 0, R * 0.42); paint(ctx, C.pot, C.line, 0.8);
-    if (FINE) { circ(ctx, 0, 0, R * 0.36); paint(ctx, null, C.fine, 0.5); }
-    var rings = [[0.95, 14, 0.3, C.leafDark, 0], [0.75, 12, 0.28, C.leaf, 15], [0.5, 9, 0.26, C.leafDark, 7], [0.28, 6, 0.22, C.leaf, 30]];
-    rings.forEach(function (rg) {
-      for (var i = 0; i < rg[1]; i++) {
-        var a = i / rg[1] * 360 + rg[4], rad = a * Math.PI / 180, base = R * rg[0] * 0.45;
-        leaf(ctx, Math.cos(rad) * base, Math.sin(rad) * base, a + (i % 2 ? 18 : -18), R * rg[0] * 0.55, R * rg[2] * 0.42, rg[3]);
+  // Fiddle leaf fig: a few big, broad, round-tipped leaves at uneven angles
+  function broadLeaf(ctx, x, y, ang, len, wid, fill) {
+    turned(ctx, x, y, ang, function () {
+      var L = len * K, W = wid * K;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(L * 0.15, -W * 0.7, L * 0.7, -W * 1.05, L * 0.97, -W * 0.25);
+      ctx.quadraticCurveTo(L * 1.03, 0, L * 0.97, W * 0.25);
+      ctx.bezierCurveTo(L * 0.7, W * 1.05, L * 0.15, W * 0.7, 0, 0);
+      ctx.closePath();
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.strokeStyle = C.vein; ctx.lineWidth = 0.55 * LW; ctx.lineJoin = 'round'; ctx.stroke();
+      if (FINE && len * K > 9) {
+        ctx.beginPath(); ctx.moveTo(L * 0.08, 0); ctx.lineTo(L * 0.9, 0);
+        [0.35, 0.55, 0.75].forEach(function (t) {   // side veins
+          ctx.moveTo(L * t, 0); ctx.lineTo(L * (t + 0.12), -W * 0.5);
+          ctx.moveTo(L * t, 0); ctx.lineTo(L * (t + 0.12), W * 0.5);
+        });
+        ctx.lineWidth = 0.45 * LW; ctx.stroke();
       }
     });
-    circ(ctx, 0, 0, R * 0.07); paint(ctx, C.line, null);
+  }
+  function fiddle(ctx, w, d) {
+    var R = Math.min(w, d) / 2;
+    pot(ctx, R, 0.48);
+    [[20, 0.98, C.leafDark], [105, 0.9, C.leafDark], [200, 0.96, C.leafDark], [290, 0.88, C.leafDark],
+     [62, 0.78, C.leaf], [158, 0.74, C.leaf], [245, 0.8, C.leaf], [335, 0.72, C.leaf]].forEach(function (l) {
+      broadLeaf(ctx, 0, 0, l[0], R * l[1], R * 0.34, l[2]);
+    });
+  }
+  // Snake plant: stiff, narrow, pointed blades with a pale edge
+  function snake(ctx, w, d) {
+    var R = Math.min(w, d) / 2;
+    pot(ctx, R, 0.62);
+    [[10, 0.95], [55, 0.8], [100, 1], [148, 0.85], [190, 0.96], [235, 0.78], [280, 0.98], [325, 0.84]].forEach(function (b, i) {
+      turned(ctx, 0, 0, b[0], function () {
+        var L = R * b[1] * K, W = R * 0.13 * K;
+        ctx.beginPath();
+        ctx.moveTo(0, -W * 0.6);
+        ctx.quadraticCurveTo(L * 0.55, -W * 1.1, L, 0);
+        ctx.quadraticCurveTo(L * 0.55, W * 1.1, 0, W * 0.6);
+        ctx.closePath();
+        ctx.fillStyle = i % 2 ? '#8fa552' : C.leafDark; ctx.fill();
+        ctx.strokeStyle = '#d3d99b'; ctx.lineWidth = 1.1 * LW; ctx.stroke();   // the pale band at the edge
+        ctx.strokeStyle = C.vein; ctx.lineWidth = 0.5 * LW; ctx.stroke();
+        if (FINE && L > 12) {   // cross bands
+          ctx.beginPath();
+          [0.3, 0.5, 0.7].forEach(function (t) { ctx.moveTo(L * t, -W * 0.5); ctx.lineTo(L * (t + 0.04), W * 0.5); });
+          ctx.strokeStyle = '#7f9445'; ctx.lineWidth = 0.4 * LW; ctx.stroke();
+        }
+      });
+    });
+  }
+  // Palm: arching fronds, a midrib with fine leaflets either side
+  function palm(ctx, w, d) {
+    var R = Math.min(w, d) / 2;
+    pot(ctx, R, 0.4);
+    [0, 60, 120, 180, 240, 300, 30, 150, 270].forEach(function (a, i) {
+      var outer = i < 6, len = R * (outer ? 0.97 : 0.62);
+      turned(ctx, 0, 0, a + (outer ? 0 : 8), function () {
+        var L = len * K, bend = L * 0.12, n = Math.max(5, Math.round(len / 1.6));
+        ctx.strokeStyle = outer ? C.leafDark : C.leaf;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(0.8 * LW, Math.min(0.45 * K, 1.6 * LW));
+        for (var k = 1; k < n; k++) {   // leaflets: thin lines angled toward the tip
+          var t = k / n, x = L * t, y = bend * t * t, ln = L * 0.24 * Math.sin(Math.PI * Math.min(1, t * 1.1)) + 0.5 * K;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + ln * 0.45, y - ln); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + ln * 0.45, y + ln); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(L * 0.5, bend * 0.2, L, bend);
+        ctx.strokeStyle = C.vein; ctx.lineWidth = 0.8 * LW; ctx.stroke();
+      });
+    });
+  }
+  // Olive tree: a basket and a full canopy of small, narrow, silvery leaves
+  function olive(ctx, w, d) {
+    var R = Math.min(w, d) / 2, grey = '#aab489', greyDark = '#8f9b6c';
+    circ(ctx, 0, 0, R * 0.42); paint(ctx, C.pot, C.line, 0.8);
+    if (FINE) { circ(ctx, 0, 0, R * 0.36); paint(ctx, null, C.fine, 0.5); }
+    var rings = [[0.95, 18, 0.16, greyDark, 0], [0.75, 15, 0.15, grey, 12], [0.52, 11, 0.14, greyDark, 5], [0.3, 7, 0.13, grey, 25]];
+    rings.forEach(function (rg) {
+      for (var i = 0; i < rg[1]; i++) {
+        var a = i / rg[1] * 360 + rg[4], rad = a * Math.PI / 180, base = R * rg[0] * 0.5;
+        leaf(ctx, Math.cos(rad) * base, Math.sin(rad) * base, a + (i % 2 ? 22 : -22), R * rg[0] * 0.5, R * rg[2] * 0.5, rg[3]);
+      }
+    });
+    circ(ctx, 0, 0, R * 0.06); paint(ctx, C.line, null);
   }
   // Floor lamp: a weighted base just visible round a wide shade
   function floorLamp(ctx, w, d) {
@@ -1287,7 +1364,7 @@ var FURNART = (function () {
     coffee: coffee, coffeeR: roundCoffee, ottoman: ottoman, side: side, sideR: roundSide, media: media, console: consoleTable,
     full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser,
     chair: diningChair, desk: desk, deskchair: deskChair, bookcase: bookcase,
-    plant: plant, plantS: plant, tree: tree, lamp: floorLamp, pouf: ottoman
+    plant: fiddle, palm: palm, plantS: snake, tree: olive, lamp: floorLamp, pouf: ottoman
   };
   // Pieces of your own, and anything not in the catalog, draw by what they are
   function pick(pc) {
@@ -1308,7 +1385,7 @@ var FURNART = (function () {
     var fn = pick(pc), round = pc.shape === 'round';
     ctx.save();
     // a soft shadow under the footprint (not under chairs, plants and lamps, whose drawings are smaller than their outline)
-    if (o.shadow !== false && ['chair', 'deskchair', 'plant', 'plantS', 'tree', 'lamp'].indexOf(pc.type) < 0) {
+    if (o.shadow !== false && ['chair', 'deskchair', 'plant', 'palm', 'plantS', 'tree', 'lamp'].indexOf(pc.type) < 0) {
       ctx.save();
       ctx.shadowColor = 'rgba(67,62,60,0.18)'; ctx.shadowBlur = 5 * ratio; ctx.shadowOffsetY = 1.5 * ratio;
       if (round) ell(ctx, 0, 0, pc.w / 2, pc.d / 2);
