@@ -350,7 +350,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=16"></script>
+  <script src="/static/tools/plan-engine.js?v=17"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -1233,7 +1233,7 @@
     function addPiece(spec) {
       if (!state.scale) return;
       pushUndo();
-      var seats = FURNITURE.chairLayout(spec), chair = FURNITURE.get('chair');
+      var seats = FURNITURE.chairLayout(spec), chair = FURNITURE.seatFor(spec);
       var room = { w: spec.w, d: spec.d };
       seats.forEach(function (c) {
         var bb = PLAN.bounds(GEO.place(FURNITURE.outline(chair), c.x, c.y, c.rot, 1));
@@ -1252,7 +1252,7 @@
       renderPieceBar(); renderSpacing(); draw();
     }
     // The chairs that came with a table
-    function chairsOf(pc) { return pc && pc.role === 'dining' ? state.pieces.filter(function (o) { return o.group === pc.id; }) : []; }
+    function chairsOf(pc) { return FURNITURE.seated(pc) ? state.pieces.filter(function (o) { return o.group === pc.id; }) : []; }
     function addCustom() {
       var nameEl = $('customName'), wEl = $('customW'), dEl = $('customD'), round = $('customShape').value === 'round';
       var w = FURNITURE.parseInches(wEl.value), d = FURNITURE.parseInches(dEl.value), ok = true;
@@ -1410,6 +1410,7 @@
     function catFor(r) {
       if (!r) return null;
       if (/office|study/i.test(r.name)) return 'Office';
+      if (/kitchen|kitchenette/i.test(r.name)) return 'Kitchen';
       var t = RUG.roomType(r.name);
       return t === 'bedroom' ? 'Bedroom' : t === 'dining' ? 'Dining' : t === 'living' ? 'Living' : null;
     }
@@ -1538,7 +1539,7 @@
         pushUndo();
         if (id === 'pcW' && pc.shape === 'round' && Math.round(pc.w) === Math.round(pc.d)) { pc.w = v; pc.d = v; }   // a circle stays a circle
         else if (id === 'pcW') pc.w = v; else pc.d = v;
-        if (pc.role === 'dining') relayoutChairs(pc);
+        if (FURNITURE.seated(pc)) relayoutChairs(pc);
       } else return;
       renderPieceBar(); renderSpacing(); draw();
     }
@@ -1548,9 +1549,9 @@
       var spec = FURNITURE.get(t.type);
       if (!spec || !spec.chairs) return;
       state.pieces = state.pieces.filter(function (o) { return o.group !== t.id; });
-      var k = 1 / 12 / state.scale.ftPerPx, cx = t.x / 100 * state.W, cy = t.y / 100 * state.H, chair = FURNITURE.get('chair');
+      var k = 1 / 12 / state.scale.ftPerPx, cx = t.x / 100 * state.W, cy = t.y / 100 * state.H, chair = FURNITURE.seatFor(spec);
       var fit = FURNITURE.fitChairs({ w: t.w, d: t.d, chairs: spec.chairs });
-      FURNITURE.chairLayout({ w: t.w, d: t.d, shape: t.shape, chairs: fit }).forEach(function (c) {
+      FURNITURE.chairLayout({ w: t.w, d: t.d, shape: t.shape, chairs: fit, seat: spec.seat, tuck: spec.tuck }).forEach(function (c) {
         var p = GEO.place([{ x: c.x * k, y: c.y * k }], cx, cy, t.rot, 1)[0];
         state.pieces.push(makePiece(chair, p.x / state.W * 100, p.y / state.H * 100, (c.rot + t.rot) % 360, t.id));
       });
@@ -1938,7 +1939,7 @@
       var shift = GEO.place([{ x: (d.sx || 0) * (w - o.w) / 2 * k, y: (d.sy || 0) * (dd - o.d) / 2 * k }], 0, 0, o.rot, 1)[0];
       pc.w = w; pc.d = dd;
       pc.x = o.x + shift.x / state.W * 100; pc.y = o.y + shift.y / state.H * 100;
-      if (pc.role === 'dining') relayoutChairs(pc);
+      if (FURNITURE.seated(pc)) relayoutChairs(pc);
       else d.chairs.forEach(function (s) { s.c.x = s.x + (pc.x - o.x); s.c.y = s.y + (pc.y - o.y); });
       state.pieceSel = state.pieces.indexOf(pc);
       draw();
@@ -2076,6 +2077,7 @@
       if (type === 'talk') return status === 'ok' ? 'Easy to talk' : status === 'tight' ? 'A bit far' : 'Too far to talk';
       if (type === 'tv') return status === 'ok' ? 'Comfortable' : status === 'tight' ? (near ? 'A bit close' : 'A bit far') : (near ? 'Too close' : 'Too far');
       if (type === 'console') return status === 'ok' ? 'Set behind it' : 'Gap behind the sofa';
+      if (type === 'aisle') return status === 'ok' ? 'Room for two cooks' : status === 'tight' ? 'Fine for one cook' : 'Too narrow';
       if (status === 'ok') return 'Comfortable';
       if (type === 'coffee') return status === 'close' ? (inch < SPACE.COFFEE.min ? 'Too close' : 'Too far') : inch > SPACE.COFFEE.max ? 'A bit far' : 'Tight';
       if (type === 'drawers' || type === 'desk') return status === 'close' ? 'Too tight' : 'Tight';
@@ -2094,6 +2096,8 @@
         }
         else if (r.type === 'bedFoot') { label = 'Foot of the ' + A + ' to ' + (B ? 'the ' + B : 'the wall'); value = inchText(r.inch); }
         else if (r.type === 'dining') { label = 'Around the ' + A; value = inchText(r.inch) + (r.open ? ' on a side with no chairs' : r.walk ? ' where people walk behind the chairs' : ' at the tightest side'); }
+        else if (r.type === 'aisle') { label = 'Work aisle between the ' + A + ' and the ' + B; value = inchText(r.inch); }
+        else if (r.type === 'seating') { label = 'Behind the stools at the ' + A; value = inchText(r.inch) + (r.walk ? ' where people walk behind' : ''); }
         else if (r.type === 'desk') { label = 'Chair space behind the ' + A; value = inchText(r.inch); }
         else if (r.type === 'drawers') { label = 'In front of the ' + A + ' (drawers)'; value = inchText(r.inch); }
         else if (r.type === 'console') { label = 'The ' + B + ' behind the ' + A; value = inchText(r.inch); }
@@ -3689,6 +3693,8 @@
       }
       doc.save('floor-plan-summary.pdf');
     }
+    // The plan as a data file. Not on the page (people save plans instead); run exportJSON() in the
+    // browser console if a data file is ever needed for development.
     function exportJSON() {
       var data = {
         unit: 'ft',
@@ -3823,9 +3829,7 @@
 
       $('addBtn').addEventListener('click', addRoom);
       $('pngBtn').addEventListener('click', exportPNG);
-      $('jsonBtn').addEventListener('click', exportJSON);
       $('pdfBtn').addEventListener('click', exportPDF);
-      if (IN_TOOLKIT) $('jsonBtn').classList.add('hidden'); // data file is for the standalone demo only
       $('resetBtn').addEventListener('click', reset);
       $('retryBtn').addEventListener('click', extract);
       $('newBtn').addEventListener('click', reset);
@@ -3939,7 +3943,6 @@
       <button class="btn-primary btn-sm" id="pdfBtn">Download PDF</button>
       <button class="btn-secondary btn-sm" id="saveBtn">Save</button>
       <button class="btn-secondary btn-sm optional" id="pngBtn">PNG</button>
-      <button class="btn-secondary btn-sm optional" id="jsonBtn">JSON</button>
       <button class="btn-secondary btn-sm" id="resetBtn">New plan</button>
     </div>
   </header>

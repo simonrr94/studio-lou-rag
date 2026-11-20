@@ -771,6 +771,20 @@ var FURNITURE = (function () {
       { id: 'deskchair', name: 'Desk chair', w: 26, d: 26, h: 38, kind: 'seat', role: 'chair' },
       { id: 'bookcase', name: 'Bookcase', w: 36, d: 14, h: 72, kind: 'table', role: 'storage' }
     ] },
+    // Kitchen: counters, appliances and islands, checked against the NKBA kitchen planning guidelines
+    // (work aisles 42" for one cook, 48" for two; walkways 36"; seating clearance 32" / 36" / 44").
+    // Counters, the range, the fridge and the pantry stand with their backs to a wall and their fronts
+    // to the room. An island with seating brings its stools, tucked under the overhang on its front.
+    { group: 'Kitchen', items: [
+      { id: 'counter', name: 'Counter', w: 96, d: 25, h: 36, kind: 'kitchen', role: 'counter' },
+      { id: 'sink', name: 'Sink', w: 36, d: 25, h: 36, kind: 'kitchen', role: 'counter' },
+      { id: 'range', name: 'Range', w: 30, d: 26, h: 36, kind: 'kitchen', role: 'counter' },
+      { id: 'fridge', name: 'Refrigerator', w: 36, d: 30, h: 70, kind: 'kitchen', role: 'counter' },
+      { id: 'pantry', name: 'Pantry cabinet', w: 30, d: 24, h: 84, kind: 'kitchen', role: 'counter' },
+      { id: 'island', name: 'Island with seating', w: 72, d: 40, h: 36, kind: 'kitchen', role: 'island', chairs: { front: 3 }, seat: 'stool', tuck: 8, overhang: 12 },
+      { id: 'islandP', name: 'Island', w: 60, d: 30, h: 36, kind: 'kitchen', role: 'island' },
+      { id: 'stool', name: 'Counter stool', w: 17, d: 17, h: 26, kind: 'seat', role: 'chair', shape: 'round' }
+    ] },
     // Decor: plants, lamps and a pouf. They block walking routes and door swings and are
     // flagged when they run into a wall or a piece, but they make no spacing lines of their own
     // and don't count as blocking a window.
@@ -832,9 +846,19 @@ var FURNITURE = (function () {
   // and which way each one is turned. Chairs face the table with their seats
   // TUCK inches under its edge, the way they sit when pushed in.
   var TUCK = 4;
+  // The seat a table or island takes: dining chairs, or counter stools
+  function seatFor(t) { return get((t && t.seat) || 'chair'); }
+  // Pieces that bring their own seats (and take them along when moved)
+  function seated(pc) { return pc && (pc.role === 'dining' || pc.role === 'island'); }
   function chairLayout(t) {
-    var c = get('chair'), off = c.d / 2 - TUCK, out = [];
-    if (!t || !t.chairs) return out;
+    if (!t || !t.chairs) return [];
+    var c = seatFor(t), off = c.d / 2 - (t.tuck || TUCK), out = [];
+    if (t.chairs.front) {
+      // A row along the front edge (an island's seating side), facing in
+      var nf = t.chairs.front, stepF = t.w / nf;
+      for (var f = 0; f < nf; f++) out.push({ x: -t.w / 2 + stepF * (f + 0.5), y: t.d / 2 + off, rot: 180 });
+      return out;
+    }
     if (t.chairs.around) {
       // Evenly around, starting at the top, each chair facing the middle
       var R = Math.max(t.w, t.d) / 2 + off;
@@ -868,6 +892,7 @@ var FURNITURE = (function () {
   var SEAT = 24, CORNER = 6;
   function fitChairs(t) {
     if (!t || !t.chairs) return null;
+    if (t.chairs.front) return { front: Math.max(1, Math.floor(t.w / SEAT)) };   // 24" of counter per stool (NKBA)
     if (t.chairs.around) {
       var D = Math.max(t.w, t.d);
       var n = D < 36 ? 2 : D < 42 ? 3 : D < 54 ? 4 : D < 60 ? 5 : D < 66 ? 6 : D < 72 ? 7 : D < 84 ? 8 : Math.floor(Math.PI * D / 30);
@@ -901,7 +926,7 @@ var FURNITURE = (function () {
   function bounds(pc, cx, cy, k) { return PLAN.bounds(shapeAt(pc, cx, cy, k)); }
 
   return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, outline: outline, legs: legs, parts: parts,
-           chairLayout: chairLayout, fitChairs: fitChairs, shapeAt: shapeAt, toLocal: toLocal, contains: contains, bounds: bounds };
+           chairLayout: chairLayout, fitChairs: fitChairs, seatFor: seatFor, seated: seated, shapeAt: shapeAt, toLocal: toLocal, contains: contains, bounds: bounds };
 })();
 
 /* =====================================================================
@@ -1258,6 +1283,83 @@ var FURNART = (function () {
     }
   }
 
+  /* ---------- Kitchen ---------- */
+  var STONE = '#f4efe6', STEEL = '#e3ddd3', BURNER = '#8a7e72';
+  // A countertop: a backsplash line along the back, the nosing along the front, and a few soft veins
+  function countertop(ctx, w, d, x0, y0) {
+    x0 = x0 || 0; y0 = y0 || 0;
+    rr(ctx, x0 - w / 2, y0 - d / 2, w, d, 0.8); paint(ctx, STONE, C.line, 1);
+    line(ctx, x0 - w / 2 + 0.6, y0 - d / 2 + 1.2, x0 + w / 2 - 0.6, y0 - d / 2 + 1.2, C.fine, 0.6);
+    if (FINE) {
+      line(ctx, x0 - w / 2 + 0.6, y0 + d / 2 - 1.2, x0 + w / 2 - 0.6, y0 + d / 2 - 1.2, C.fine, 0.45);
+      for (var i = 0; i < Math.floor(w / 30); i++) {   // a few veins in the stone
+        var vx = x0 - w / 2 + 12 + i * 30 + (i % 2) * 7;
+        ctx.beginPath(); ctx.moveTo(vx * K, (y0 - d / 2 + 4) * K);
+        ctx.bezierCurveTo((vx + 6) * K, (y0 - d * 0.1) * K, (vx - 3) * K, (y0 + d * 0.1) * K, (vx + 9) * K, (y0 + d / 2 - 4) * K);
+        ctx.strokeStyle = '#e4dccf'; ctx.lineWidth = 0.6 * LW; ctx.stroke();
+      }
+    }
+  }
+  function counter(ctx, w, d) {
+    countertop(ctx, w, d);
+    if (w >= 60) { rr(ctx, -w / 2 + 6, -d / 2 + 3, Math.min(14, w * 0.15), Math.min(9, d * 0.36), 1); paint(ctx, C.wood, C.line, 0.6); }   // a cutting board
+    if (w >= 84) bowl(ctx, w / 2 - 10, -d / 2 + 7, 4);
+  }
+  // Sink: an undermount basin and a faucet at the back
+  function sink(ctx, w, d) {
+    countertop(ctx, w, d);
+    var bw = Math.min(w - 8, 30), bd = Math.min(d - 9, 17), by = -d / 2 + 4.5;
+    rr(ctx, -bw / 2, by, bw, bd, 2.5); paint(ctx, STEEL, C.line, 0.8);
+    if (FINE) { rr(ctx, -bw / 2 + 1, by + 1, bw - 2, bd - 2, 2); paint(ctx, null, C.fine, 0.5); }
+    circ(ctx, 0, by + bd * 0.62, 0.9); paint(ctx, C.line, null);   // the drain
+    circ(ctx, 0, -d / 2 + 2.6, 1.1); paint(ctx, C.frame, C.line, 0.7);   // the faucet, reaching over the basin
+    rr(ctx, -0.5, -d / 2 + 2.6, 1, 6, 0.5); paint(ctx, C.frame, C.line, 0.6);
+  }
+  // Range: four burners with grates, the controls along the front
+  function range(ctx, w, d) {
+    rr(ctx, -w / 2, -d / 2, w, d, 0.8); paint(ctx, STEEL, C.line, 1);
+    rr(ctx, -w / 2 + 1.2, -d / 2 + 1.2, w - 2.4, d - 5.5, 0.6); paint(ctx, '#d9d2c7', C.line, 0.6);
+    var bx = w * 0.22, top = -d / 2 + 1.2 + (d - 5.5) * 0.28, bot = -d / 2 + 1.2 + (d - 5.5) * 0.72;
+    [[-bx, top, 4.6], [bx, top, 3.8], [-bx, bot, 3.8], [bx, bot, 4.6]].forEach(function (b) {
+      circ(ctx, b[0], b[1], b[2]); paint(ctx, null, BURNER, 0.8);
+      circ(ctx, b[0], b[1], b[2] * 0.45); paint(ctx, BURNER, null);
+      if (FINE) { line(ctx, b[0] - b[2] - 0.8, b[1], b[0] + b[2] + 0.8, b[1], BURNER, 0.5); line(ctx, b[0], b[1] - b[2] - 0.8, b[0], b[1] + b[2] + 0.8, BURNER, 0.5); }
+    });
+    for (var i = 0; i < 4; i++) { circ(ctx, -w / 2 + w * (i + 0.5) / 4, d / 2 - 2.1, 0.9); paint(ctx, C.cushion, C.line, 0.6); }   // knobs
+  }
+  // Refrigerator: two doors meeting in the middle, handles at the front
+  function fridge(ctx, w, d) {
+    rr(ctx, -w / 2, -d / 2, w, d, 1); paint(ctx, STEEL, C.line, 1);
+    if (FINE) { rr(ctx, -w / 2 + 1.2, -d / 2 + 1.2, w - 2.4, d - 4.6, 0.6); paint(ctx, null, C.fine, 0.5); }
+    line(ctx, 0, d / 2 - 3.4, 0, d / 2, C.line, 0.7);
+    line(ctx, -w / 2, d / 2 - 3.4, w / 2, d / 2 - 3.4, C.line, 0.7);   // the door fronts
+    [-1, 1].forEach(function (sg) { rr(ctx, sg * 2.2 - (sg < 0 ? 1 : 0), d / 2 - 0.4, 1, 1.6, 0.4); paint(ctx, C.line, null); });   // handles
+  }
+  function pantry(ctx, w, d) {
+    rr(ctx, -w / 2, -d / 2, w, d, 0.8); paint(ctx, C.wood, C.line, 1);
+    if (FINE) { rr(ctx, -w / 2 + 1.2, -d / 2 + 1.2, w - 2.4, d - 4, 0.5); paint(ctx, null, C.fine, 0.5); }
+    line(ctx, -w / 2, d / 2 - 2.6, w / 2, d / 2 - 2.6, C.line, 0.6);
+    if (w >= 24) line(ctx, 0, d / 2 - 2.6, 0, d / 2, C.line, 0.6);
+  }
+  // Island: the cabinet base under a stone top; on a seating island the overhang shows as a dashed line
+  function island(ctx, w, d, pc) {
+    var spec = FURNITURE.get(pc && pc.type), over = spec && spec.chairs ? Math.min(spec.overhang || 12, d * 0.35) : 0;
+    countertop(ctx, w, d);
+    if (over) {
+      ctx.save(); ctx.setLineDash([2 * K, 1.5 * K]);
+      line(ctx, -w / 2 + 1, d / 2 - over, w / 2 - 1, d / 2 - over, C.line, 0.6);
+      ctx.restore();
+    }
+    if (w >= 48) bowl(ctx, w * 0.2, -d / 2 + (d - over) / 2, Math.min(5, d * 0.13));
+  }
+  // Counter stool: a round seat with a footrest ring below
+  function stool(ctx, w, d) {
+    var R = Math.min(w, d) / 2;
+    circ(ctx, 0, 0, R); paint(ctx, null, C.line, 0.7);   // footrest
+    circ(ctx, 0, 0, R * 0.74); paint(ctx, C.accent, C.line, 0.85);
+    if (FINE) { circ(ctx, 0, 0, R * 0.5); paint(ctx, null, C.fine, 0.5); }
+  }
+
   /* ---------- Decor: four plants, each with its own leaf ---------- */
   function pot(ctx, R, f) {
     circ(ctx, 0, 0, R * f); paint(ctx, C.pot, C.line, 0.8);
@@ -1364,6 +1466,7 @@ var FURNART = (function () {
     coffee: coffee, coffeeR: roundCoffee, ottoman: ottoman, side: side, sideR: roundSide, media: media, console: consoleTable,
     full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser,
     chair: diningChair, desk: desk, deskchair: deskChair, bookcase: bookcase,
+    counter: counter, sink: sink, range: range, fridge: fridge, pantry: pantry, island: island, islandP: island, stool: stool,
     plant: fiddle, palm: palm, plantS: snake, tree: olive, lamp: floorLamp, pouf: ottoman
   };
   // Pieces of your own, and anything not in the catalog, draw by what they are
@@ -1374,6 +1477,8 @@ var FURNART = (function () {
     if (pc.role === 'bed') return bed;
     if (pc.role === 'seat') return seat;
     if (pc.role === 'chair') return diningChair;
+    if (pc.role === 'island') return island;
+    if (pc.role === 'counter') return counter;
     return pc.shape === 'round' ? function (ctx, w, d) { roundTop(ctx, w, d, C.cushion); } : function (ctx, w, d) { top(ctx, w, d, C.cushion); };
   }
 
@@ -1385,7 +1490,7 @@ var FURNART = (function () {
     var fn = pick(pc), round = pc.shape === 'round';
     ctx.save();
     // a soft shadow under the footprint (not under chairs, plants and lamps, whose drawings are smaller than their outline)
-    if (o.shadow !== false && ['chair', 'deskchair', 'plant', 'palm', 'plantS', 'tree', 'lamp'].indexOf(pc.type) < 0) {
+    if (o.shadow !== false && ['chair', 'deskchair', 'stool', 'plant', 'palm', 'plantS', 'tree', 'lamp'].indexOf(pc.type) < 0) {
       ctx.save();
       ctx.shadowColor = 'rgba(67,62,60,0.18)'; ctx.shadowBlur = 5 * ratio; ctx.shadowOffsetY = 1.5 * ratio;
       if (round) ell(ctx, 0, 0, pc.w / 2, pc.d / 2);
@@ -1406,8 +1511,8 @@ var FURNART = (function () {
     if (thumbs[key]) return thumbs[key];
     var dpr = 2, cv = document.createElement('canvas'), ctx = cv.getContext('2d');
     cv.width = cssW * dpr; cv.height = cssH * dpr;
-    var parts = [{ pc: Object.assign({ type: spec.id }, spec), x: 0, y: 0, rot: 0 }], all = [], chair = FURNITURE.get('chair');
-    FURNITURE.chairLayout(spec).forEach(function (c) { parts.unshift({ pc: Object.assign({ type: 'chair' }, chair), x: c.x, y: c.y, rot: c.rot }); });
+    var parts = [{ pc: Object.assign({ type: spec.id }, spec), x: 0, y: 0, rot: 0 }], all = [], chair = FURNITURE.seatFor(spec);
+    FURNITURE.chairLayout(spec).forEach(function (c) { parts.unshift({ pc: Object.assign({ type: chair.id }, chair), x: c.x, y: c.y, rot: c.rot }); });
     parts.forEach(function (p) { all = all.concat(GEO.place(FURNITURE.outline(p.pc), p.x, p.y, p.rot, 1)); });
     var b = PLAN.bounds(all), pad = 3, k = Math.min((cv.width - 2 * pad * dpr) / b.w, (cv.height - 2 * pad * dpr) / b.h);
     ctx.translate(cv.width / 2 - (b.x + b.w / 2) * k, cv.height / 2 - (b.y + b.h / 2) * k);
@@ -1436,7 +1541,8 @@ var SPACE = (function () {
   var AGAINST = 4;        // inches: closer than this, the piece is set against it on purpose
   var PASSAGE = 12;       // inches: walkway gaps from here up to 36" are flagged on the plan
   var COFFEE_PAIR = 36;   // inches: a coffee table farther than this from a seat is not part of its group
-  var WALL_PATH = { seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, dresser: 1, media: 1, console: 1, other: 1 };   // pieces whose gap to a wall can be a walkway
+  var WALL_PATH = { seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, dresser: 1, media: 1, console: 1, other: 1, counter: 1, island: 1 };
+  var KITCHEN = { counter: 1, island: 1 };   // the pieces a work aisle runs between   // pieces whose gap to a wall can be a walkway
   // Pieces set out together on purpose. A gap between them is part of the group, not a walkway:
   // seating with its coffee, side, and console tables; seats side by side; a bed and its nightstands.
   function grouped(a, b) {
@@ -1468,7 +1574,11 @@ var SPACE = (function () {
     bed: { ok: 24, tight: 18 },         // beside a bed
     bedFoot: { ok: 30, tight: 24 },     // at the foot of a bed
     desk: { ok: 36, tight: 30 },        // behind a desk, where the chair rolls out
-    drawers: { ok: 36, tight: 30 }      // in front of a dresser, to open drawers and stand
+    drawers: { ok: 36, tight: 30 },     // in front of a dresser, to open drawers and stand
+    // Kitchens (NKBA Kitchen Planning Guidelines 6 to 8)
+    aisle: { ok: 48, tight: 42 },       // work aisle: 48" for two cooks, 42" for one
+    seat: { ok: 36, tight: 32 },        // behind island stools: 32" if nobody passes, 36" to edge past
+    seatWalk: { ok: 44, tight: 36 }     // behind island stools on a walking route: 44" to walk past
   };
   var CONSOLE_PAIR = 12;  // inches: a console table this close behind a seat belongs to it
   var CONSOLE_OK = 8;     // inches: a few inches behind the sofa back is the norm
@@ -1565,7 +1675,7 @@ var SPACE = (function () {
       var skip = function (o, j) {
         if (j === i) return true;
         if (o.role === 'decor') return true;
-        if ((pc.role === 'dining' || pc.role === 'desk') && o.role === 'chair') return true;   // chairs pull out
+        if ((pc.role === 'dining' || pc.role === 'desk' || pc.role === 'island') && o.role === 'chair') return true;   // chairs and stools pull out
         if (pc.group && o.group === pc.group) return true;                      // a chair and its own table or neighbors
         if (pc.role === 'chair' && pc.group && o.id === pc.group) return true;
         return false;
@@ -1585,6 +1695,9 @@ var SPACE = (function () {
         else if (pc.role === 'bed' && (sd.name === 'left' || sd.name === 'right')) rule = 'bed';
         else if (pc.role === 'bed' && sd.name === 'front') rule = 'bedFoot';
         else if (pc.role === 'dining') rule = chairsOnSide(pc, sd, pieces) ? (pc.walkBehind && pc.walkBehind[sd.name] ? 'diningWalk' : 'dining') : 'diningOpen';
+        // Kitchen: behind an island's stools, and the work aisle between counters, appliances and islands
+        else if (pc.role === 'island' && chairsOnSide(pc, sd, pieces)) rule = pc.walkBehind && pc.walkBehind[sd.name] ? 'seatWalk' : 'seat';
+        else if (other && inch >= PASSAGE && KITCHEN[pc.role] && KITCHEN[other.role] && (pc.role === 'island' || sd.name === 'front')) rule = 'aisle';   // closer: counters meeting at a corner
         else if (pc.role === 'desk' && sd.name === 'front') rule = 'desk';
         else if (pc.role === 'dresser' && sd.name === 'front') rule = 'drawers';
         // A bed set right against a wall on a side nobody uses is on purpose (a kids' room, a daybed)
@@ -1623,7 +1736,7 @@ var SPACE = (function () {
     lines = lines.filter(function (l) { return !l.dup; });
     return lines.concat(talkLines(pieces), tvLines(pieces));
   }
-  var PRIORITY = { coffee: 0, console: 1, drawers: 2, desk: 3, dining: 4, diningWalk: 4, diningOpen: 4, bedFoot: 5, bed: 6 };
+  var PRIORITY = { coffee: 0, console: 1, drawers: 2, desk: 3, dining: 4, diningWalk: 4, diningOpen: 4, seat: 4, seatWalk: 4, aisle: 4, bedFoot: 5, bed: 6 };
 
   /* ---------- Seats facing each other, and the TV ---------- */
   // Where someone sits: the middle of a seat's front edge (a sectional's long run), in feet
@@ -1688,6 +1801,8 @@ var SPACE = (function () {
       else if (l.rule === 'bed') (beds[l.piece] = beds[l.piece] || []).push(l);
       else if (l.rule === 'dining' || l.rule === 'diningWalk' || l.rule === 'diningOpen') { if (!tables[l.piece] || worse(l, tables[l.piece]) > 0) tables[l.piece] = l; }
       else if (l.rule === 'bedFoot' && !l.against) rows.push({ type: 'bedFoot', a: l.piece, b: b, inch: l.inch, status: l.status });
+      else if (l.rule === 'aisle') rows.push({ type: 'aisle', a: l.piece, b: b, inch: l.inch, status: l.status });
+      else if (l.rule === 'seat' || l.rule === 'seatWalk') rows.push({ type: 'seating', a: l.piece, b: b, inch: l.inch, walk: l.rule === 'seatWalk', status: l.status });
       else if (l.rule === 'desk' || l.rule === 'drawers') rows.push({ type: l.rule, a: l.piece, b: b, inch: l.inch, status: l.status });
       else if (l.rule === 'console' && l.status !== 'ok') rows.push({ type: 'console', a: l.piece, b: b, inch: l.inch, status: l.status });
       else if (l.rule === 'talk') rows.push({ type: 'talk', a: l.piece, b: b, inch: l.inch, ft: l.gap, status: l.status });
@@ -1701,7 +1816,7 @@ var SPACE = (function () {
                   inches: ls.map(function (l) { return l.inch; }), status: open.length ? open[0].status : 'ok' });
     });
     Object.keys(tables).forEach(function (k) { var l = tables[k]; rows.push({ type: 'dining', a: +k, inch: l.inch, open: l.rule === 'diningOpen', walk: l.rule === 'diningWalk', status: l.status }); });
-    var ORDER = { coffee: 0, talk: 1, tv: 2, console: 3, dining: 4, desk: 5, drawers: 6, bed: 7, bedFoot: 8, walk: 9 };
+    var ORDER = { coffee: 0, talk: 1, tv: 2, console: 3, dining: 4, aisle: 4.5, seating: 4.6, desk: 5, drawers: 6, bed: 7, bedFoot: 8, walk: 9 };
     return rows.sort(function (p, q) { return (ORDER[p.type] - ORDER[q.type]) || (RANK[q.status] - RANK[p.status]) || (p.a - q.a); });
   }
 
@@ -1753,7 +1868,7 @@ var SPACE = (function () {
     return deep;
   }
   // Chairs are meant to tuck under dining tables and desks
-  function tucked(c, t) { return c.role === 'chair' && (t.role === 'dining' || t.role === 'desk'); }
+  function tucked(c, t) { return c.role === 'chair' && (t.role === 'dining' || t.role === 'desk' || t.role === 'island'); }
   // [{ type: 'wall', a, inch }] and [{ type: 'overlap', a, b, inch }].
   // wallTest(p) says whether point p (feet) is wall ink; pass null when the plan has no wall map.
   function conflicts(pieces, wallTest) {
@@ -2457,7 +2572,7 @@ var WALK = (function () {
     // Dining sides that a route passes behind (people walk behind seated guests there)
     var behind = {};
     pieces.forEach(function (pc, k) {
-      if (pc.role !== 'dining') return;
+      if (pc.role !== 'dining' && pc.role !== 'island') return;
       edges(pc).forEach(function (e) {
         var zone = {}; cellsNear(e, 0, 1, BEHIND[0], BEHIND[1]).forEach(function (z) { zone[z.j] = 1; });
         var hit = out.some(function (r) {

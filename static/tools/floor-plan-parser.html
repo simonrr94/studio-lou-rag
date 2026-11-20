@@ -318,7 +318,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=16"></script>
+  <script src="/static/tools/plan-engine.js?v=17"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -1018,7 +1018,7 @@
     // A dining table brings its chairs: they land around it, pushed in, and move and turn with it
     function addPiece(spec) {
       if (!state.scale) return;
-      var seats = FURNITURE.chairLayout(spec), chair = FURNITURE.get('chair');
+      var seats = FURNITURE.chairLayout(spec), chair = FURNITURE.seatFor(spec);
       var room = { w: spec.w, d: spec.d };
       seats.forEach(function (c) {
         var bb = PLAN.bounds(GEO.place(FURNITURE.outline(chair), c.x, c.y, c.rot, 1));
@@ -1037,7 +1037,7 @@
       renderPieceBar(); renderSpacing(); draw();
     }
     // The chairs that came with a table
-    function chairsOf(pc) { return pc && pc.role === 'dining' ? state.pieces.filter(function (o) { return o.group === pc.id; }) : []; }
+    function chairsOf(pc) { return FURNITURE.seated(pc) ? state.pieces.filter(function (o) { return o.group === pc.id; }) : []; }
     function addCustom() {
       var nameEl = $('customName'), wEl = $('customW'), dEl = $('customD'), round = $('customShape').value === 'round';
       var w = FURNITURE.parseInches(wEl.value), d = FURNITURE.parseInches(dEl.value), ok = true;
