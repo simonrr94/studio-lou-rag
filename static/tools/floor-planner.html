@@ -350,7 +350,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=17"></script>
+  <script src="/static/tools/plan-engine.js?v=18"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -2094,7 +2094,11 @@
           label = 'Beside the ' + A;
           value = (r.sides || r.inches.map(function (n) { return { inch: n }; })).map(function (sd) { return sd.against ? 'against the wall' : inchText(sd.inch); }).join(' and ');
         }
-        else if (r.type === 'bedFoot') { label = 'Foot of the ' + A + ' to ' + (B ? 'the ' + B : 'the wall'); value = inchText(r.inch); }
+        else if (r.type === 'bedFoot') {
+          label = state.pieces[r.a].role === 'bench' ? 'In front of the ' + A + ' at the foot of the bed, to ' + (B ? 'the ' + B : 'the wall')
+            : 'Foot of the ' + A + ' to ' + (B ? 'the ' + B : 'the wall');
+          value = inchText(r.inch);
+        }
         else if (r.type === 'dining') { label = 'Around the ' + A; value = inchText(r.inch) + (r.open ? ' on a side with no chairs' : r.walk ? ' where people walk behind the chairs' : ' at the tightest side'); }
         else if (r.type === 'aisle') { label = 'Work aisle between the ' + A + ' and the ' + B; value = inchText(r.inch); }
         else if (r.type === 'seating') { label = 'Behind the stools at the ' + A; value = inchText(r.inch) + (r.walk ? ' where people walk behind' : ''); }

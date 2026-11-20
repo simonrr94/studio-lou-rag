@@ -755,7 +755,8 @@ var FURNITURE = (function () {
       { id: 'queen', name: 'Queen bed', w: 64, d: 86, h: 24, kind: 'bed', role: 'bed' },
       { id: 'king', name: 'King bed', w: 80, d: 86, h: 24, kind: 'bed', role: 'bed' },
       { id: 'nightstand', name: 'Nightstand', w: 24, d: 18, h: 26, kind: 'table', role: 'nightstand' },
-      { id: 'dresser', name: 'Dresser', w: 60, d: 20, h: 34, kind: 'table', role: 'dresser' }
+      { id: 'dresser', name: 'Dresser', w: 60, d: 20, h: 34, kind: 'table', role: 'dresser' },
+      { id: 'bench', name: 'Bench', w: 48, d: 16, h: 18, kind: 'seat', role: 'bench' }
     ] },
     { group: 'Dining', items: [
       { id: 'dining4r', name: 'Round table for 4', w: 48, d: 48, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: { around: 4 } },
@@ -1283,6 +1284,14 @@ var FURNART = (function () {
     }
   }
 
+  // Bench: a wood frame, an upholstered top with piping and a row of buttons
+  function bench(ctx, w, d) {
+    rr(ctx, -w / 2, -d / 2, w, d, 1.2); paint(ctx, C.wood, C.line, 1);
+    rr(ctx, -w / 2 + 1.4, -d / 2 + 1.4, w - 2.8, d - 2.8, 2.2); paint(ctx, C.cushion, C.line, 0.75);
+    if (FINE) { rr(ctx, -w / 2 + 2.6, -d / 2 + 2.6, w - 5.2, d - 5.2, 1.6); paint(ctx, null, C.fine, 0.5); }
+    var n = Math.max(2, Math.round(w / 14));
+    for (var i = 1; i < n; i++) { circ(ctx, -w / 2 + w * i / n, 0, 0.6); paint(ctx, C.line, null); }
+  }
   /* ---------- Kitchen ---------- */
   var STONE = '#f4efe6', STEEL = '#e3ddd3', BURNER = '#8a7e72';
   // A countertop: a backsplash line along the back, the nosing along the front, and a few soft veins
@@ -1466,7 +1475,7 @@ var FURNART = (function () {
     coffee: coffee, coffeeR: roundCoffee, ottoman: ottoman, side: side, sideR: roundSide, media: media, console: consoleTable,
     full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser,
     chair: diningChair, desk: desk, deskchair: deskChair, bookcase: bookcase,
-    counter: counter, sink: sink, range: range, fridge: fridge, pantry: pantry, island: island, islandP: island, stool: stool,
+    bench: bench, counter: counter, sink: sink, range: range, fridge: fridge, pantry: pantry, island: island, islandP: island, stool: stool,
     plant: fiddle, palm: palm, plantS: snake, tree: olive, lamp: floorLamp, pouf: ottoman
   };
   // Pieces of your own, and anything not in the catalog, draw by what they are
@@ -1541,14 +1550,14 @@ var SPACE = (function () {
   var AGAINST = 4;        // inches: closer than this, the piece is set against it on purpose
   var PASSAGE = 12;       // inches: walkway gaps from here up to 36" are flagged on the plan
   var COFFEE_PAIR = 36;   // inches: a coffee table farther than this from a seat is not part of its group
-  var WALL_PATH = { seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, dresser: 1, media: 1, console: 1, other: 1, counter: 1, island: 1 };
+  var WALL_PATH = { bench: 1, seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, dresser: 1, media: 1, console: 1, other: 1, counter: 1, island: 1 };
   var KITCHEN = { counter: 1, island: 1 };   // the pieces a work aisle runs between   // pieces whose gap to a wall can be a walkway
   // Pieces set out together on purpose. A gap between them is part of the group, not a walkway:
   // seating with its coffee, side, and console tables; seats side by side; a bed and its nightstands.
   function grouped(a, b) {
     function pair(x, y) {
       return (x.role === 'seat' && (y.role === 'coffee' || y.role === 'side' || y.role === 'console' || y.role === 'seat')) ||
-             (x.role === 'bed' && y.role === 'nightstand');
+             (x.role === 'bed' && (y.role === 'nightstand' || y.role === 'bench'));
     }
     return pair(a, b) || pair(b, a);
   }
@@ -1626,6 +1635,13 @@ var SPACE = (function () {
       if (wallTest && !realWall({ x: p.x + dir.x * t, y: p.y + dir.y * t }, dir, wallTest)) return;   // open floor, not a wall
       best = { gap: t, hit: { type: 'wall' } };
     });
+    // A piece set right against a wall starts its line on (or past) the room outline, so the
+    // outline can't stop it. Wall ink on the way to a piece means the wall comes first.
+    if (wallTest && best && best.hit.type === 'piece') {
+      for (var s = 0; s < best.gap; s += 1 / 12) {
+        if (wallTest({ x: p.x + dir.x * s, y: p.y + dir.y * s })) { best = { gap: s, hit: { type: 'wall' } }; break; }
+      }
+    }
     return best && best.gap <= RANGE ? best : null;
   }
 
@@ -1689,11 +1705,15 @@ var SPACE = (function () {
         if (!best) return;
         var inch = Math.round(best.gap * 12), other = best.hit.type === 'piece' ? pieces[best.hit.i] : null;
         var rule = 'walk';
+        // A bench at the foot of a bed belongs to it: the bed's foot is measured from the bench's front instead
+        var benchAtFoot = pc.role === 'bed' && sd.name === 'front' && other && other.role === 'bench' && inch <= 12;
+        var footBench = pc.role === 'bench' && sd.name === 'front' && pieces.some(function (o) { return o.role === 'bed' && GEO.polyDist(pc.poly, o.poly) <= 1; });
         // A seat and its coffee table are one group, measured from whichever piece finds the gap
         if (other && seatCoffee(pc, other) && inch <= COFFEE_PAIR) rule = 'coffee';
         else if (other && seatConsole(pc, other) && inch <= CONSOLE_PAIR) rule = 'console';
         else if (pc.role === 'bed' && (sd.name === 'left' || sd.name === 'right')) rule = 'bed';
-        else if (pc.role === 'bed' && sd.name === 'front') rule = 'bedFoot';
+        else if (pc.role === 'bed' && sd.name === 'front' && !benchAtFoot) rule = 'bedFoot';
+        else if (footBench) rule = 'bedFoot';
         else if (pc.role === 'dining') rule = chairsOnSide(pc, sd, pieces) ? (pc.walkBehind && pc.walkBehind[sd.name] ? 'diningWalk' : 'dining') : 'diningOpen';
         // Kitchen: behind an island's stools, and the work aisle between counters, appliances and islands
         else if (pc.role === 'island' && chairsOnSide(pc, sd, pieces)) rule = pc.walkBehind && pc.walkBehind[sd.name] ? 'seatWalk' : 'seat';
@@ -1708,7 +1728,7 @@ var SPACE = (function () {
         // Off the ends of a dresser, desk or console, a gap to the wall is a corner, not a path
         var sideOk = (sd.name !== 'left' && sd.name !== 'right') || SIDE_PATH[pc.role];
         var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || (WALL_PATH[pc.role] && sideOk && Math.max(pc.w, pc.d) >= 36));
-        var show = against ? false : rule === 'console' ? (status(rule, inch) === 'ok' ? 'selected' : 'always')
+        var show = against || benchAtFoot ? false : rule === 'console' ? (status(rule, inch) === 'ok' ? 'selected' : 'always')
           : rule !== 'walk' ? 'always' : inch < AGAINST ? false : (passage && !(other && grouped(pc, other))) ? 'always' : 'selected';
         lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, against: against,
                      status: against ? 'ok' : status(rule, inch),
