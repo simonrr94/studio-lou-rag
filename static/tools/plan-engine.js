@@ -138,19 +138,21 @@ var SNAP = (function () {
   }
   // Rays that pass through a window or doorway land somewhere else (or nowhere).
   // The wall is where a solid group of rays agree, even if it's only a third of them.
-  function agree(arr, tol, seedPos) {
+  // near: take the nearest solid group instead of the biggest. For a space with no printed size
+  // (a laundry or closet), a doorway lets most rays run on into the next room; the nearer wall is its own.
+  function agree(arr, tol, seedPos, near) {
     var v = arr.filter(function (n) { return n != null; }).sort(function (p, q) { return p - q; });
-    var best = null, bestN = 0, bestD = Infinity;
+    var best = null, bestN = 0, bestD = Infinity, need = Math.max(2, Math.ceil(arr.length * 0.25));
     for (var i = 0; i < v.length; i++) {
       var grp = v.filter(function (n) { return Math.abs(n - v[i]) <= tol; });
       var d = Math.abs(v[i] - seedPos);
-      if (grp.length > bestN || (grp.length === bestN && d < bestD)) { best = grp; bestN = grp.length; bestD = d; }
+      if (near ? (grp.length >= need && d < bestD) : (grp.length > bestN || (grp.length === bestN && d < bestD))) { best = grp; bestN = grp.length; bestD = d; }
     }
-    if (!best || bestN < Math.max(2, Math.ceil(arr.length * 0.25))) return null;
+    if (!best || bestN < need) return null;
     return best[Math.floor(best.length / 2)];
   }
   // Several parallel rays per side, so a doorway or window in one spot can't throw the box off.
-  function scanSide(a, rect, side, seed) {
+  function scanSide(a, rect, side, seed, near) {
     var hits = [], n = 13, tol = Math.max(4, a.k);
     for (var i = 0; i < n; i++) {
       var f = 0.15 + 0.7 * i / (n - 1);
@@ -162,9 +164,9 @@ var SNAP = (function () {
         hits.push(ray(a, xx, seed.y, 0, side === 't' ? -1 : 1));
       }
     }
-    return agree(hits, tol, side === 'l' || side === 'r' ? seed.x : seed.y);
+    return agree(hits, tol, side === 'l' || side === 'r' ? seed.x : seed.y, near);
   }
-  function snapFrom(a, seed) {
+  function snapFrom(a, seed, near) {
     // Step off any wall pixel the seed landed on
     if (isWall(a, seed.x, seed.y)) {
       var found = false;
@@ -183,7 +185,7 @@ var SNAP = (function () {
     for (var pass = 0; pass < 3; pass++) {
       var cur = { l: rect.l == null ? seed.x - 1 : rect.l, r: rect.r == null ? seed.x + 1 : rect.r,
                   t: rect.t == null ? seed.y - 1 : rect.t, b: rect.b == null ? seed.y + 1 : rect.b };
-      rect = { l: scanSide(a, cur, 'l', seed), r: scanSide(a, cur, 'r', seed), t: scanSide(a, cur, 't', seed), b: scanSide(a, cur, 'b', seed) };
+      rect = { l: scanSide(a, cur, 'l', seed, near), r: scanSide(a, cur, 'r', seed, near), t: scanSide(a, cur, 't', seed, near), b: scanSide(a, cur, 'b', seed, near) };
     }
     return rect;
   }
@@ -197,14 +199,15 @@ var SNAP = (function () {
       var lab = words.length ? findLabel(r, words, guess) : null;
       if (lab) lab.used = true;
       var seed = lab ? { x: lab.x, y: lab.y } : { x: guess.x, y: guess.y };
-      return { room: r, guess: guess, seed: seed, anchored: !!lab, rect: snapFrom(a, seed) };
+      return { room: r, guess: guess, seed: seed, anchored: !!lab, rect: snapFrom(a, seed, r.source !== 'labeled') };
     });
 
     // Pixels per foot, from rooms whose snapped box agrees with their own dimensions
     var cands = [], voters = 0;
     work.forEach(function (it) {
       var r = it.room, q = it.rect;
-      if (!q || q.l == null || q.r == null || q.t == null || q.b == null || !r.width || !r.length) return;
+      // Only sizes printed on the plan vote; an estimated room's size is the model's guess
+      if (!q || q.l == null || q.r == null || q.t == null || q.b == null || !r.width || !r.length || r.source !== 'labeled') return;
       var pw = q.r - q.l, ph = q.b - q.t;
       var before = cands.length;
       [[r.width, r.length], [r.length, r.width]].forEach(function (d) {
@@ -234,24 +237,89 @@ var SNAP = (function () {
     var ppf = cands.length ? cands[Math.floor(cands.length / 2)] : null;
 
     work.forEach(function (it) {
-      var r = it.room, q = it.rect, g = it.guess;
-      if (!q) return; // could not scan at all: keep the model's box
-      // If the drawing is rotated relative to how the model reported width/length, swap them
-      if (ppf && r.width && r.length && q.l != null && q.r != null && q.t != null && q.b != null) {
-        var pw = q.r - q.l, ph = q.b - q.t;
-        var errA = Math.abs(pw / (r.width * ppf) - 1) + Math.abs(ph / (r.length * ppf) - 1);
-        var errB = Math.abs(pw / (r.length * ppf) - 1) + Math.abs(ph / (r.width * ppf) - 1);
-        if (errB < 0.25 && errB + 0.15 < errA) { var tmp = r.width; r.width = r.length; r.length = tmp; }
-      }
-      var yLo = q.t != null ? q.t : g.y - g.h / 2, yHi = q.b != null ? q.b : g.y + g.h / 2;
-      var x = fixAxis(q.l, q.r, it.seed.x, r.width, ppf, g.x - g.w / 2, g.x + g.w / 2, a.w,
-        function (pos) { return wallNear(a, pos, yLo, yHi, true); });
-      var y = fixAxis(q.t, q.b, it.seed.y, r.length, ppf, g.y - g.h / 2, g.y + g.h / 2, a.h,
-        function (pos) { return wallNear(a, pos, x[0], x[1], false); });
-      r.bbox = { x: x[0] / a.w * 100, y: y[0] / a.h * 100, w: (x[1] - x[0]) / a.w * 100, h: (y[1] - y[0]) / a.h * 100 };
-      r.snapped = true;
+      var r = it.room;
+      // Kept on the room so the box can be fitted again when the scale changes (see refit)
+      r.modelBox = { x: r.bbox.x, y: r.bbox.y, w: r.bbox.w, h: r.bbox.h };
+      r.snapAt = it.rect ? { seed: it.seed, q: it.rect, guess: it.guess, anchored: it.anchored, aw: a.w, ah: a.h } : null;
+      fitRoom(r, a, ppf, true);
     });
+    settleOverlaps(rooms);
     return { rooms: rooms, ppf: ppf, ppfRooms: ppf ? voters : 0, ppfFrom: ppf ? ppfFrom : null, wallPx: a.k };
+  }
+
+  // Fit one room's box from what the wall scan found. A size printed on the plan holds the
+  // box to it: an open side (a room open to a hall) stops at the printed size instead of
+  // running on to the next wall. Estimated sizes are only the model's guess, so they never
+  // size a box; the walls (or the model's own box) do.
+  function fitRoom(r, a, ppf, first) {
+    var S = r.snapAt;
+    if (!S) { r.snapped = false; return; }   // could not scan at all: keep the model's box
+    var q = S.q, g = S.guess, printed = r.source === 'labeled';
+    // If the drawing is rotated relative to how the model reported width/length, swap them
+    if (first && printed && ppf && r.width && r.length && q.l != null && q.r != null && q.t != null && q.b != null) {
+      var pw = q.r - q.l, ph = q.b - q.t;
+      var errA = Math.abs(pw / (r.width * ppf) - 1) + Math.abs(ph / (r.length * ppf) - 1);
+      var errB = Math.abs(pw / (r.length * ppf) - 1) + Math.abs(ph / (r.width * ppf) - 1);
+      if (errB < 0.25 && errB + 0.15 < errA) { var tmp = r.width; r.width = r.length; r.length = tmp; }
+    }
+    var fw = printed ? r.width : null, fh = printed ? r.length : null;
+    var yLo = q.t != null ? q.t : g.y - g.h / 2, yHi = q.b != null ? q.b : g.y + g.h / 2;
+    var x = fixAxis(q.l, q.r, S.seed.x, fw, ppf, g.x - g.w / 2, g.x + g.w / 2, a.w,
+      function (pos) { return wallNear(a, pos, yLo, yHi, true); });
+    var y = fixAxis(q.t, q.b, S.seed.y, fh, ppf, g.y - g.h / 2, g.y + g.h / 2, a.h,
+      function (pos) { return wallNear(a, pos, x[0], x[1], false); });
+    r.bbox = { x: x[0] / a.w * 100, y: y[0] / a.h * 100, w: (x[1] - x[0]) / a.w * 100, h: (y[1] - y[0]) / a.h * 100 };
+    r.snapped = true; r.weak = false;
+  }
+  // Two boxes that landed on the same space: a small space whose rough position fell inside a
+  // bigger room fills that room. The room with the better claim (its printed name was found
+  // there, its size is printed) keeps the space; the other goes back to the model's own box
+  // and is marked so the person knows to drag it into place.
+  function overlapShare(p, q) {
+    var w = Math.min(p.x + p.w, q.x + q.w) - Math.max(p.x, q.x), h = Math.min(p.y + p.h, q.y + q.h) - Math.max(p.y, q.y);
+    if (w <= 0 || h <= 0) return 0;
+    return w * h / Math.min(p.w * p.h, q.w * q.h);
+  }
+  function claim(r) {
+    var S = r.snapAt, c = 0;
+    if (S && S.anchored) c += 2;
+    if (r.source === 'labeled') c += 1;
+    if (r.modelBox) c += overlapShare(r.modelBox, r.bbox) * Math.min(1, (r.modelBox.w * r.modelBox.h) / (r.bbox.w * r.bbox.h));   // how well the model's own box agrees
+    return c;
+  }
+  function settleOverlaps(rooms) {
+    var live = rooms.filter(function (r) { return r.snapped && !r.boxEdited; });
+    // A box the person placed by hand always keeps its space
+    rooms.forEach(function (m) {
+      if (!m.boxEdited) return;
+      live.forEach(function (r) {
+        if (r.snapped && overlapShare(m.bbox, r.bbox) >= 0.5) {
+          if (r.modelBox) r.bbox = { x: r.modelBox.x, y: r.modelBox.y, w: r.modelBox.w, h: r.modelBox.h };
+          r.snapped = false; r.weak = true;
+        }
+      });
+    });
+    for (var pass = 0; pass < 3; pass++) {
+      var changed = false;
+      for (var i = 0; i < live.length; i++) for (var j = i + 1; j < live.length; j++) {
+        var A = live[i], B = live[j];
+        if (!A.snapped || !B.snapped || overlapShare(A.bbox, B.bbox) < 0.5) continue;
+        var lose = claim(A) >= claim(B) ? B : A;
+        if (lose.modelBox) lose.bbox = { x: lose.modelBox.x, y: lose.modelBox.y, w: lose.modelBox.w, h: lose.modelBox.h };
+        lose.snapped = false; lose.weak = true; changed = true;
+      }
+      if (!changed) break;
+    }
+  }
+  // Fit the boxes again with a new scale (pixels per foot of the analysis image), for a
+  // scale set by hand after the plan was read. Boxes the person moved or resized stay put.
+  function refit(rooms, a, ppf) {
+    rooms.forEach(function (r) {
+      if (r.boxEdited || !r.snapAt || r.shape) return;
+      if (r.modelBox && !r.snapped && r.weak) { r.bbox = { x: r.modelBox.x, y: r.modelBox.y, w: r.modelBox.w, h: r.modelBox.h }; }
+      fitRoom(r, a, ppf, false);
+    });
+    settleOverlaps(rooms);
   }
 
   // Share of a box edge that sits on a wall: samples along the edge, looking a few px either side.
@@ -274,7 +342,7 @@ var SNAP = (function () {
   function fixAxis(lo, hi, seed, ft, ppf, gLo, gHi, max, probe) {
     var want = ft && ppf ? ft * ppf : null;
     if (lo != null && hi != null) {
-      if (!want || Math.abs((hi - lo) / want - 1) < 0.2) return [lo, hi];
+      if (!want || Math.abs((hi - lo) / want - 1) <= 0.1) return [lo, hi];
     }
     if (want) {
       var opts = [];
@@ -292,7 +360,7 @@ var SNAP = (function () {
     return [lo != null ? lo : Math.max(0, gLo), hi != null ? hi : Math.min(max, gHi)];
   }
 
-  return { analyze: analyze, ocr: ocr, place: place };
+  return { analyze: analyze, ocr: ocr, place: place, refit: refit };
 })();
 
 /* =====================================================================

@@ -350,7 +350,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=18"></script>
+  <script src="/static/tools/plan-engine.js?v=19"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -407,8 +407,24 @@
         r.ftShape = f ? PLAN.shapeFt(pts(r), f, state.W, state.H) : null;
         r.shapeArea = r.shape && r.ftShape ? PLAN.polyArea(r.ftShape) : null;
         // A drawn shape is checked against the printed area instead of the box
-        r.mismatch = r.shape ? null : PLAN.mismatch(r, r.ftBox);
+        // A size the plan doesn't print is measured from the room's box once there's a scale
+        if (!r.dimsEdited && r.source !== 'labeled' && !(r.width && r.length)) r.boxSized = true;   // a room added without a size
+        if (boxMeasured(r) && r.ftBox) {
+          var fw = r.shape && r.ftShape ? PLAN.bounds(r.ftShape) : r.ftBox;
+          r.width = Math.round(fw.w * 12) / 12; r.length = Math.round(fw.h * 12) / 12;
+        }
+        r.mismatch = r.shape || boxMeasured(r) ? null : PLAN.mismatch(r, r.ftBox);
       });
+    }
+    // Rooms whose size comes from their box: estimated by the model (not printed, not typed),
+    // or added by hand without a size
+    function boxMeasured(r) { return !r.dimsEdited && (r.source === 'estimated' || r.boxSized); }
+    // Fit the room boxes again for the scale that was just set (boxes moved by hand stay put)
+    function refitRooms() {
+      if (!state.scale || !state.walls || !state.walls.map) return;
+      var a = state.walls.map;
+      SNAP.refit(state.rooms, a, (1 / state.scale.ftPerPx) * a.w / state.W);
+      syncGeometry();
     }
 
     /* ---------- Room shapes ---------- */
@@ -747,7 +763,10 @@
 
       if (state.scale) { drawRugs(ctx, forExport); drawPieces(ctx, forExport); drawDoors(ctx, forExport); drawWalkways(ctx, forExport, 'routes'); }
 
-      state.rooms.forEach(function (r, i) {
+      // Tags for rooms placed from the plan go first; a space that couldn't be placed steps aside for them
+      var tagOrder = state.rooms.map(function (r, i) { return i; }).sort(function (p, q) { return (state.rooms[p].weak ? 1 : 0) - (state.rooms[q].weak ? 1 : 0) || p - q; });
+      tagOrder.forEach(function (i) {
+        var r = state.rooms[i];
         var b = px(r), sel = !forExport && i === state.selected;
         // In Furnish the panel names the selected room, so its tag steps aside for the spacing lines
         if (sel && state.mode === 'furnish' && rugOK(r)) return;
@@ -778,6 +797,14 @@
           }
         }
         else { cx = b.x + b.w / 2 - cw / 2; cy = b.y + b.h / 2 - ch / 2; }
+        // Two rooms sharing a corner would stack their tags: try the box's other corners, then its middle
+        var clash = function (x, y) { return LABELS.some(function (L) { return x < L.x + L.w && x + cw > L.x && y < L.y + L.h && y + ch > L.y; }); };
+        if (clash(cx, cy)) {
+          var alt = [[b.x + b.w - inset - cw, b.y + inset], [b.x + inset, b.y + b.h - inset - ch], [b.x + b.w - inset - cw, b.y + b.h - inset - ch],
+                     [b.x + b.w / 2 - cw / 2, b.y + b.h / 2 - ch / 2], [b.x + inset, b.y + b.h + inset], [b.x + inset, b.y - ch - inset]];
+          var free = alt.filter(function (sp) { return !clash(sp[0], sp[1]); })[0];
+          if (free) { cx = free[0]; cy = free[1]; }
+        }
         cx = clamp(cx, 2, state.W - cw - 2); cy = clamp(cy, 2, state.H - ch - 2);
 
         LABELS.push({ x: cx, y: cy, w: cw, h: ch });
@@ -2982,6 +3009,7 @@
         if (state.drag.press) clearTimeout(state.drag.press);
         var r = state.rooms[state.selected], dr = state.drag;
         if (dr.moved) pushUndo(dr.snap);
+        if (dr.moved && r) { r.boxEdited = true; r.weak = false; }   // placed by hand: never refitted
         if (dr.mode === 'point' && !dr.moved && r && r.shape) {
           if (dr.added) { r.shape.splice(dr.k, 1); state.ptSel = -1; }   // tapped a + by accident: no new corner
           else state.ptSel = state.ptSel === dr.k ? -1 : dr.k;            // tapped a corner: show (or hide) its remove button
@@ -3308,6 +3336,7 @@
       pushUndo();
       state.scale = { ftPerPx: PLAN.scaleFromLine(l.p1, l.p2, feet), source: 'manual',
                       line: { p1: l.p1, p2: l.p2, feet: feet } };
+      refitRooms();
       endScaleTool();
       renderAll();
     }
@@ -3398,6 +3427,8 @@
       var sc = PLAN.shapeConflict(r);
       if (sc) return '<div class="box-note">The shape you drew measures ' + fmtArea(sc.shape) + ', but the plan prints ' + fmtArea(sc.printed) +
         '. Check the corners or the scale.</div>';
+      if (r.weak && !r.boxEdited) return '<div class="box-note">This space couldn\u2019t be placed from the plan. Drag its box into place' +
+        (boxMeasured(r) ? ' and its size will follow.' : '.') + '</div>';
       if (!r.mismatch) return '<div class="box-note hidden"></div>';
       return '<div class="box-note">The box on the plan measures ' + esc(fmtFtIn(r.mismatch.w)) + ' x ' + esc(fmtFtIn(r.mismatch.h)) +
         '. Adjust the box or the size, or check the scale.</div>';
