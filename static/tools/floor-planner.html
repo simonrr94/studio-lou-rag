@@ -221,6 +221,13 @@
     .rc-size { font-size: 13px; color: #6b6560; white-space: nowrap; }
     .rc-flag { width: 18px; height: 18px; border-radius: 50%; background: #f6e6e9; color: #582b36; font: 700 11px 'DM Sans', sans-serif; display: inline-flex; align-items: center; justify-content: center; flex: none; }
     .m-add { margin: 8px 0 0; font-size: 13.5px; }
+    #measureMain.one-room .m-sum, #measureMain.one-room .m-add, #measureMain.one-room .m-doors, #measureMain:not(.one-room) #measureBack { display: none; }
+    #roomGrid { background: none; border: none; border-radius: 0; overflow: visible; }
+    #roomGrid .room-card.selected { border: 1px solid #e3dccf; border-radius: 12px; box-shadow: none; background: #ffffff; }
+    .f-back { padding: 12px 18px 0; }
+    .f-back .detail-back { margin-bottom: 0; }
+    #furnishRooms { padding-top: 14px; }
+    .l-acts { display: flex; gap: 18px; align-items: center; margin-top: 12px; font-size: 13.5px; }
     .m-count { font-weight: 500; color: #6b6560; margin-left: 4px; }
     .card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
     .name-input { flex: 1; min-width: 0; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; color: #582b36; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 3px 6px; margin-left: -6px; }
@@ -236,7 +243,8 @@
     .card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; color: #6b6560; }
     .badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
     .badge.labeled, .badge.fits, .badge.ok { background: #eef2dc; color: #4f5c1d; }
-    .badge.estimated, .badge.big { background: #f6e6e9; color: #582b36; }
+    .badge.big { background: #f6e6e9; color: #582b36; }
+    .badge.estimated { background: #f7ecd2; color: #7a5a12; }
     .badge.edited { background: #efeae2; color: #433E3C; }
     .badge.tight { background: #f7ecd2; color: #7a5a12; }
     .box-note { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #fdf6f7; font-size: 12px; line-height: 1.45; color: #582b36; }
@@ -1669,9 +1677,26 @@
     }
 
     /* ---------- The Furnish panel: tabs, or the selected piece or door ---------- */
+    // Furnish with no room picked: every room with its pieces and what needs a look
+    function renderFurnishRooms() {
+      var el = $('furnishRooms');
+      if (!el) return;
+      var none = state.selected < 0 && state.pieceSel < 0 && state.tool !== 'erase';
+      el.classList.toggle('hidden', !none);
+      $('furnishBack').classList.toggle('hidden', none || state.pieceSel > -1 || state.tool === 'erase');
+      document.querySelector('#furnishPanel .ptabs').classList.toggle('hidden', none);
+      if (!none) return;
+      el.innerHTML = tipHTML('add') + '<div class="l-list">' + state.rooms.map(function (r, i) {
+        var n = state.pieces.filter(function (pc) { return pieceRoom(pc) === r && !(pc.role === 'chair' && pc.parent); }).length;
+        var bad = state.scale ? spaceRows(r).filter(function (rw) { return rw.status !== 'ok'; }).length : 0;
+        return roomRow(i, bad ? 'dim' : n ? 'ok' : '', bad ? bad + ' to check' : n ? n + (n === 1 ? ' piece' : ' pieces') : 'Empty');
+      }).join('') + '</div><p class="l-note" style="margin-top:12px">Pick a room to add furniture and check its spacing.</p>';
+    }
     function showPane() {
       var erasing = state.tool === 'erase', detail = !erasing && state.pieceSel > -1;
-      ['add', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', erasing || detail || state.ptab !== t); });
+      var noRoom = state.selected < 0 && !detail && !erasing;
+      ['add', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', noRoom || erasing || detail || state.ptab !== t); });
+      renderFurnishRooms();
       $('pane-detail').classList.toggle('hidden', !detail);
       $('pane-erase').classList.toggle('hidden', !erasing);
       var tabs = document.querySelectorAll('.ptab');
@@ -1714,6 +1739,7 @@
       $('pieceSub').innerHTML = !state.scale ? 'Furniture is drawn to scale, so this plan needs a scale first. Use <b>Set the scale</b> under the plan.'
         : r ? '' : 'Pick a room, then tap a piece to add it at its real size.';
       $('pieceSub').classList.toggle('hidden', !$('pieceSub').innerHTML);
+      if ($('pieceBack')) $('pieceBack').innerHTML = backToRoom(state.rooms[state.selected]);
       if (!pc) { bar.innerHTML = ''; showPane(); placeFloat(); return; }
       var sel = selList(), rugs = selRugs();
       if (selCount() > 1) {
@@ -2189,7 +2215,34 @@
       var pc = state.pieces[state.pieceSel], dr = state.doors[state.doorSel];
       if (pc && state.mode !== 'furnish') pc = null;
       if (dr && state.mode !== 'measure') dr = null;
-      if (!state.scale || (!pc && !dr) || state.tool || (state.drag && state.drag.moved)) { fb.classList.add('hidden'); return; }
+      // the other things that can be picked: a light or a lamp in Light, a room in Measure
+      var lt = state.mode === 'light' ? state.lights[state.lightSel] : null;
+      var lp = state.mode === 'light' && !lt && state.lampSel != null ? pieceById(state.lampSel) : null;
+      var rm = state.mode === 'measure' && !dr && state.ptSel < 0 ? state.rooms[state.selected] : null;
+      if (state.tool || (state.drag && state.drag.moved) || (!pc && !dr && !lt && !lp && !rm) || (!state.scale && !rm)) { fb.classList.add('hidden'); return; }
+      if (!pc && !dr) {
+        var bx, k2;
+        if (lt || lp) {
+          var q0 = lt ? lightPx(lt) : lampPx(lp), rr0 = lt ? lightRad(lt) : 11 * displayRatio();
+          if (!q0) { fb.classList.add('hidden'); return; }
+          bx = { x: q0.x - rr0, y: q0.y - rr0, w: rr0 * 2, h: rr0 * 2 };
+          k2 = lt ? 'l' + lt.id + kindOf(lt) : 'lamp' + lp.id;
+        } else { bx = px(rm); k2 = 'r' + rm.id; }
+        if (fb.getAttribute('data-key') !== k2) {
+          fb.innerHTML = lt ? (kindOf(lt) !== 'undercab' ? '<button data-fact="ldup" title="Duplicate" aria-label="Duplicate">' + ICON.copy + '</button>' : '') +
+              '<button data-fact="lremove" class="danger" title="Remove" aria-label="Remove">' + ICON.trash + '</button>'
+            : lp ? '<button data-fact="lampoff" class="danger" title="' + (lp.type === 'lamp' ? 'Remove the floor lamp' : 'No lamp here') + '" aria-label="Remove the lamp">' + ICON.trash + '</button>'
+            : '<button data-fact="rremove" class="danger" title="Remove this room" aria-label="Remove this room">' + ICON.trash + '</button>';
+          fb.setAttribute('data-key', k2);
+        }
+        fb.classList.remove('hidden');
+        var sx0 = $('planCanvas').clientWidth / state.W, cr0 = $('planCanvas').getBoundingClientRect(), sr0 = $('stage').getBoundingClientRect();
+        var l0 = cr0.left - sr0.left + (bx.x + bx.w / 2) * sx0 - fb.offsetWidth / 2, t0 = cr0.top - sr0.top + bx.y * sx0 - fb.offsetHeight - 10;
+        if (t0 < 4) t0 = cr0.top - sr0.top + (bx.y + bx.h) * sx0 + 10;
+        fb.style.left = clamp(l0, 4, sr0.width - fb.offsetWidth - 4) + 'px';
+        fb.style.top = clamp(t0, 4, sr0.height - fb.offsetHeight - 4) + 'px';
+        return;
+      }
       var bb, key;
       var many = pc && multi(), grouped = many && selList().every(function (o) { return o.gid && o.gid === pc.gid; }) && selRugs().every(function (r) { return r.rug.gid === pc.gid; });
       if (pc) { var q = piecePx(pc); bb = many ? selBounds(selList()) : FURNITURE.bounds(pc, q.cx, q.cy, q.k); key = 'p' + pc.id + pc.shape + (many ? 'm' + selCount() + (grouped ? 'g' : '') : ''); }
@@ -2248,6 +2301,28 @@
       else if (a === 'dup') duplicatePiece();
       else if (a === 'remove') removePiece();
       else if (a === 'dremove') removeDoor();
+      else if (a === 'lremove') removeLight();
+      else if (a === 'ldup') {
+        var src = state.lights[state.lightSel];
+        if (!src) return;
+        pushUndo();
+        var cp = JSON.parse(JSON.stringify(src)), f2 = state.scale.ftPerPx;
+        cp.id = state.nextId++; cp.edited = true;
+        cp.x = clamp(cp.x + 2.5 / f2 / state.W * 100, 0, 100);   // 2'6" to the side
+        state.lights.push(cp); state.lightSel = state.lights.length - 1;
+        renderLight(); draw();
+      }
+      else if (a === 'lampoff') {
+        var lpc = pieceById(state.lampSel);
+        if (lpc) { pushUndo(); if (lpc.type === 'lamp') state.pieces.splice(state.pieces.indexOf(lpc), 1); else lpc.noLamp = true; }
+        state.lampSel = null; renderLight(); draw();
+      }
+      else if (a === 'rremove' && state.selected > -1) {
+        pushUndo();
+        state.rooms.splice(state.selected, 1);
+        state.selected = -1;
+        renderAll();
+      }
       else if (d && (a === 'swing' || a === 'hinge')) {
         pushUndo();
         if (a === 'swing') { d.out = !d.out; d.nx = -d.nx; d.ny = -d.ny; } else d.hinge = -d.hinge;
@@ -2850,18 +2925,18 @@
       var r = state.rooms[state.selected], html = '';
       var stray = state.lights.filter(function (q) { return !roomById(q.room); }).length;
       if (stray) html += '<p class="l-note l-warn">' + (stray === 1 ? 'One light sits' : stray + ' lights sit') + ' outside every room. Drag ' + (stray === 1 ? 'it' : 'them') + ' into a room or remove ' + (stray === 1 ? 'it' : 'them') + '.</p>';
+      if (r) html += '<button class="link-btn detail-back" data-lact="allrooms">&larr; All rooms</button>';
       html += tipHTML('light');
-      if (r) html += '<button class="link-btn detail-back" data-lact="allrooms">&larr; All rooms</button>' + roomLightCard(r);
+      if (r) html += roomLightCard(r);
       else {
         html += state.lightEditCeil
           ? '<div class="l-ceil"><label class="field"><span>Ceiling height, whole plan</span><input id="lCeilPlan" value="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + '" autocomplete="off"></label></div>'
           : '<p class="l-quiet">Ceilings ' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + ' <button class="link-btn" data-lact="ceil">Change</button></p>';
         html += '<div class="l-list">' + state.rooms.map(function (rm, i) {
           if (!rm.ftShape) return '';
-          if (roomTarget(rm) == null) return '<button class="l-row" data-lroom="' + i + '"><span class="l-dot"></span><b>' + esc(rm.name) + '</b><small>Outdoor</small></button>';
+          if (roomTarget(rm) == null) return roomRow(i, '', 'Outdoor');
           var ev = roomLight(rm), n = lightChecks(rm).length, all = ev.count + ev.extraLights;
-          return '<button class="l-row" data-lroom="' + i + '"><span class="l-dot ' + (n ? 'dim' : ev.status) + '"></span><b>' + esc(rm.name) + '</b>' +
-            '<small>' + (n ? n + ' to check' : all + ' ' + lightWord(all) + ', ' + LSTATUS[ev.status].toLowerCase()) + '</small></button>';
+          return roomRow(i, n || ev.status !== 'ok' ? 'dim' : 'ok', n ? n + ' to check' : all + ' ' + lightWord(all) + ', ' + LSTATUS[ev.status].toLowerCase());
         }).join('') + '</div>' +
         '<p class="l-note" style="margin-top:12px">Pick a room to see its lights and change its mood.</p>';
       }
@@ -2932,7 +3007,7 @@
       html += lamplessChairs(r).map(function (o) {
         return '<p class="l-note l-sug">The ' + esc(nameOf(state.pieces.indexOf(o.pc)).toLowerCase()) + ' has no lamp near it for reading. <button class="link-btn" data-lact="addlamp" data-pid="' + o.pc.id + '">Add a floor lamp</button></p>';
       }).join('');
-      html += '<div class="btn-row"><button class="btn-primary btn-sm" data-lact="addmenu">Add a light</button><button class="btn-secondary btn-sm" data-lact="redo">Suggest again</button></div>';
+      html += '<div class="l-acts"><button class="link-btn" data-lact="addmenu">+ Add a light</button><button class="link-btn" data-lact="redo">Suggest again</button></div>';
       if (state.lightAdd) html += '<div class="l-add">' + ADD_KINDS.map(function (k) { return '<button class="btn-secondary btn-sm" data-ladd="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>';
       // Details: the numbers behind the result, and the notes
       var others = {};
@@ -2965,19 +3040,18 @@
     }
     function lampDetail(pc) {
       var rm = pieceRoom(pc), floor = pc.type === 'lamp';
-      return '<button class="link-btn detail-back" data-lact="back">&larr; Back</button>' +
+      return '<button class="link-btn detail-back" data-lact="back">' + backToRoom(rm) + '</button>' +
         '<p class="detail-name" style="border:none;padding-left:0">' + (floor ? 'Floor lamp' : 'Table lamp') + '</p>' +
         '<p class="pane-sub">' + (floor ? '' : 'On the ' + esc(nameOf(state.pieces.indexOf(pc)).toLowerCase()) + (rm ? ' in the ' + esc(rm.name) : '') + '. ') +
           'Lamps are furniture, so move ' + (floor ? 'it' : 'it with its ' + esc(nameOf(state.pieces.indexOf(pc)).toLowerCase())) + ' in Furnish.</p>' +
         '<label class="field"><span>Brightness, lumens</span><input data-lf="lamplm" value="' + lampLmOf(pc) + '" inputmode="numeric" autocomplete="off"></label>' +
-        '<p class="l-note">A standard lamp bulb is about 800 lumens' + info('lumens') + '. Use the bulb you have, or add up the bulbs in a lamp with more than one.</p>' +
-        '<div class="btn-row"><button class="btn-secondary btn-sm" data-lact="nolamp">' + (floor ? 'Remove the floor lamp' : 'No lamp here') + '</button></div>' + glossary();
+        '<p class="l-note">A standard lamp bulb is about 800 lumens' + info('lumens') + '. Use the bulb you have, or add up the bulbs in a lamp with more than one.</p>' + glossary();
     }
     function lightDetail(l) {
       var r = roomById(l.room), k = kindOf(l), name;
       if (k === 'recessed') { var fx = LIGHT.FIXTURES[l.type] || LIGHT.FIXTURES.r4; name = fx.name.charAt(0).toUpperCase() + fx.name.slice(1); }
       else name = LIGHT.KINDS[k].name;
-      var html = '<button class="link-btn detail-back" data-lact="back">&larr; Back</button>' +
+      var html = '<button class="link-btn detail-back" data-lact="back">' + backToRoom(r) + '</button>' +
         '<p class="detail-name" style="border:none;padding-left:0">' + name + (k !== 'recessed' && GLOSS.some(function (g) { return g[0] === k; }) ? info(k) : '') + '</p>' +
         '<p class="pane-sub">' + (r ? 'In the ' + esc(r.name) + '.' : 'Not in a room.') + (k === 'undercab' ? ' It runs along its counter and moves with it.' : ' Drag it on the plan to move it.') + '</p>';
       if (k === 'recessed') {
@@ -3003,7 +3077,7 @@
         html += '<label class="field"><span>Brightness, lumens</span><input data-lf="lm" value="' + Math.round(l.lm) + '" inputmode="numeric" autocomplete="off"></label>' +
           '<p class="l-note">Use the lumens' + info('lumens') + ' on the fixture you’re buying' + (k === 'chandelier' ? ', or add up its bulbs' : '') + '.</p>';
       }
-      html += '<div class="btn-row"><button class="btn-secondary btn-sm" data-lact="remove">Remove this light</button></div>' + glossary();
+      html += glossary();
       return html;
     }
     // A room setting changed: its own lights follow; the person's own lights stay where they are
@@ -3019,7 +3093,7 @@
       var b = e.target.closest('button');
       if (!b) return;
       if (b.hasAttribute('data-term')) { e.preventDefault(); showTerm(b.getAttribute('data-term')); return; }
-      var ri = b.getAttribute('data-lroom');
+      var ri = b.getAttribute('data-room');
       if (ri != null) { state.lightSel = -1; state.lightAdd = false; state.lightTypeOpen = false; select(+ri, false); return; }
       var add = b.getAttribute('data-ladd');
       if (add) { addLight(add); return; }
@@ -3485,6 +3559,7 @@
       if (!btn) return;
       if (btn.getAttribute('data-note') === 'hide') { if (state.found) state.found.hidden = true; renderFoundNote(); return; }
       if (state.mode !== 'measure') setMode('measure');
+      if (state.selected > -1) select(-1, false);   // doors and windows live on the All rooms view
       var sec = $('doorsSection'); if (sec) { sec.open = true; if (sec.scrollIntoView) sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     }
     function showPaneTab(t) { setTab(t); showPane(); }
@@ -3641,6 +3716,7 @@
       var bar = $('doorBar'), d = state.doors[state.doorSel];
       if (!bar) return;
       var mDoor = !!(d && state.scale && state.mode === 'measure');
+      if (d && $('doorBack')) $('doorBack').innerHTML = backToRoom(state.rooms.filter(function (r) { return r.id === d.room; })[0] || state.rooms[state.selected]);
       if ($('measureMain')) { $('measureMain').classList.toggle('hidden', mDoor); $('measureDoor').classList.toggle('hidden', !mDoor); }
       if (!d || !state.scale) { bar.classList.add('hidden'); bar.innerHTML = ''; showPane(); placeFloat(); return; }
       var t = d.type || 'swing', st = doorStatus(d), win = isWin(d), widths = DOOR.TYPES[t].widths.slice(), fl = DOOR_FLIPS[t];
@@ -3829,7 +3905,6 @@
       $('measurePanel').classList.toggle('hidden', m !== 'measure');
       $('furnishPanel').classList.toggle('hidden', m !== 'furnish');
       $('lightPanel').classList.toggle('hidden', m !== 'light');
-      $('panelHead').classList.toggle('hidden', m === 'measure');
       $('planCanvas').classList.toggle('furnishing', m === 'furnish' || m === 'light');
       if (m !== 'measure') state.doorSel = -1;
       renderDoorBar();
@@ -3837,13 +3912,7 @@
       state.lightSel = -1; state.lampSel = null;
       if (m === 'light') { state.pieceSel = -1; state.doorSel = -1; state.extra = []; state.extraRugs = []; }
       if (!state.img || !state.rooms.length) return;
-      if (m === 'light') { if (lightAsked()) ensureLights(); state.selected = -1; }
-      // Coming into Furnish with nothing selected: start on the first living space, if there is one
-      if (m === 'furnish' && state.selected < 0) {
-        var pick = -1;
-        state.rooms.forEach(function (r, k) { if (pick < 0 && RUG.roomType(r.name) === 'living') pick = k; });
-        if (pick > -1) state.selected = pick;
-      }
+      if (m === 'light' && lightAsked()) ensureLights();
       select(state.selected, false);
     }
 
@@ -4570,7 +4639,7 @@
 
     // The room picker in the toolbar
     function renderRoomPick() {
-      $('rugRoom').innerHTML = '<option value="-1">' + (state.mode === 'light' ? 'All rooms' : 'Pick a room') + '</option>' + state.rooms.map(function (rm, i) {
+      $('rugRoom').innerHTML = '<option value="-1">All rooms</option>' + state.rooms.map(function (rm, i) {
         return '<option value="' + i + '"' + (i === state.selected ? ' selected' : '') + '>' + esc(rm.name) + '</option>';
       }).join('');
     }
@@ -4582,7 +4651,7 @@
       }
       var changed = state.selected !== i;
       state.selected = i;
-      if (changed && state.mode === 'measure') renderCards();   // the picked room opens into its card
+      if (changed) { renderCards(); renderFurnishRooms(); }   // the list, or the picked room's view
       $('planCanvas').classList.toggle('editing', i > -1);
       var cards = document.querySelectorAll('.room-card');
       for (var k = 0; k < cards.length; k++) cards[k].classList.toggle('selected', +cards[k].getAttribute('data-i') === i);
@@ -4591,7 +4660,7 @@
         if (rect.top < pr.top || rect.bottom > Math.min(pr.bottom, window.innerHeight)) cards[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
       renderRoomPick();
-      if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderPieceBar(); }
+      if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderPieceBar(); showPane(); }
       if (state.mode === 'light') renderLight();
       draw();
     }
@@ -4605,18 +4674,29 @@
       return '<span class="badge estimated">Estimated</span>';
     }
 
-    // The rooms as a compact list (name and size); the picked room opens into its editable card
+    /* One room row, the same in every mode: a status dot (green fine, amber worth a look, grey nothing
+       yet), the name, and one short summary that suits the mode. Tapping it opens that room. */
+    function roomRow(i, dot, summary) {
+      return '<button class="l-row" data-room="' + i + '"><span class="l-dot ' + (dot || '') + '"></span><b>' + esc(state.rooms[i].name) + '</b><small>' + summary + '</small></button>';
+    }
+    function backToRoom(r) { return r ? '\u2190 Back to ' + esc(r.name) : '\u2190 All rooms'; }
+
+    // Measure: every room in a list (name and size); a picked room opens its editable card
     function renderCards() {
-      var html = state.rooms.map(function (r, i) {
-        if (i !== state.selected) {
-          var flag = r.source === 'estimated' ? '<span class="badge estimated">Estimated</span>' : r.weak || PLAN.areaConflict(r) || PLAN.shapeConflict(r) ? '<span class="rc-flag" title="Needs a look">!</span>' : '';
-          return '<div class="room-card compact" data-i="' + i + '"><span class="rc-name">' + esc(r.name) + '</span>' +
-            '<span class="rc-size">' + (r.width && r.length ? esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) : 'No size yet') + '</span>' + flag + '</div>';
-        }
+      var one = state.selected > -1 && state.rooms[state.selected];
+      $('measureMain').classList.toggle('one-room', !!one);
+      if (!one) {
+        $('roomGrid').innerHTML = '<div class="l-list">' + state.rooms.map(function (r, i) {
+          var look = r.source === 'estimated' || r.weak || PLAN.areaConflict(r) || PLAN.shapeConflict(r);
+          return roomRow(i, look ? 'dim' : 'ok', (r.width && r.length ? esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) : 'No size yet') + (r.source === 'estimated' ? ', estimated' : look ? ', needs a look' : ''));
+        }).join('') + '</div>';
+        return;
+      }
+      var html = [state.rooms[state.selected]].map(function (r) {
+        var i = state.selected;
         return '<div class="room-card selected" data-i="' + i + '">' +
           '<div class="card-top">' +
             '<input class="name-input" data-f="name" value="' + esc(r.name) + '" aria-label="Room name">' +
-            '<button class="del" data-act="del" title="Remove room" aria-label="Remove room">&times;</button>' +
           '</div>' +
           '<div class="dims">' +
             '<div><label>Width</label><input data-f="width" value="' + esc(fmtFtIn(r.width)) + '" placeholder="12\'6&quot;"></div>' +
@@ -4695,6 +4775,8 @@
       if (r && (f === 'width' || f === 'length') && !el.classList.contains('bad')) el.value = fmtFtIn(r[f]);
     }
     function onGridClick(e) {
+      var row = e.target.closest('[data-room]');
+      if (row) { select(+row.getAttribute('data-room'), false); return; }
       var i = cardIndex(e.target);
       if (i < 0) return;
       if (e.target.getAttribute('data-act') === 'del') {
@@ -5177,11 +5259,17 @@
       $('rugBody').addEventListener('click', onFurnishClick);
       renderCatalog();
       var fp = $('furnishPanel');
-      fp.addEventListener('click', onPieceClick);
+      fp.addEventListener('click', function (e) {
+        var row = e.target.closest('[data-room]');
+        if (row) { select(+row.getAttribute('data-room'), false); showPane(); return; }
+        if (e.target.closest('[data-fback]')) { select(-1, false); showPane(); return; }
+        onPieceClick(e);
+      });
       fp.addEventListener('change', onDetailChange);
       var mp = $('measurePanel');
       mp.addEventListener('click', function (e) {
         if (e.target.closest('[data-dback]')) { state.doorSel = -1; renderDoorBar(); draw(); return; }
+        if (e.target.closest('[data-act=allrooms]')) { select(-1, false); return; }
         var row = e.target.closest('[data-door]');
         if (row && !e.target.closest('button')) { state.doorSel = +row.getAttribute('data-door'); renderDoorBar(); draw(); return; }
         onDoorClick(e);
@@ -5427,12 +5515,13 @@
         <!-- On phones the panel is a bottom sheet: this handle opens and closes it -->
         <button class="sheet-grip" id="sheetGrip" aria-label="Show the panel" aria-expanded="false"><span></span></button>
         <!-- The picked room, as the panel's title (Furnish and Light) -->
-        <div class="panel-head hidden" id="panelHead">
+        <div class="panel-head" id="panelHead">
           <select class="room-select" id="rugRoom" aria-label="Room"></select>
         </div>
         <!-- Measure -->
         <div id="measurePanel" class="pane">
          <div id="measureMain">
+          <div id="measureBack"><button class="link-btn detail-back" data-act="allrooms">&larr; All rooms</button></div>
           <div class="found-note hidden" id="foundNoteM"></div>
           <div class="tip-slot" data-tipslot="measure"></div>
           <p class="m-sum"><b id="statRooms">0</b> rooms, <b id="statArea">0</b> sq ft<span id="statEst"></span></p>
@@ -5448,13 +5537,15 @@
           </details>
          </div>
          <div class="hidden" id="measureDoor">
-           <button class="link-btn detail-back" data-dback="1">&larr; Back</button>
+           <button class="link-btn detail-back" data-dback="1" id="doorBack">&larr; Back</button>
            <div id="doorBar"></div>
          </div>
         </div>
 
         <!-- Furnish -->
         <div id="furnishPanel" class="hidden">
+          <div class="pane hidden" id="furnishRooms"></div>
+          <div class="f-back" id="furnishBack"><button class="link-btn detail-back" data-fback="1">&larr; All rooms</button></div>
           <div class="ptabs" role="tablist" aria-label="Furnish">
             <button class="ptab on" data-ptab="add">Add</button>
             <button class="ptab" data-ptab="checks">Checks<span class="count hidden" id="checkCount"></span></button>
@@ -5501,7 +5592,7 @@
           </div>
 
           <div class="pane hidden" id="pane-detail">
-            <button class="link-btn detail-back" data-pact="done">&larr; Back</button>
+            <button class="link-btn detail-back" data-pact="done" id="pieceBack">&larr; Back</button>
             <div id="pieceBar"></div>
           </div>
         </div>
