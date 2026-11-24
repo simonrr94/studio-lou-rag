@@ -171,6 +171,11 @@
     .ptab .count { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; background: #582b36; color: #FAF9F6; font-size: 11px; line-height: 18px; }
     .pane-sub { font-size: 13px; color: #433E3C; line-height: 1.5; margin-bottom: 12px; }
     .hint { font-size: 12px; color: #6b6560; margin-top: 16px; line-height: 1.6; }
+    .found-note { position: relative; background: #f5f0e8; border: 1px solid #d0c9bc; border-left: 3px solid #A6BE47; border-radius: 10px; padding: 10px 34px 10px 12px; margin-bottom: 14px; font-size: 13px; line-height: 1.5; color: #433E3C; }
+    .found-note b { font-weight: 600; }
+    .found-note .btn-sm { margin-top: 8px; }
+    .found-note .note-x { position: absolute; top: 6px; right: 8px; border: none; background: none; font-size: 18px; line-height: 1; color: #6b6560; cursor: pointer; padding: 2px 4px; }
+    .found-note .note-x:hover { color: #433E3C; }
     .legend { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; white-space: nowrap; }
     .swatch { width: 18px; height: 0; border-top: 2px solid #582b36; display: inline-block; }
     .swatch.dash { border-top-style: dashed; }
@@ -350,7 +355,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=19"></script>
+  <script src="/static/tools/plan-engine.js?v=20"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -372,6 +377,23 @@
       '- label is the room name exactly as it is printed on the plan (for example "Vaulted Sleeping" or "Kitchen"). Use "" if the space has no printed name.',
       '- Name unlabeled spaces by function (Closet, Hallway, Pantry, Laundry). Number duplicates (Bedroom 2, Closet 2).',
       '- Skip exterior areas unless they are a labeled patio, deck, porch, or balcony. Skip stairs and garage only if they have no label.'
+    ].join('\n');
+
+    // Asked alongside the rooms, in its own call, so the rooms read exactly as before. The model
+    // only points; OPENINGS (plan-engine.js) finds each one on the wall map and measures it.
+    var OPEN_PROMPT = [
+      'You are reading a residential floor plan image. List every door, doorway opening, and window drawn on it.',
+      '',
+      'Return ONLY a JSON object. No prose, no markdown, no code fences. Use exactly this shape:',
+      '{"openings":[{"kind":"door","type":"swing","x":42.5,"y":61,"width_in":32,"rooms":["Bedroom","Hallway"]}]}',
+      '',
+      'Rules:',
+      '- kind is "door" for any door, "opening" for a doorway or gap in a wall with no door drawn, and "window" for a window.',
+      '- type is for doors only: "swing", "double", "pocket", "sliding", "bifold" or "barn", from the symbol drawn. A quarter-circle arc, or a leaf drawn at an angle from one side, is a swing door; two of them meeting in the middle is double; a V or zigzag is bifold; panels drawn side by side along the wall are sliding.',
+      '- x,y is the middle of the door, opening or window, where it sits in the wall, as percentages of the FULL image (0 to 100).',
+      '- width_in is its width in inches if you can tell, otherwise null.',
+      '- rooms names the space on each side as the plan labels them, or "outside" for an exterior wall.',
+      '- Include every one: closet doors, sliding glass doors, and doors to balconies, decks and porches too. Skip stairs, cabinets and appliances.'
     ].join('\n');
 
     var RETRY_SUFFIX = '\n\nIMPORTANT: Your previous reply could not be parsed. Reply with the raw JSON object only, starting with { and ending with }.';
@@ -519,7 +541,24 @@
       });
     }
 
+    // The model's list of doors, openings and windows: rough spots in percent of the image
+    function parseOpenings(text) {
+      var t = String(text).replace(/```(?:json)?/gi, '');
+      var s = t.indexOf('{'), e = t.lastIndexOf('}');
+      var obj = s > -1 && e > s ? JSON.parse(t.slice(s, e + 1)) : JSON.parse(t.slice(t.indexOf('['), t.lastIndexOf(']') + 1));
+      var list = Array.isArray(obj) ? obj : obj.openings || obj.doors || [];
+      return list.map(function (o) {
+        var x = num(o && o.x), y = num(o && o.y);
+        if (x == null || y == null) return null;
+        if (x <= 1 && y <= 1) { x *= 100; y *= 100; }
+        return { kind: String(o.kind || 'door').toLowerCase(), type: o.type ? String(o.type).toLowerCase() : null, x: clamp(x, 0, 100), y: clamp(y, 0, 100) };
+      }).filter(Boolean);
+    }
+
     function extract() {
+      // Doors and windows are asked for at the same time; if that answer fails, the plan's
+      // own drawing still finds the doors with swings and the windows in outside walls
+      state.openHints = callVision(OPEN_PROMPT).then(parseOpenings).catch(function () { return null; });
       showStatus('loading', 'Reading your floor plan...', 'Measuring every room, closet, and hallway. Usually 15 to 40 seconds, though the first run of the day can take up to a minute.');
       var vision = callVision(PROMPT)
         .then(parseResponse)
@@ -549,6 +588,7 @@
           state.selected = -1;
           showScreen('result');
           renderAll();
+          findOpenings();
           trackUsage('floor-plan-parser');
         })
         .catch(function (err) {
@@ -626,6 +666,7 @@
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
       state.view = { z: 1, px: 0, py: 0 };
       state.erase = []; state.eraseVer++; state.floorCol = floorColorOf(img); ERASE.mask = ERASE.layer = null;
+      state.openHints = null; state.openingsDone = false; state.found = null;
       UNDO = []; $('undoBtn').disabled = true;
       setMode('measure');
     }
@@ -2324,6 +2365,123 @@
       state.doorSel = state.doors.length - 1; state.pieceSel = -1;
       endDoorTool(); renderPieceBar(); renderDoorBar(); renderSpacing(); renderDoorList(); draw();
     }
+    /* ---------- Doors and windows found on the plan ----------
+       Once there's a scale, the model's rough list (state.openHints) and the plan's own
+       drawing are put together by OPENINGS, and what it finds arrives already marked, with
+       a note asking the person to check it. Nothing is required: everything found is fixed
+       with the usual door tools. Runs once per plan. */
+    var OUTDOOR = /porch|balcony|deck|patio|terrace|yard|garden|lanai/i;
+    function findOpenings() {
+      if (state.openingsDone || !state.scale || !state.walls || !state.walls.map || !state.walls.map.ink || !state.rooms.length) return;
+      state.openingsDone = true;
+      var img = state.img;
+      (state.openHints || Promise.resolve(null)).then(function (hints) {
+        if (state.img !== img || !state.scale) return;
+        var a = state.walls.map, k = a.w / state.W, ppf = k / state.scale.ftPerPx;
+        var spots = (hints || []).map(function (h) { return { kind: h.kind, type: h.type, x: h.x / 100 * a.w, y: h.y / 100 * a.h }; });
+        // Inside an indoor room, by its outline or the model's own box (a box can be snapped short)
+        var indoor = function (p) {
+          var q = { x: p.x / a.w * 100, y: p.y / a.h * 100 };
+          return state.rooms.some(function (r) {
+            if (OUTDOOR.test(r.name + ' ' + (r.label || ''))) return false;
+            var m = r.modelBox;
+            return PLAN.pointInPoly(q, pts(r)) || (m && q.x > m.x && q.x < m.x + m.w && q.y > m.y && q.y < m.y + m.h);
+          });
+        };
+        var list = [];
+        try { list = OPENINGS.find(a, ppf, spots, indoor); } catch (e) { if (window.console) console.warn('Door finding skipped:', e); }
+        if (list.length) pushUndo();   // one Undo takes them all off again
+        var made = addFound(list, k);
+        if (!made.length && UNDO.length) { UNDO.pop(); $('undoBtn').disabled = !UNDO.length; }
+        state.found = { doors: made.filter(function (d) { return !isWin(d); }).length, windows: made.filter(isWin).length };
+        renderAll();
+      });
+    }
+    // Put each find on the nearest room outline along its wall, the way a tap marks one:
+    // a door on the room it opens into, a window or a way in on the room inside
+    function addFound(list, k) {
+      var f = state.scale.ftPerPx, made = [];
+      list.forEach(function (it) {
+        var c = { x: it.cx / k, y: it.cy / k }, n = { x: it.nx, y: it.ny }, u = { x: it.ux, y: it.uy };
+        var half = it.thick / 2 / f, step = half + 6 / 12 / f, reach = half + 18 / 12 / f;
+        var front = { x: c.x + n.x * step, y: c.y + n.y * step }, back = { x: c.x - n.x * step, y: c.y - n.y * step }, best = null;
+        state.rooms.forEach(function (r) {
+          var poly = ptsPx(r), side = PLAN.pointInPoly(front, poly) ? 2 : PLAN.pointInPoly(back, poly) ? 1 : 0;
+          if (!side) return;
+          // A door with no swing doesn't open into either room: name it for the bigger one
+          // (a closet's sliding doors belong to the bedroom). A box that couldn't be placed counts last.
+          if (it.kind === 'door' && !it.hinge && it.type !== 'opening') side = 1 + Math.min(0.9, PLAN.polyArea(poly) / (state.W * state.H));
+          if (r.weak) side /= 4;
+          if (OUTDOOR.test(r.name + ' ' + (r.label || ''))) side /= 8;   // a door to the balcony belongs to the room inside
+          poly.forEach(function (p0, e) {
+            var p1 = poly[(e + 1) % poly.length], dx = p1.x - p0.x, dy = p1.y - p0.y, L = Math.hypot(dx, dy);
+            if (L < 1 || Math.abs((dx * u.x + dy * u.y) / L) < 0.9) return;   // only the outline running along this wall
+            var t = clamp(((c.x - p0.x) * dx + (c.y - p0.y) * dy) / (L * L), 0, 1), q = { x: p0.x + t * dx, y: p0.y + t * dy };
+            var dist = Math.hypot(c.x - q.x, c.y - q.y);
+            if (dist > reach) return;
+            var score = side * 1e6 - dist;
+            if (!best || score > best.score) best = { score: score, a: p0, L: L, t: t, q: q, room: r, u: { x: dx / L, y: dy / L }, poly: poly };
+          });
+        });
+        if (!best) {
+          // No outline runs along this wall (a room box that came out too big or too small):
+          // mark it where it is, on the face of the wall, for the room it opens into
+          var home = null, side = 0;
+          state.rooms.forEach(function (r) {
+            var poly = ptsPx(r), sd = PLAN.pointInPoly(front, poly) ? 1 : PLAN.pointInPoly(back, poly) ? -1 : 0;
+            var rank = function (rm, v) { return (v > 0 ? 2 : 1) * (rm.weak ? 0.25 : 1) * (OUTDOOR.test(rm.name + ' ' + (rm.label || '')) ? 0.1 : 1); };
+            if (sd && (!home || rank(r, sd) > rank(home, side))) { home = r; side = sd; }
+          });
+          if (!home) return;
+          var into = { x: n.x * side, y: n.y * side }, face = { x: c.x + into.x * half, y: c.y + into.y * half };
+          var fd = { id: state.nextId++, type: it.type, w: Math.round(clamp(it.w, 12, 192)), hinge: 1, out: false, found: true,
+                     x: face.x / state.W * 100, y: face.y / state.H * 100, ux: u.x, uy: u.y, nx: into.x, ny: into.y, room: home.id };
+          if (it.hinge && side < 0) { fd.out = true; fd.nx = n.x; fd.ny = n.y; }
+          if (it.hinge) fd.hinge = (it.hinge.x / k - c.x) * u.x + (it.hinge.y / k - c.y) * u.y < 0 ? -1 : 1;
+          if (state.doors.some(function (o) { return Math.hypot(o.x / 100 * state.W - face.x, o.y / 100 * state.H - face.y) < (Math.min(o.w, fd.w) / 2) / 12 / f; })) return;
+          state.doors.push(fd); made.push(fd);
+          return;
+        }
+        // Into the room, as a tap on its outline gives it
+        var nn = { x: -best.u.y, y: best.u.x }, s = 3 * displayRatio();
+        if (!PLAN.pointInPoly({ x: best.q.x + nn.x * s, y: best.q.y + nn.y * s }, best.poly)) nn = { x: -nn.x, y: -nn.y };
+        best.n = nn;
+        var d = { id: state.nextId++, type: it.type, w: Math.round(clamp(it.w, 12, 192)), hinge: 1, out: false, found: true };
+        if (it.hinge && nn.x * n.x + nn.y * n.y < 0) d.out = true;   // swings out of this room
+        var c2 = doorSpot(best, d.w);
+        if (state.doors.some(function (o) { return Math.hypot(o.x / 100 * state.W - c2.x, o.y / 100 * state.H - c2.y) < (Math.min(o.w, d.w) / 2) / 12 / f; })) return;   // already marked
+        setDoorOn(d, best);
+        if (it.hinge) {
+          var H = { x: it.hinge.x / k, y: it.hinge.y / k };
+          d.hinge = (H.x - c.x) * d.ux + (H.y - c.y) * d.uy < 0 ? -1 : 1;
+        }
+        state.doors.push(d); made.push(d);
+      });
+      return made;
+    }
+    function plural(n, one) { return n + ' ' + one + (n === 1 ? '' : 's'); }
+    function renderFoundNote() {
+      var fd = state.found, show = fd && !fd.hidden && (fd.doors || fd.windows);
+      var what = show ? [fd.doors ? plural(fd.doors, 'door') : '', fd.windows ? plural(fd.windows, 'window') : ''].filter(Boolean).join(' and ') : '';
+      var x = '<button class="note-x" data-note="hide" aria-label="Hide this note">&times;</button>';
+      ['foundNoteM', 'foundNoteD'].forEach(function (id) {
+        var el = $(id);
+        if (!el) return;
+        el.classList.toggle('hidden', !show);
+        if (!show) { el.innerHTML = ''; return; }
+        el.innerHTML = x + (id === 'foundNoteM'
+          ? '<b>We found ' + what + ' on your plan.</b> Check them: they\'re marked in green.<br><button class="btn-secondary btn-sm" data-note="check">Check the doors</button>'
+          : '<b>We found ' + what + ' on your plan</b> and marked them for you. Check each one: drag it into place, flip the way it opens, change its type, or remove it. Mark any we missed below.');
+      });
+    }
+    function onNoteClick(e) {
+      var btn = e.target.closest('[data-note]');
+      if (!btn) return;
+      if (btn.getAttribute('data-note') === 'hide') { if (state.found) state.found.hidden = true; renderFoundNote(); return; }
+      setMode('furnish'); showPaneTab('doors');
+    }
+    function showPaneTab(t) { setTab(t); showPane(); }
+
     // The doors marked so far, in the Doors tab
     function renderDoorList() {
       var el = $('doorList');
@@ -2461,12 +2619,13 @@
     // What each type's buttons say: which way it swings or hangs, and which end it hinges, slides or folds to
     var DOOR_FLIPS = {
       swing: ['Flip swing', 'Flip hinge'], double: ['Flip swing', null], bifold: ['Flip side', 'Flip fold'],
-      barn: ['Flip side', 'Flip slide'], pocket: [null, 'Flip pocket'], bypass: [null, null], window: [null, null]
+      barn: ['Flip side', 'Flip slide'], pocket: [null, 'Flip pocket'], bypass: [null, null], opening: [null, null], window: [null, null]
     };
     var DOOR_NOTE = {
       swing: '', double: 'Two leaves, each half the width.', bifold: 'Folds back against the frame; 48" and wider folds to both sides.',
       barn: 'Hangs on the wall and slides past the opening, so that stretch of wall needs to be clear.', pocket: 'Slides into the wall, so nothing to check in the room.',
       bypass: 'Two panels slide past each other in the opening (closets), so nothing to check in the room.',
+      opening: 'A way through with no door, so nothing to check in the room.',
       window: 'Furniture ' + DOOR.WINDOW_TALL + '" or taller standing within 12" of it counts as blocking it.'
     };
     function renderDoorBar() {
@@ -3104,7 +3263,7 @@
         W: state.W, H: state.H, fileName: state.fileName || '',
         rooms: plan.rooms, scale: plan.scale, pieces: plan.pieces, doors: plan.doors, erase: plan.erase || [],
         words: state.walls && state.walls.words ? state.walls.words.map(function (w) { return { text: w.text, x: w.x, y: w.y, w: w.w, h: w.h }; }) : null,
-        hasWalls: !!(state.walls && state.walls.map), mode: state.mode
+        hasWalls: !!(state.walls && state.walls.map), mode: state.mode, openingsDone: !!state.openingsDone
       };
     }
     function openSave() {
@@ -3192,6 +3351,9 @@
           state.rooms = rec.rooms || []; state.scale = rec.scale || null;
           state.pieces = rec.pieces || []; state.doors = rec.doors || [];
           state.erase = rec.erase || []; state.eraseVer++;
+          // A plan saved before it had a scale still looks for its doors once the scale is set
+          // (from the drawing alone: the model's list isn't kept). Older saves never do.
+          state.openingsDone = rec.openingsDone !== false; state.openHints = null; state.found = null;
           var ids = [0];
           state.rooms.concat(state.pieces, state.doors).forEach(function (o) { if (typeof o.id === 'number') ids.push(o.id); });
           state.nextId = Math.max.apply(null, ids) + 1;
@@ -3339,6 +3501,7 @@
       refitRooms();
       endScaleTool();
       renderAll();
+      findOpenings();   // doors and windows wait for a scale to be measured
     }
 
     function renderScaleBar() {
@@ -3442,7 +3605,7 @@
       $('statEst').textContent = est;
     }
 
-    function renderAll() { syncGeometry(); renderCards(); renderStats(); renderScaleBar(); renderRoomPick(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderDoorBar(); renderDoorList(); } draw(); }
+    function renderAll() { syncGeometry(); renderFoundNote(); renderCards(); renderStats(); renderScaleBar(); renderRoomPick(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderDoorBar(); renderDoorList(); } draw(); }
 
     function cardIndex(el) {
       var card = el.closest('.room-card');
@@ -3817,6 +3980,7 @@
       state.img = null; state.savedId = null; state.dirty = false; state.planName = ''; state.rooms = []; state.selected = -1; state.sendB64 = '';
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
+      state.openHints = null; state.openingsDone = false; state.found = null;
       state.view = { z: 1, px: 0, py: 0 };
       UNDO = []; $('undoBtn').disabled = true;
       endScaleTool(); endDoorTool();
@@ -3884,6 +4048,8 @@
         onPieceClick(e); onDoorClick(e);
       });
       fp.addEventListener('change', function (e) { onDoorChange(e); onDetailChange(e); });
+      $('foundNoteM').addEventListener('click', onNoteClick);
+      $('foundNoteD').addEventListener('click', onNoteClick);
       fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (/^pc[NWDT]/.test(e.target.id || '') || e.target.getAttribute('data-dact') === 'width')) e.target.blur(); });
       $('floatBar').addEventListener('click', onFloatClick);
       $('undoBtn').addEventListener('click', undo);
@@ -4080,6 +4246,7 @@
       <aside class="panel" id="panel">
         <!-- Measure -->
         <div id="measurePanel" class="pane">
+          <div class="found-note hidden" id="foundNoteM"></div>
           <div class="stats">
             <div class="stat"><b id="statRooms">0</b><span>Spaces</span></div>
             <div class="stat"><b id="statArea">0</b><span>Total sq ft</span></div>
@@ -4144,6 +4311,7 @@
           </div>
 
           <div class="pane hidden" id="pane-doors">
+            <div class="found-note hidden" id="foundNoteD"></div>
             <p class="pane-sub">Mark the doors and windows on the walls. Doors show the space they swing or slide through and start the walking routes; windows show whether tall furniture stands in front of them. Pick a door to change its type: swing, double, pocket, barn, sliding or bifold.</p>
             <div class="btn-row"><button class="btn-primary btn-sm" id="doorBtn">Mark a door</button><button class="btn-secondary btn-sm" id="winBtn">Mark a window</button></div>
             <p class="hint" id="doorHint"></p>

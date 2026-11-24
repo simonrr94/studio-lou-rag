@@ -9,6 +9,7 @@
           converting between the wall map and the displayed plan.
    RUG    standard rug sizes, which ones fit a room, and spacing lines.
    FURNITURE  the starter catalog and the geometry of placed pieces.
+   OPENINGS   finds the doors and windows drawn on the plan (after DOOR).
 
    When this file changes, bump the ?v= number on its <script> tag in
    floor-plan-parser.html so browsers fetch the new copy.
@@ -41,10 +42,13 @@ var SNAP = (function () {
     var px = ctx.getImageData(0, 0, w, h).data;
 
     // Dark pixel mask
-    var dark = new Uint8Array(w * h);
+    // ink: any drawn line, thin ones too (door swings); faint: light gray as well (window glass)
+    var dark = new Uint8Array(w * h), ink = new Uint8Array(w * h), faint = new Uint8Array(w * h);
     for (var i = 0, j = 0; i < dark.length; i++, j += 4) {
       var lum = 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2];
       dark[i] = lum < 110 ? 1 : 0;
+      ink[i] = lum < 175 ? 1 : 0;
+      faint[i] = lum < 230 ? 1 : 0;
     }
     // Integral image for fast box sums
     var W1 = w + 1, I = new Uint32Array(W1 * (h + 1));
@@ -75,7 +79,7 @@ var SNAP = (function () {
     for (var y2 = 0; y2 < h; y2++) for (var x2 = 0; x2 < w; x2++) {
       if (dark[y2 * w + x2] && full(x2, y2, kUse)) wall[y2 * w + x2] = 1;
     }
-    return { w: w, h: h, scale: s, wall: wall, k: kUse, kMax: kMax, canvas: c };
+    return { w: w, h: h, scale: s, wall: wall, ink: ink, faint: faint, k: kUse, kMax: kMax, canvas: c };
   }
 
   /* ---------- Text recognition ---------- */
@@ -1995,9 +1999,10 @@ var DOOR = (function () {
     barn:   { name: 'Barn', widths: [30, 32, 36, 42] },
     bypass: { name: 'Sliding (bypass)', widths: [48, 60, 72, 96] },
     bifold: { name: 'Bifold', widths: [24, 30, 36, 48, 60, 72] },
+    opening: { name: 'Opening (no door)', widths: [30, 36, 48, 60, 72] },
     window: { name: 'Window', widths: [24, 30, 36, 48, 60, 72, 96] }
   };
-  var ORDER = ['swing', 'double', 'pocket', 'barn', 'bypass', 'bifold'];
+  var ORDER = ['swing', 'double', 'pocket', 'barn', 'bypass', 'bifold', 'opening'];
   var WIDTHS = TYPES.swing.widths;
   var BARN_GAP = 5;      // inches off the wall a barn door hangs and slides (door and track)
   var WINDOW_FRONT = 12; // inches in front of a window that count as standing in front of it
@@ -2053,6 +2058,9 @@ var DOOR = (function () {
       out.slabs.push([off(a, -1), off(along(c, -r * 0.06), -1)]);
       out.slabs.push([off(b, 1), off(along(c, r * 0.06), 1)]);
     }
+    else if (type === 'opening') {
+      out.dashed.push([a, b]);   // a way through with no door: just the line across it
+    }
     else if (type === 'window') {
       out.zones.push([a, b, off(b, WINDOW_FRONT), off(a, WINDOW_FRONT)]);
     }
@@ -2075,6 +2083,313 @@ var DOOR = (function () {
     return { hits: hits, under: under, nearest: nearest, moves: true };
   }
   return { TYPES: TYPES, ORDER: ORDER, WIDTHS: WIDTHS, WINDOW_TALL: WINDOW_TALL, geom: geom, check: check };
+})();
+
+/* =====================================================================
+   OPENINGS: finding the doors and windows drawn on a plan
+   Same split as measuring: the reading model points (roughly where each
+   door, opening and window is), and this code pins them down on the
+   wall map, where they can be measured.
+     1. Every break in a wall is found: wall ink on both sides, a gap
+        between, the gap no deeper than the wall is thick, and open
+        floor (not more wall) just past it on both sides.
+     2. Each break is cut where a line crosses the wall (a window frame or
+        a door jamb), so a door beside a window comes apart from it.
+        A stretch filled with ink across the wall is only a thinner wall.
+     3. Each piece is read: a swing arc or a door leaf drawn beside it
+        makes it a door (with its hinge and the side it opens to); thin
+        lines inside it on an outside wall make it a window; nothing
+        drawn makes it an opening.
+     4. The model's list settles what the drawing can't say on its own
+        (a sliding or bifold door, a window drawn as a plain gap), and
+        pieces it never mentioned still count when the drawing is clear
+        (a swing arc; lines in an outside wall).
+   Works in the wall map's pixels (SNAP.analyze). ppf: map pixels per foot.
+   hints: [{ kind: 'door' | 'opening' | 'window', type, x, y (map px) }].
+   indoor(p): true when a map point is inside an indoor room (optional).
+   Returns [{ kind: 'door' | 'window', type (a DOOR type, or 'opening' for a
+   way in with no door), cx, cy, ux, uy (along the wall), nx, ny (the side a
+   door opens to, or the inside), w (inches), thick (feet), hinge ({ x, y }
+   jamb, swing doors only), outside, from: 'both' | 'plan' }].
+   Openings between two rooms are left out: the walking routes already
+   treat them as passages.
+   ===================================================================== */
+var OPENINGS = (function () {
+  var MIN_IN = 16;        // inches: narrower breaks are drawing slop
+  var DOOR_MAX = 100;     // inches: the widest door (a pair of 48" leaves)
+  var WINDOW_MAX = 30 * 12;
+  var WALL_MAX = 16;      // inches: the thickest wall
+  var REACH = 4;          // feet: how far from a break the model's rough spot may land
+
+  function at(m, a, x, y) { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < a.w && y < a.h && m[y * a.w + x] === 1; }
+  // Thin ink near a spot (a line drawn in pen, not a wall)
+  function inkNear(a, x, y, r) {
+    for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++)
+      if (at(a.ink, a, x + dx, y + dy) && !at(a.wall, a, x + dx, y + dy)) return true;
+    return false;
+  }
+  function median(l) { var q = l.slice().sort(function (p, r) { return p - r; }); return q[q.length >> 1]; }
+
+  /* ---------- 1. Breaks in the walls ---------- */
+  // Scan rows (horizontal walls) or columns (vertical walls) for a wall run, a gap, and
+  // another wall run; then stack matching rows into one break. In a break's own frame,
+  // u runs along the wall and v across it.
+  function breaks(a, ppf, vertical) {
+    var W = vertical ? a.h : a.w, H = vertical ? a.w : a.h, k = a.k;
+    var lo = MIN_IN / 12 * ppf + k * 0.5, hi = WINDOW_MAX / 12 * ppf + k;
+    function wallAt(u, v) { return u >= 0 && v >= 0 && u < W && v < H && (vertical ? a.wall[u * a.w + v] === 1 : a.wall[v * a.w + u] === 1); }
+    var open = [], found = [];
+    for (var v = 0; v < H; v++) {
+      var runs = [], s = -1;
+      for (var u = 0; u <= W; u++) {
+        var on = u < W && wallAt(u, v);
+        if (on && s < 0) s = u;
+        if (!on && s > -1) { runs.push([s, u - 1]); s = -1; }
+      }
+      var next = [];
+      for (var i = 0; i + 1 < runs.length; i++) {
+        var x1 = runs[i][1], x2 = runs[i + 1][0], g = x2 - x1 - 1;
+        if (g < lo || g > hi) continue;
+        var L = Math.max(runs[i][1] - runs[i][0], runs[i + 1][1] - runs[i + 1][0]) + 1, m = null;
+        // Carry on a break from the row before, or start a new one
+        for (var j = 0; j < open.length; j++) {
+          var o = open[j];
+          if (Math.abs(o.x1s[o.x1s.length - 1] - x1) <= 2 && Math.abs(o.x2s[o.x2s.length - 1] - x2) <= 2) { m = o; open.splice(j, 1); break; }
+        }
+        if (!m) m = { v0: v, x1s: [], x2s: [], Ls: [] };
+        m.v1 = v; m.x1s.push(x1); m.x2s.push(x2); m.Ls.push(L);
+        next.push(m);
+      }
+      found = found.concat(open);
+      open = next;
+    }
+    found = found.concat(open);
+    var maxT = WALL_MAX / 12 * ppf;
+    // Share of the gap that's wall on a row just past the break
+    function wallShare(v, u0, u1) {
+      var n = 0, hit = 0;
+      for (var u = Math.ceil(u0); u <= u1; u++) { n++; if (wallAt(u, v)) hit++; }
+      return n ? hit / n : 1;
+    }
+    return found.map(function (m) {
+      var x1 = median(m.x1s), x2 = median(m.x2s);
+      // The wall map sits a little inside the ink (by half its box): put the ink back
+      return { vertical: vertical, x1: x1, x2: x2, v0: m.v0, v1: m.v1, T: m.v1 - m.v0 + 1, L: median(m.Ls),
+               g0: x1 + k / 2, g1: x2 - k / 2, t0: m.v0 - k / 2, t1: m.v1 + k / 2 };
+    }).filter(function (b) {
+      if (b.T < 2 || b.t1 - b.t0 > maxT || b.T > Math.max(3, 1.8 * b.L) || b.g1 - b.g0 < MIN_IN / 12 * ppf) return false;
+      // Open floor just past it on both sides. More wall there means this is the room
+      // between two walls, cut short where one of them has a window.
+      var d = Math.max(2, Math.round(k / 2));
+      return wallShare(b.v0 - d, b.x1 + 1, b.x2 - 1) < 0.3 && wallShare(b.v1 + d, b.x1 + 1, b.x2 - 1) < 0.3;
+    });
+  }
+
+  /* ---------- 2. Cutting breaks at frames and jambs ---------- */
+  function pix(a, b, u, v) { return b.vertical ? { x: v, y: u } : { x: u, y: v }; }
+  function pieces(a, b, ppf) {
+    var u0 = Math.ceil(b.g0), u1 = Math.floor(b.g1), cov = [];
+    var v0 = Math.ceil(b.t0), v1 = Math.floor(b.t1), T = v1 - v0 + 1;
+    for (var u = u0; u <= u1; u++) {
+      var hit = 0;
+      for (var v = v0; v <= v1; v++) { var p = pix(a, b, u, v); if (at(a.ink, a, p.x, p.y)) hit++; }
+      cov.push(hit / T);
+    }
+    // Ink right across the wall: a jamb or frame line (thin), or more wall (wide)
+    var cuts = [], i = 0, solid = 0, min = MIN_IN / 12 * ppf;
+    while (i < cov.length) {
+      if (cov[i] < 0.75) { i++; continue; }
+      var j = i; while (j < cov.length && cov[j] >= 0.75) j++;
+      cuts.push([i, j - 1]); solid += j - i; i = j;
+    }
+    if (solid > cov.length * 0.6) return [];   // a thinner wall the wall map missed, not a break
+    var out = [], start = 0;
+    cuts.concat([[cov.length, cov.length]]).forEach(function (c) {
+      if (c[0] - start >= min) out.push({ g0: u0 + start, g1: u0 + c[0] - 1 });
+      start = c[1] + 1;
+    });
+    // Each piece needs open floor (not wall) just past it on both sides, along its own length
+    var d = Math.max(2, Math.round(a.k / 2));
+    function open(g0, g1) {
+      return [b.v0 - d, b.v1 + d].every(function (vv) {
+        var n = 0, hit = 0;
+        for (var uu = Math.ceil(g0); uu <= g1; uu++) { n++; var q = pix(a, b, uu, vv); if (at(a.wall, a, q.x, q.y)) hit++; }
+        return n && hit / n < 0.3;
+      });
+    }
+    // Then where lines along the wall start or stop: a window's glass beside a door's open gap
+    var lined = [], parts = [];
+    for (u = u0; u <= u1; u++) {
+      var any = 0;
+      for (v = v0 + 1; v < v1; v++) { var q = pix(a, b, u, v); if (at(a.faint, a, q.x, q.y)) { any = 1; break; } }
+      lined.push(any);
+    }
+    out.forEach(function (sg) {
+      var runs = [], k0 = sg.g0 - u0, k1 = sg.g1 - u0, r0 = k0;
+      for (var x = k0 + 1; x <= k1 + 1; x++) if (x > k1 || lined[x] !== lined[r0]) { runs.push({ a: r0, b: x - 1, on: lined[r0] }); r0 = x; }
+      // Short runs (a mullion, an arc crossing the jamb) join the run before them
+      var keep = [];
+      runs.forEach(function (r) {
+        var last = keep[keep.length - 1];
+        if (last && (r.b - r.a + 1 < 12 / 12 * ppf || last.on === r.on)) last.b = r.b;
+        else if (!last && r.b - r.a + 1 < 12 / 12 * ppf && runs.length > 1) { r.on = 1 - r.on; keep.push(r); }
+        else keep.push(r);
+      });
+      keep.forEach(function (r) { if (r.b - r.a + 1 >= min && open(u0 + r.a, u0 + r.b)) parts.push({ g0: u0 + r.a, g1: u0 + r.b }); });
+      if (!keep.some(function (r) { return r.b - r.a + 1 >= min; }) && open(sg.g0, sg.g1)) parts.push(sg);
+    });
+    return parts.map(function (s) { return { vertical: b.vertical, g0: s.g0, g1: s.g1, t0: b.t0, t1: b.t1, T: b.T, L: b.L }; });
+  }
+
+  /* ---------- 3. Reading each piece ---------- */
+  function frame(b) {
+    var c = (b.g0 + b.g1) / 2, m = (b.t0 + b.t1) / 2;
+    return b.vertical
+      ? { cx: m, cy: c, u: { x: 0, y: 1 }, n: { x: 1, y: 0 }, A: { x: m, y: b.g0 }, B: { x: m, y: b.g1 } }
+      : { cx: c, cy: m, u: { x: 1, y: 0 }, n: { x: 0, y: 1 }, A: { x: b.g0, y: m }, B: { x: b.g1, y: m } };
+  }
+  // Share of the piece with something drawn inside the wall (window glass, a sliding door)
+  function filled(a, b) {
+    var n = 0, hit = 0, v0 = Math.ceil(b.t0) + 1, v1 = Math.floor(b.t1) - 1;
+    for (var u = Math.ceil(b.g0); u <= b.g1; u++) {
+      n++;
+      for (var v = v0; v <= v1; v++) { var p = pix(a, b, u, v); if (at(a.faint, a, p.x, p.y)) { hit++; break; } }
+    }
+    return n ? hit / n : 0;
+  }
+  // Lines drawn inside the piece, running along it (window glass, a sliding door, a threshold)
+  function lines(a, b) {
+    var count = 0, inLine = false, pad = Math.max(2, (b.g1 - b.g0) * 0.08);
+    for (var v = Math.floor(b.t0) - 1; v <= Math.ceil(b.t1) + 1; v++) {
+      var hit = 0, n = 0;
+      for (var u = b.g0 + pad; u <= b.g1 - pad; u += 1) { n++; var p = pix(a, b, u, v); if (at(a.faint, a, p.x, p.y)) hit++; }
+      var full = n && hit / n >= 0.8;
+      if (full && !inLine) count++;
+      inLine = full;
+    }
+    return count;
+  }
+  // A swing: the leaf drawn as a straight line out from the hinge (standing open at any angle),
+  // and the arc it sweeps back to the latch jamb. Tries each jamb as the hinge, on each side
+  // of the wall. The hinge sits at the wall's face on the side the door opens to.
+  function swing(a, b, F) {
+    var R = Math.hypot(F.B.x - F.A.x, F.B.y - F.A.y), half = (b.t1 - b.t0) / 2, best = null;
+    [[F.A, F.B], [F.B, F.A]].forEach(function (pair) {
+      var e = { x: (pair[1].x - pair[0].x) / R, y: (pair[1].y - pair[0].y) / R };
+      [1, -1].forEach(function (sd) {
+        var n = { x: F.n.x * sd, y: F.n.y * sd }, h = { x: pair[0].x + n.x * half, y: pair[0].y + n.y * half };
+        // The leaf: the strongest straight line out from the hinge
+        var leaf = 0, leafAng = 90;
+        for (var g = 16; g <= 94; g += 3) {
+          var gr = g * Math.PI / 180, dx = e.x * Math.cos(gr) + n.x * Math.sin(gr), dy = e.y * Math.cos(gr) + n.y * Math.sin(gr), lh = 0, ln = 0;
+          for (var s = R * 0.15; s <= R * 0.95; s += 1.5) { ln++; if (inkNear(a, h.x + dx * s, h.y + dy * s, 1)) lh++; }
+          if (ln && lh / ln > leaf) { leaf = lh / ln; leafAng = g; }
+        }
+        // The arc, from just off the closed position round to the leaf (or to square open)
+        var top = leaf >= 0.8 ? leafAng - 4 : 84, hit = 0, tot = 0;
+        for (var t = 6; t <= top; t += 2) {
+          var th = t * Math.PI / 180, x = h.x + (e.x * Math.cos(th) + n.x * Math.sin(th)) * R, y = h.y + (e.y * Math.cos(th) + n.y * Math.sin(th)) * R;
+          tot++; if (inkNear(a, x, y, 2)) hit++;
+        }
+        var arc = tot ? hit / tot : 0;
+        // A door shows a strong arc, or a clear leaf with some of its arc
+        var score = Math.max(top >= 40 ? arc : arc * 0.8, leaf >= 0.8 && arc >= 0.4 ? (leaf + arc) / 2 : 0, leaf >= 0.92 && leafAng < 80 ? leaf * 0.7 : 0);
+        if (!best || score > best.score) best = { score: score, arc: arc, leaf: leaf, ang: leafAng, hinge: pair[0], n: n };
+      });
+    });
+    return best;
+  }
+  // Is this side of the wall outdoors? Not in an indoor room, and most of a fan of lines out
+  // from the wall reach the edge of the plan without crossing another wall. (One straight line
+  // can slip out through a door on the far side of a room; a fan can't.)
+  function outdoors(a, p, n, indoor) {
+    if (indoor && indoor(p)) return false;
+    var out = 0;
+    for (var f = -60; f <= 60; f += 15) {
+      var r = f * Math.PI / 180, dx = n.x * Math.cos(r) - n.y * Math.sin(r), dy = n.x * Math.sin(r) + n.y * Math.cos(r), esc = true;
+      for (var s = 0; s < a.w + a.h; s += 1) {
+        var x = p.x + dx * s, y = p.y + dy * s;
+        if (x < 0 || y < 0 || x >= a.w || y >= a.h) break;
+        if (at(a.wall, a, x, y)) { esc = false; break; }
+      }
+      if (esc) out++;
+    }
+    return out >= 6;
+  }
+
+  /* ---------- 4. Putting it together ---------- */
+  var DOOR_TYPES = { swing: 'swing', single: 'swing', hinged: 'swing', double: 'double', french: 'double', pocket: 'pocket', barn: 'barn',
+                     sliding: 'bypass', slider: 'bypass', bypass: 'bypass', bifold: 'bifold', folding: 'bifold' };
+  function find(a, ppf, hints, indoor) {
+    if (!a || !a.wall || !a.ink || !ppf) return [];
+    var all = [];
+    breaks(a, ppf, false).concat(breaks(a, ppf, true)).forEach(function (b) { all = all.concat(pieces(a, b, ppf)); });
+    // The same gap can show up twice (in both scans, or on a thin row along a wall's face):
+    // where two pieces overlap, keep the one whose wall runs on past it (a real wall does;
+    // a strip of floor between two walls that cross it doesn't)
+    all.sort(function (p, q) { return (q.L - p.L) || (q.T - p.T); });
+    var list = [];
+    all.forEach(function (b) {
+      var F = frame(b), wd = b.g1 - b.g0;
+      var same = list.some(function (o) {
+        var c = o.b;
+        if (c.vertical !== b.vertical) return Math.hypot(o.F.cx - F.cx, o.F.cy - F.cy) < Math.min(wd, c.g1 - c.g0) / 2;
+        var along = Math.min(c.g1, b.g1) - Math.max(c.g0, b.g0), across = Math.min(c.t1, b.t1) - Math.max(c.t0, b.t0);
+        return along > 0.3 * Math.min(wd, c.g1 - c.g0) && across > -ppf / 3;
+      });
+      if (!same) list.push({ b: b, F: F });
+    });
+    // The model's spots, each matched to the nearest piece (closest pairs first)
+    hints = (hints || []).filter(function (h) { return h && isFinite(h.x) && isFinite(h.y); });
+    var pairs = [];
+    list.forEach(function (it, i) {
+      var b = it.b, reach = REACH * ppf;
+      hints.forEach(function (h, j) {
+        // Distance to the piece itself (not its middle), so a long window still catches a spot near its end
+        var t = Math.max(b.g0, Math.min(b.g1, b.vertical ? h.y : h.x)), q = pix(a, b, t, (b.t0 + b.t1) / 2);
+        var d = Math.hypot(h.x - q.x, h.y - q.y);
+        if (d <= reach) pairs.push({ i: i, j: j, d: d });
+      });
+    });
+    pairs.sort(function (p, q) { return p.d - q.d; });
+    var takenI = {}, takenJ = {};
+    pairs.forEach(function (p) { if (takenI[p.i] || takenJ[p.j]) return; takenI[p.i] = 1; takenJ[p.j] = 1; list[p.i].hint = hints[p.j]; });
+
+    var out = [];
+    list.forEach(function (it) {
+      var b = it.b, F = it.F, hint = it.hint || null, wIn = (b.g1 - b.g0) / ppf * 12;
+      var off = (b.t1 - b.t0) / 2 + 9 / 12 * ppf;
+      var sideP = { x: F.cx + F.n.x * off, y: F.cy + F.n.y * off }, sideM = { x: F.cx - F.n.x * off, y: F.cy - F.n.y * off };
+      var outP = outdoors(a, sideP, F.n, indoor), outM = outdoors(a, sideM, { x: -F.n.x, y: -F.n.y }, indoor);
+      if (outP && outM) return;   // a stub of wall standing in the open
+      var outside = outP || outM, inside = outP ? { x: -F.n.x, y: -F.n.y } : F.n;
+      var sw = wIn <= DOOR_MAX ? swing(a, b, F) : null, fill = filled(a, b), ln = Math.max(lines(a, b), fill >= 0.7 ? 1 : 0), item = null;
+      var kind = hint ? String(hint.kind || '').toLowerCase() : '';
+      var htype = hint && hint.type ? DOOR_TYPES[String(hint.type).toLowerCase()] || null : null;
+      if (sw && sw.score >= 0.6 && kind !== 'window') {
+        // A swing drawn on the plan: a door, whatever the model said
+        item = { kind: 'door', type: htype === 'double' && wIn >= 44 ? 'double' : 'swing', n: sw.n, hinge: sw.hinge };
+      } else if (kind === 'window') {
+        if (outside) item = { kind: 'window', type: 'window', n: inside };
+      } else if (kind === 'door' && wIn <= DOOR_MAX) {
+        // A door the model saw where the drawing shows no swing: sliding, pocket, bifold, or one drawn plainly
+        var t = htype && htype !== 'swing' ? htype : (ln >= 1 ? 'bypass' : outside ? 'opening' : null);
+        if (t) item = { kind: 'door', type: t, n: inside };
+      } else if (kind === 'opening' && outside && wIn <= DOOR_MAX) {
+        item = { kind: 'door', type: 'opening', n: inside };    // a way in with no door drawn
+      } else if (!hint && ln >= 1 && outside) {
+        item = { kind: 'window', type: 'window', n: inside };   // lines in an outside wall
+      } else if (!hint && ln === 0 && outside && wIn >= 24 && wIn <= DOOR_MAX) {
+        item = { kind: 'door', type: 'opening', n: inside };    // a plain gap in an outside wall: a way in
+      }
+      if (!item) return;
+      out.push({ kind: item.kind, type: item.type, cx: F.cx, cy: F.cy, ux: F.u.x, uy: F.u.y, nx: item.n.x, ny: item.n.y,
+                 w: Math.round(wIn), thick: (b.t1 - b.t0) / ppf, hinge: item.hinge || null, outside: outside, from: hint ? 'both' : 'plan'
+               });
+    });
+    return out;
+  }
+  return { find: find, breaks: breaks, pieces: pieces };
 })();
 
 /* =====================================================================
