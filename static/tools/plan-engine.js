@@ -3101,6 +3101,14 @@ var LIGHT = (function () {
     if (!t.fc) return null;
     return t.fc[{ cozy: 0, balanced: 1, bright: 2 }[mood] != null ? { cozy: 0, balanced: 1, bright: 2 }[mood] : 1];
   }
+  // Rooms built around tasks: their recessed lights give the general light (the room's Cozy number),
+  // and task lights (pendants, under-cabinet, vanity, a desk lamp) bring the work surfaces up to the mood
+  var TASK_ROOMS = { kitchen: 'over the counters and island', bath: 'at the mirror (vanity lights)', office: 'at the desk', laundry: 'over the work surfaces' };
+  function taskRoom(typeId) { return TASK_ROOMS[typeId] || null; }
+  function general(typeId, mood) {
+    var t = type(typeId), tg = target(typeId, mood);
+    return tg == null ? null : TASK_ROOMS[typeId] ? Math.min(tg, t.fc[0]) : tg;
+  }
   function defaultSize(typeId, ceil) { return ceil >= 10 ? 'r6' : type(typeId).size; }
 
   // The lumen method, both ways
@@ -3214,8 +3222,7 @@ var LIGHT = (function () {
      o: { poly (room outline, feet), target (fc), lm (per light), beam, ceil (feet),
           pieces (in feet, with role, type, w, d in inches, cx, cy, rot), fixed (lights
           kept from before: { x, y, lm, beam }) }
-     Returns { lights: [{ x, y }], base: lights placed for the lumen method, extra: lights
-     added to fill a dark gap, short: lights the lumen method asked for that wouldn't fit
+     Returns { lights: [{ x, y }], base: lights placed, extra: 0 (kept for older callers), short: lights the lumen method asked for that wouldn't fit
      without crowding the ceiling, layout: 'grid' | 'aimed' }. */
   function suggest(o) {
     var poly = o.poly, bb = boundsOf(poly), A = polyArea(poly), h = Math.max(2, o.ceil - WORK);
@@ -3243,8 +3250,6 @@ var LIGHT = (function () {
     if (!S.length) return { lights: [], base: 0, extra: 0, layout: 'none' };
     var off = Math.min(WALL, inr * 0.7);
     var minSp = Math.max(2, Math.min(3, o.ceil * 0.3));   // closest two lights may sit (2 to 5 ft is the usual range)
-    var C = S.filter(function (p) { return p.e >= off - 1e-6 && !p.ban; });
-    if (!C.length) C = S.slice().sort(function (a, b) { return b.e - a.e; }).slice(0, 1);
     var spec = { lm: o.lm, beam: o.beam || 'wide' };
     var out = [];
 
@@ -3288,90 +3293,108 @@ var LIGHT = (function () {
       if (most.length) return { lights: most, base: most.length, extra: 0, layout: 'grid', short: N - most.length };
     }
 
-    // Aimed: one light at a time, each where it adds the most light to the spots that need it
-    var E = S.map(function (p) { return at(p, fixed, o.ceil); });
+    // Aimed, but always a standard grid: straight rows and columns that line up, each line slid
+    // toward where the room is used. Lines start evenly spaced, then each moves in 3" steps to
+    // wherever it lights the used spots best, staying between 0.7 and 1.35 times the even spacing
+    // from its neighbors (and never under minSp), and not far from the wall. Grid points outside the
+    // room, too close to a wall, over pillows or anything tall, or on a kept light are left out
+    // (a gap in a grid reads as planned; a stray light doesn't).
     var T = o.target, reach2 = (3.5 * h) * (3.5 * h);
-    function gainAt(c, list) {
-      var g = 0, fx = { x: c.x, y: c.y, lm: spec.lm, beam: spec.beam };
+    var E0 = S.map(function (p) { return at(p, fixed, o.ceil); });
+    var Wsum = S.reduce(function (sum, p) { return sum + p.w; }, 0) * T || 1;
+    var gx0 = bb.x + off, gx1 = bb.x + bb.w - off, gy0 = bb.y + off, gy1 = bb.y + bb.h - off;
+    if (gx1 < gx0) gx0 = gx1 = bb.x + bb.w / 2;
+    if (gy1 < gy0) gy0 = gy1 = bb.y + bb.h / 2;
+    var cache = {}, okCache = {};
+    function key(x, y) { return x.toFixed(2) + ',' + y.toFixed(2); }
+    function vec(x, y) {            // light from one fixture at (x, y) on every floor spot
+      var k = key(x, y);
+      if (cache[k]) return cache[k];
+      var v = new Float32Array(S.length), fx = { x: x, y: y, lm: spec.lm, beam: spec.beam };
       for (var s = 0; s < S.length; s++) {
-        var dx = S[s].x - c.x, dy = S[s].y - c.y;
-        if (dx * dx + dy * dy > reach2) continue;   // too far to add much
-        var add = illum(fx, S[s], h), e = list[s];
-        g += S[s].w * (Math.min(e + add, T) - Math.min(e, T));
+        var dx = S[s].x - x, dy = S[s].y - y;
+        if (dx * dx + dy * dy <= reach2) v[s] = illum(fx, S[s], h);
       }
-      return g * c.soft;
+      return (cache[k] = v);
     }
-    function addLight(c) {
-      var fx = { x: c.x, y: c.y, lm: spec.lm, beam: spec.beam };
-      out.push({ x: c.x, y: c.y });
-      for (var s = 0; s < S.length; s++) E[s] += illum(fx, S[s], h);
-    }
-    // Gains only shrink as lights are added, so a stale gain is an upper bound: re-check
-    // the leader only (lazy greedy), which keeps big open plans quick
-    var heap = C.map(function (c) { return { c: c, g: gainAt(c, E), at: 0 }; });
-    for (var n = 0; n < N; n++) {
-      var taken = fixed.concat(out), pick = null;
-      heap.sort(function (a, b) { return b.g - a.g; });
-      for (var hi = 0; hi < heap.length; hi++) {
-        var it = heap[hi];
-        if (near(it.c, taken, minSp)) { it.g = -1; continue; }
-        if (it.at !== n) { it.g = gainAt(it.c, E); it.at = n; }
-        var next = heap[hi + 1];
-        if (!next || it.g >= next.g) { pick = it; break; }
-        // fell behind: put it back in order and look again
-        heap.sort(function (a, b) { return b.g - a.g; }); hi = -1;
+    function okPt(x, y) {           // a grid point that can take a light, and how much its spot is avoided
+      var k = key(x, y);
+      if (okCache[k] !== undefined) return okCache[k];
+      var p = { x: x, y: y }, r = null;
+      if (inPoly(p, poly) && edgeDist(p, poly) >= off - 1e-6 && !near(p, fixed, minSp * 0.85)) {
+        var u = usage(p, pieces);
+        if (!u.ban) r = u.soft;
       }
-      if (!pick || pick.g <= 0) break;
-      addLight(pick.c);
-      heap = heap.filter(function (x) { return x !== pick && x.g >= 0; });
+      return (okCache[k] = r);
     }
-
-    // Line the lights up: lights nearly in a row or column share it, where the spot still works
-    var tol = Math.max(1.6, step * 2);
-    function ok(p) {
-      if (!inPoly(p, poly) || edgeDist(p, poly) < off - 1e-6) return false;
-      return !usage(p, pieces).ban;
+    function scoreOf(E, nSoft) {
+      var c = 0;
+      for (var s = 0; s < S.length; s++) c += S[s].w * Math.min(E[s], T);
+      return c / Wsum - nSoft * 0.03;
     }
-    ['x', 'y', 'x', 'y'].forEach(function (ax) {
-      var order = out.slice().sort(function (a, b) { return a[ax] - b[ax]; }), group = [];
-      function settle() {
-        if (group.length < 2) { group = []; return; }
-        var m = group.reduce(function (s, q) { return s + q[ax]; }, 0) / group.length;
-        group.forEach(function (q) {
-          var t = { x: q.x, y: q.y }; t[ax] = m;
-          // only where the spot works and no other light is already too close to it
-          var crowd = fixed.concat(out).some(function (o) { return o !== q && Math.hypot(o.x - t.x, o.y - t.y) < minSp * 0.85; });
-          if (ok(t) && !crowd) q[ax] = m;
-        });
-        group = [];
+    function gridScore(xs, ys) {
+      var E = Float32Array.from(E0), n = 0, soft = 0;
+      ys.forEach(function (y) { xs.forEach(function (x) {
+        var q = okPt(x, y);
+        if (q === null) return;
+        n++; soft += 1 - q;
+        var v = vec(x, y);
+        for (var s = 0; s < S.length; s++) E[s] += v[s];
+      }); });
+      return { score: scoreOf(E, soft / 0.45), n: n };
+    }
+    function even(a, b, k) {
+      var out = [];
+      for (var i = 0; i < k; i++) out.push(k === 1 ? (a + b) / 2 : a + i * (b - a) / (k - 1));
+      return out;
+    }
+    function snap4(v) { return Math.round(v * 4) / 4; }
+    // Slide one family of lines (xs or ys) one line at a time; the other family stays put
+    function slide(lines, other, isX, lo0, hi0) {
+      var k = lines.length;
+      if (k === 0) return;
+      // gaps stay within about a third of even, so lines never bunch into pairs
+      var span = hi0 - lo0, evenGap = k > 1 ? span / (k - 1) : span;
+      var minGap = Math.max(minSp, evenGap * 0.7), maxGap = Math.max(minGap, evenGap * 1.35);
+      var wallSlack = k > 1 ? evenGap * 0.35 : span / 2;
+      for (var j = 0; j < k; j++) {
+        var lo = j === 0 ? lo0 : lines[j - 1] + minGap, hi = j === k - 1 ? hi0 : lines[j + 1] - minGap;
+        if (j > 0) hi = Math.min(hi, lines[j - 1] + maxGap);
+        if (j < k - 1) lo = Math.max(lo, lines[j + 1] - maxGap);
+        if (j === 0 && k > 1) hi = Math.min(hi, lo0 + wallSlack);
+        if (j === k - 1 && k > 1) lo = Math.max(lo, hi0 - wallSlack);
+        if (hi < lo) continue;
+        var bestV = lines[j], bestS = -Infinity;
+        for (var v = snap4(lo); v <= hi + 1e-6; v += 0.25) {
+          if (v < lo - 1e-6) continue;
+          lines[j] = v;
+          var sc = isX ? gridScore(lines, other) : gridScore(other, lines);
+          if (sc.score > bestS + 1e-9) { bestS = sc.score; bestV = v; }
+        }
+        lines[j] = bestV;
       }
-      order.forEach(function (q) {
-        if (group.length && q[ax] - group[group.length - 1][ax] > tol) settle();
-        group.push(q);
-      });
-      settle();
+    }
+    var capC = Math.max(1, Math.floor((gx1 - gx0) / minSp + 1e-6) + 1), capR = Math.max(1, Math.floor((gy1 - gy0) / minSp + 1e-6) + 1);
+    var ideal = Math.sqrt(Math.max(1, N) * (bb.w / Math.max(bb.h, 0.1)));
+    var combos = [];
+    for (var nc = Math.max(1, Math.floor(ideal) - 1); nc <= Math.min(capC, Math.ceil(ideal) + 1); nc++) {
+      var nr0 = Math.min(capR, Math.ceil(N / nc));
+      combos.push([nc, nr0]);
+      if (nr0 + 1 <= capR && nc * (nr0 + 1) <= N * 1.4 + 1) combos.push([nc, nr0 + 1]);
+    }
+    if (!combos.length) combos.push([1, 1]);
+    var pick = null;
+    combos.forEach(function (cb) {
+      var xs = even(gx0, gx1, cb[0]), ys = even(gy0, gy1, cb[1]);
+      for (var pass = 0; pass < 2; pass++) { slide(xs, ys, true, gx0, gx1); slide(ys, xs, false, gy0, gy1); }
+      var r = gridScore(xs, ys);
+      var aspect = Math.abs(Math.log(((gx1 - gx0) / Math.max(1, cb[0] - 1) + 0.01) / ((gy1 - gy0) / Math.max(1, cb[1] - 1) + 0.01)));
+      var val = r.score - 0.025 * Math.max(0, r.n - N) - 0.5 * Math.max(0, N - r.n) / Math.max(1, N) - 0.01 * Math.min(aspect, 3);
+      if (!pick || val > pick.val) pick = { val: val, xs: xs.slice(), ys: ys.slice(), n: r.n };
     });
-    E = S.map(function (p) { return at(p, fixed.concat(out.map(function (q) { return { x: q.x, y: q.y, lm: spec.lm, beam: spec.beam }; })), o.ceil); });
-
-    // Fill dark gaps: away from the walls, any stretch of floor left far darker than the rest
-    var base = out.length, extra = 0, short = Math.max(0, N - out.length);
-    for (var round = 0; round < 3; round++) {
-      var inner = S.map(function (p, s) { return s; }).filter(function (s) { return S[s].e >= 1.5; });
-      if (!inner.length) break;
-      var mean = inner.reduce(function (sum, s) { return sum + E[s]; }, 0) / inner.length;
-      var dark = inner.filter(function (s) { return E[s] < mean * 0.3; });
-      if (dark.length * step * step < 9) break;
-      var pickC = null, pickG = 0, taken2 = fixed.concat(out);
-      C.forEach(function (c) {
-        if (near(c, taken2, minSp)) return;
-        var fx = { x: c.x, y: c.y, lm: spec.lm, beam: spec.beam }, g = 0;
-        dark.forEach(function (s) { g += Math.min(illum(fx, S[s], h), mean * 0.6 - E[s]); });
-        if (g > pickG) { pickG = g; pickC = c; }
-      });
-      if (!pickC) break;
-      addLight(pickC); extra++;
-    }
-    return { lights: out, base: base, extra: extra, layout: 'aimed', short: short };
+    var out2 = [];
+    pick.ys.forEach(function (y) { pick.xs.forEach(function (x) { if (okPt(x, y) !== null) out2.push({ x: x, y: y }); }); });
+    return { lights: out2, base: out2.length, extra: 0, layout: 'aimed', short: Math.max(0, N - out2.length) };
   }
 
   /* ---------- Results for a room ----------
@@ -3391,6 +3414,6 @@ var LIGHT = (function () {
   }
 
   return { CU: CU, LLF: LLF, WORK: WORK, WALL: WALL, LAMP_LM: LAMP_LM, FIXTURES: FIXTURES, BEAMS: BEAMS, TYPES: TYPES, MOODS: MOODS,
-           type: type, typeOf: typeOf, target: target, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
+           type: type, typeOf: typeOf, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
            isLamp: isLamp, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
 })();

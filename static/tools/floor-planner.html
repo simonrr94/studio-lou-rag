@@ -300,6 +300,18 @@
     .l-plan { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
     .l-plan .field { flex: 1; margin: 0; }
     .l-section { border-top: 1.5px solid #d0c9bc; margin-top: 18px; padding-top: 14px; }
+    .l-i { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1.3px solid #b5a999; background: #ffffff; color: #6b6560; font: italic 600 10px Georgia, serif; cursor: pointer; padding: 0; margin-left: 5px; vertical-align: 1px; text-transform: none; letter-spacing: 0; }
+    .l-i:hover { border-color: #582b36; color: #582b36; }
+    .l-gloss { margin-top: 16px; border: 1.5px solid #d0c9bc; border-radius: 12px; background: #ffffff; }
+    .l-gloss summary { cursor: pointer; padding: 10px 14px; font: 600 13px 'DM Sans', sans-serif; color: #433E3C; list-style: none; }
+    .l-gloss summary::-webkit-details-marker { display: none; }
+    .l-gloss summary::after { content: '+'; float: right; color: #6b6560; font-weight: 500; }
+    .l-gloss[open] summary::after { content: '\2212'; }
+    .l-gloss dl { margin: 0; padding: 0 14px 12px; }
+    .l-gloss dt { font: 600 13px 'DM Sans', sans-serif; color: #582b36; margin-top: 10px; border-radius: 6px; transition: background 0.6s; }
+    .l-gloss dd { margin: 2px 0 0; font-size: 12.5px; color: #433E3C; line-height: 1.5; }
+    .l-gloss dt.flash { background: #eef3dc; }
+    .l-goal { font-size: 13px; color: #433E3C; line-height: 1.5; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d0c9bc; }
 
     /* ── PHONE AND NARROW SCREENS: plan on top, panel below, page scrolls ── */
     /* Saved plans */
@@ -2167,8 +2179,10 @@
     function roomCeil(r) { return lightCfg(r).ceil || state.lightCfg.ceil || 8; }
     function roomLType(r) { return lightCfg(r).type || LIGHT.typeOf(r.name); }
     function roomMood(r) { return lightCfg(r).mood || LIGHT.type(roomLType(r)).mood; }
-    function roomSize(r) { return lightCfg(r).size || LIGHT.defaultSize(roomLType(r), roomCeil(r)); }
+    function roomSize(r) { var c = lightCfg(r); return c.size || c.auto || LIGHT.defaultSize(roomLType(r), roomCeil(r)); }
     function roomTarget(r) { return LIGHT.target(roomLType(r), roomMood(r)); }
+    // What the recessed lights are judged on: the mood's target, or in a task room its general light
+    function roomGeneral(r) { return LIGHT.general(roomLType(r), roomMood(r)); }
     function roomAreaFt(r) { return r.ftShape ? LIGHT.polyArea(r.ftShape) : 0; }
     function lightable(r) { return !!(r && state.scale && r.ftShape && roomTarget(r) != null); }
     function roomById(id) { return state.rooms.filter(function (r) { return r.id === id; })[0] || null; }
@@ -2181,14 +2195,22 @@
     // A fresh recommendation for one room. keep: lights the person placed or changed stay put and count toward the total.
     function suggestRoom(r, keep) {
       if (!lightable(r)) return;
-      var f = state.scale.ftPerPx, size = roomSize(r), c = lightCfg(r);
+      var f = state.scale.ftPerPx, c = lightCfg(r);
+      c.auto = null;
+      var size = roomSize(r);
       var kept = keep ? lightsIn(r).filter(function (l) { return l.edited; }) : [];
       state.lights = state.lights.filter(function (l) { return l.room !== r.id || kept.indexOf(l) > -1; });
       var res;
       try {
-        res = LIGHT.suggest({ poly: r.ftShape, target: roomTarget(r), lm: LIGHT.FIXTURES[size].lm, beam: 'wide', ceil: roomCeil(r),
+        res = LIGHT.suggest({ poly: r.ftShape, target: roomGeneral(r), lm: LIGHT.FIXTURES[size].lm, beam: 'wide', ceil: roomCeil(r),
                               pieces: groupFor(r), fixed: kept.map(lightFt) });
       } catch (e) { if (window.console) console.warn('Lighting skipped:', e); res = { lights: [], extra: 0 }; }
+      // A grid can hold a light or two more than the room needs; when that makes 6" lights much too
+      // bright and 4" lights would still do, use 4" (unless the person picked a size)
+      var A = roomAreaFt(r), tg = roomGeneral(r), keptLm = kept.reduce(function (sum, l) { return sum + l.lm; }, 0), n = res.lights.length;
+      if (!c.size && size === 'r6' && n && LIGHT.fc(keptLm + n * LIGHT.FIXTURES.r6.lm, A) > tg * 1.45 && LIGHT.fc(keptLm + n * LIGHT.FIXTURES.r4.lm, A) >= tg * 0.9) {
+        c.auto = size = 'r4';
+      }
       res.lights.forEach(function (p) { state.lights.push(makeLight(size, p.x / f / state.W * 100, p.y / f / state.H * 100, r.id, false)); });
       c.done = true; c.extra = res.extra || 0; c.short = res.short || 0; c.aimed = groupFor(r).some(function (pc) { return pc.role !== 'decor' && pc.role !== 'chair'; });
     }
@@ -2212,8 +2234,8 @@
     // How a room reads: the ceiling lights by the lumen method, then with the lamps drawn on its furniture
     function roomLight(r) {
       var ls = lightsIn(r), lamps = state.pieces.filter(function (pc) { return LIGHT.isLamp(pc) && pieceRoom(pc) === r; });
-      var ev = LIGHT.evaluate({ area: roomAreaFt(r), target: roomTarget(r), lights: ls.map(lightFt), lampLm: lamps.length * LIGHT.LAMP_LM, ceil: roomCeil(r) });
-      ev.count = ls.length; ev.lamps = lamps.length; ev.target = roomTarget(r);
+      var ev = LIGHT.evaluate({ area: roomAreaFt(r), target: roomGeneral(r), lights: ls.map(lightFt), lampLm: lamps.length * LIGHT.LAMP_LM, ceil: roomCeil(r) });
+      ev.count = ls.length; ev.lamps = lamps.length; ev.target = roomGeneral(r); ev.goal = roomTarget(r); ev.task = LIGHT.taskRoom(roomLType(r));
       return ev;
     }
 
@@ -2372,12 +2394,43 @@
         if (tgt == null) return '<button class="l-row' + (i === state.selected ? ' on' : '') + '" data-lroom="' + i + '"><span class="l-dot"></span><b>' + esc(rm.name) + '</b><small>Outdoor</small></button>';
         var ev = roomLight(rm);
         return '<button class="l-row' + (i === state.selected ? ' on' : '') + '" data-lroom="' + i + '"><span class="l-dot ' + ev.status + '"></span><b>' + esc(rm.name) + '</b>' +
-          '<small>' + ev.count + ' ' + lightWord(ev.count) + ', ' + Math.round(ev.fc) + ' of ' + tgt + ' fc</small></button>';
+          '<small>' + ev.count + ' ' + lightWord(ev.count) + ', ' + Math.round(ev.fc) + ' of ' + ev.target + ' fc</small></button>';
       }).join('') + '</div></div>';
       html += '<p class="hint">Lights start 24" from the walls and aim at where each room is used: in front of seats, beside and at the foot of a bed, at the drawers, over a desk or a counter. ' +
         'Drag a light to move it. Lights you move, add or change stay put when you change a room’s settings. ' +
-        'Foot-candles are worked out with the lumen method for planning; this isn’t an electrical plan.</p>';
+        'Foot-candles are worked out with the lumen method' + info('method') + ' for planning; this isn’t an electrical plan.</p>';
+      html += glossary();
       el.innerHTML = html;
+    }
+    // Plain definitions, opened from the (i) buttons or at the bottom of the panel
+    var GLOSS = [
+      ['fc', 'Foot-candles', 'How much light lands on the floor, table or counter where you need it. One foot-candle is one lumen spread over one square foot. A cozy living room is about 10 to 15, and a kitchen counter for cooking about 50. Think of lumens as the water coming out of a hose, and foot-candles as how wet the ground gets.'],
+      ['lumens', 'Lumens', 'How much light a bulb or fixture gives off. A typical lamp bulb gives about 800, and a 4" recessed light about 650.'],
+      ['mood', 'Mood', 'How bright the room feels overall: Cozy for relaxing, Balanced for everyday, Bright for working. Each sets the room\u2019s target in foot-candles.'],
+      ['general', 'General light', 'The even, all-over light from the ceiling. In kitchens, bathrooms, offices and laundry rooms, the ceiling lights give general light and task lights do the bright work.'],
+      ['task', 'Task light', 'Light aimed at a job: pendants over an island, under-cabinet lights, vanity lights at a mirror, or a desk lamp.'],
+      ['recessed', 'Recessed light', 'A light set into the ceiling so it sits flush. 4" and 6" are the width of the opening; 6" lights usually give more light.'],
+      ['beam', 'Beam', 'How wide a light spreads. Wide lights a whole area. Narrow puts it on one spot, like art or a counter.'],
+      ['method', 'Lumen method', 'The standard way to estimate how many lights a room needs from its size and target. It gives planning numbers, not an electrical plan.']
+    ];
+    function info(term) {
+      var g = GLOSS.filter(function (x) { return x[0] === term; })[0];
+      return '<button type="button" class="l-i" data-term="' + term + '" aria-label="What ' + (g ? g[1].toLowerCase() : term) + ' means">i</button>';
+    }
+    function glossary() {
+      return '<details class="l-gloss" id="lGloss"><summary>What these mean</summary><dl>' + GLOSS.map(function (g) {
+        return '<dt id="lg-' + g[0] + '">' + g[1] + '</dt><dd>' + g[2] + '</dd>';
+      }).join('') + '</dl></details>';
+    }
+    function showTerm(term) {
+      var d = $('lGloss');
+      if (!d) { $('lightBody').insertAdjacentHTML('beforeend', glossary()); d = $('lGloss'); }
+      d.open = true;
+      var dt = $('lg-' + term);
+      if (!dt) return;
+      dt.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      dt.classList.add('flash');
+      setTimeout(function () { dt.classList.remove('flash'); }, 1400);
     }
     function seg(name, opts, on) {
       return '<div class="seg-row" data-lseg="' + name + '">' + opts.map(function (o) {
@@ -2392,18 +2445,20 @@
       }).join('') + '</select></label>';
       if (roomTarget(r) == null) return html + '<p class="pane-sub">Outdoor spaces aren’t planned here yet. Change the room type to light it.</p>';
       var fcs = LIGHT.type(t).fc, mood = roomMood(r), size = roomSize(r);
-      html += '<span class="l-label">Mood, in foot-candles</span>' + seg('mood', LIGHT.MOODS.map(function (m, k) { return { v: m.id, t: m.label + '<small>' + fcs[k] + '</small>' }; }), mood);
-      html += '<div class="field-row"><div><span class="l-label">Recessed lights</span>' + seg('size', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], size) + '</div>' +
+      html += '<span class="l-label">Mood, in foot-candles' + info('mood') + '</span>' + seg('mood', LIGHT.MOODS.map(function (m, k) { return { v: m.id, t: m.label + '<small>' + fcs[k] + '</small>' }; }), mood);
+      html += '<div class="field-row"><div><span class="l-label">Recessed lights' + info('recessed') + '</span>' + seg('size', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], size) + '</div>' +
         '<label class="field" style="margin-top:4px"><span>Ceiling height</span><input data-lf="ceil" value="' + (c.ceil ? esc(fmtFtIn(c.ceil)) : '') + '" placeholder="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + ' (plan)" autocomplete="off"></label></div>';
       var ev = roomLight(r), tgt = ev.target;
-      html += '<div class="l-res"><div class="l-res-top"><b>' + Math.round(ev.fc) + ' fc</b><span>Target ' + tgt + ' for ' + MOOD_WORD[mood].toLowerCase() + '</span>' +
+      html += '<div class="l-res"><div class="l-res-top"><b>' + Math.round(ev.fc) + '</b><span>foot-candles' + info('fc') + '</span>' +
         '<span class="l-st ' + ev.status + '">' + LSTATUS[ev.status] + '</span></div>' +
-        '<p>' + (ev.count ? ev.count + ' recessed ' + lightWord(ev.count) + ', ' + fmtNum(ev.lm) + ' lumens in ' + fmtNum(roomAreaFt(r)) + ' sq ft.' : 'No lights yet.') + '</p>' +
-        (ev.lamps ? '<p>With the ' + (ev.lamps === 1 ? 'lamp' : ev.lamps + ' lamps') + ' on your furniture switched on: about <b>' + Math.round(ev.fcAll) + ' fc</b>.</p>' : '') +
+        '<p>' + (ev.task ? 'General light' + info('general') + ' from the ceiling. Target ' + tgt + '.' : 'Target ' + tgt + ' for ' + MOOD_WORD[mood].toLowerCase() + '.') + ' ' +
+        (ev.count ? ev.count + ' recessed ' + lightWord(ev.count) + ', ' + fmtNum(ev.lm) + ' lumens' + info('lumens') + ' in ' + fmtNum(roomAreaFt(r)) + ' sq ft.' : 'No lights yet.') + '</p>' +
+        (ev.lamps ? '<p>With the ' + (ev.lamps === 1 ? 'lamp' : ev.lamps + ' lamps') + ' on your furniture switched on: about <b>' + Math.round(ev.fcAll) + ' foot-candles</b>.</p>' : '') +
+        (ev.task && ev.goal > tgt ? '<p class="l-goal">Task lights' + info('task') + ' ' + ev.task + ' bring the work surfaces up to ' + ev.goal + ' for ' + MOOD_WORD[mood].toLowerCase() + '.</p>' : '') +
         '</div>';
       var notes = [];
       var mine = lightsIn(r).some(function (q) { return q.edited; });
-      if (ev.status === 'dim' && c.short && !mine) notes.push('Recessed lights alone can\u2019t reach the target here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Pendants, under-cabinet or vanity lights make up the rest.');
+      if (ev.status === 'dim' && c.short && !mine) notes.push('Recessed lights alone can\u2019t reach ' + tgt + ' here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Lamps or task lights make up the rest.');
       else if (ev.status === 'dim') notes.push('Add a light' + (size === 'r4' ? ', or switch to 6" lights,' : '') + ' to reach the target.');
       if (ev.status === 'bright') notes.push('Brighter than the target. A dimmer brings it down, or remove a light.');
       if (c.extra && !mine) notes.push(c.extra === 1 ? 'One light was added to brighten a dark stretch of floor.' : c.extra + ' lights were added to brighten dark stretches of floor.');
@@ -2421,10 +2476,10 @@
         '<p class="pane-sub">' + (r ? 'In the ' + esc(r.name) + '.' : 'Not in a room.') + ' Drag it on the plan to move it.</p>' +
         '<span class="l-label">Size</span>' + seg('lsize', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], l.type) +
         '<label class="field"><span>Brightness, lumens</span><input data-lf="lm" value="' + Math.round(l.lm) + '" inputmode="numeric" autocomplete="off"></label>' +
-        '<p class="l-note">Use the lumens on the light you’re buying. A 4" light is usually 500 to 900, a 6" light 800 to 1,400.</p>' +
-        '<span class="l-label">Beam</span>' + seg('beam', [{ v: 'wide', t: 'Wide' }, { v: 'narrow', t: 'Narrow' }], l.beam || 'wide') +
+        '<p class="l-note">Use the lumens' + info('lumens') + ' on the light you’re buying. A 4" light is usually 500 to 900, a 6" light 800 to 1,400.</p>' +
+        '<span class="l-label">Beam' + info('beam') + '</span>' + seg('beam', [{ v: 'wide', t: 'Wide' }, { v: 'narrow', t: 'Narrow' }], l.beam || 'wide') +
         '<p class="l-note">Wide spreads light across the room. Narrow puts it on one spot, like a counter or a piece of art.</p>' +
-        '<div class="btn-row"><button class="btn-secondary btn-sm" data-lact="remove">Remove this light</button></div>';
+        '<div class="btn-row"><button class="btn-secondary btn-sm" data-lact="remove">Remove this light</button></div>' + glossary();
     }
     // A room setting changed: its own lights follow; the person's own lights stay where they are
     function lightSetting(r, key, v) {
@@ -2438,6 +2493,7 @@
     function onLightClick(e) {
       var b = e.target.closest('button');
       if (!b) return;
+      if (b.hasAttribute('data-term')) { e.preventDefault(); showTerm(b.getAttribute('data-term')); return; }
       var ri = b.getAttribute('data-lroom');
       if (ri != null) { state.lightSel = -1; select(+ri, false); return; }
       var act = b.getAttribute('data-lact'), sg = b.closest('[data-lseg]'), r = state.rooms[state.selected], l = state.lights[state.lightSel];
