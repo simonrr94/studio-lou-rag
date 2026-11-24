@@ -337,6 +337,22 @@
     .l-gloss dt { font: 600 13px 'DM Sans', sans-serif; color: #582b36; margin-top: 10px; border-radius: 6px; transition: background 0.6s; }
     .l-gloss dd { margin: 2px 0 0; font-size: 12.5px; color: #433E3C; line-height: 1.5; }
     .l-gloss dt.flash { background: #eef3dc; }
+    .l-quiet { font-size: 13.5px; color: #6b6560; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+    .l-quiet select { font: 500 14px 'DM Sans', sans-serif; border: 1.5px solid #d0c9bc; border-radius: 10px; padding: 6px 8px; background: #ffffff; color: #433E3C; }
+    .l-ceil { margin-bottom: 12px; }
+    .l-ask { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 14px; padding: 18px; }
+    .l-ask-q { font: 600 17px 'DM Sans', sans-serif; color: #582b36; margin: 0 0 4px; }
+    .l-ask-row { display: flex; gap: 8px; align-items: center; }
+    .l-ask-row input { width: 90px; height: 36px; border: 1.5px solid #d0c9bc; border-radius: 10px; padding: 0 10px; font: 500 15px 'DM Sans', sans-serif; color: #433E3C; }
+    .l-ask-row input.bad { border-color: #582b36; }
+    .l-more { border-top: 1px solid #e6dfd3; margin-top: 14px; }
+    .l-more summary { cursor: pointer; list-style: none; padding: 11px 0 4px; font: 600 13px 'DM Sans', sans-serif; color: #433E3C; display: flex; align-items: center; gap: 6px; }
+    .l-more summary::-webkit-details-marker { display: none; }
+    .l-more summary::after { content: '+'; margin-left: auto; color: #6b6560; font-weight: 500; }
+    .l-more[open] summary::after { content: '\2212'; }
+    .l-more-body { padding: 6px 0 2px; font-size: 13px; color: #433E3C; line-height: 1.5; }
+    .l-more-body p { margin: 0 0 8px; }
+    .l-count { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 99px; background: #f3e6e9; color: #582b36; font-size: 11px; line-height: 18px; text-align: center; }
     .l-add { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .l-warn { color: #582b36; background: #f3e6e9; border-radius: 8px; padding: 7px 10px; }
     .l-goal .l-st { margin-left: 6px; }
@@ -484,6 +500,9 @@
       lights: [],       // Light: the ceiling lights (see Light mode below)
       lightSel: -1,     // index of the picked light, or -1
       lightAdd: false,  // the Add a light menu is open
+      lightTypeOpen: false,   // the room type picker is showing
+      lightEditCeil: false,   // the plan's ceiling height is being changed
+      lightOpen: { details: false, settings: false },   // which folds on the room card are open
       lightCfg: { ceil: 8, rooms: {} }
     };
 
@@ -2697,6 +2716,13 @@
     var ADD_KINDS = [['recessed', 'Recessed'], ['chandelier', 'Chandelier'], ['pendant', 'Pendant'], ['flush', 'Flush mount'], ['sconce', 'Wall sconce'], ['floorlamp', 'Floor lamp']];
     function fmtNum(n) { return Math.round(n).toLocaleString(); }
     function lightWord(n) { return n === 1 ? 'light' : 'lights'; }
+    /* Light has two levels: every room at a glance (no room picked), then one room's card. The ceiling
+       height is asked once, the first time Light opens, and then sits on one quiet line. */
+    function lightAsked() {
+      var c = state.lightCfg;
+      if (!c.asked && Object.keys(c.rooms || {}).some(function (k) { return c.rooms[k].done; })) c.asked = true;   // plans lit before this was asked
+      return !!c.asked;
+    }
     function renderLight() {
       var el = $('lightBody');
       if (!el || state.mode !== 'light') return;
@@ -2708,22 +2734,30 @@
       renderRoomPick();
       var l = state.lights[state.lightSel];
       if (l) { el.innerHTML = lightDetail(l); return; }
+      if (!lightAsked()) {
+        el.innerHTML = '<div class="l-ask"><p class="l-ask-q">How high are the ceilings?</p>' +
+          '<p class="l-note">Most homes are 8\'. You can change it for any room later.</p>' +
+          '<div class="l-ask-row"><input id="lCeilAsk" value="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + '" autocomplete="off" aria-label="Ceiling height">' +
+          '<button class="btn-primary btn-sm" data-lact="lightup">Light the rooms</button></div></div>';
+        return;
+      }
       var r = state.rooms[state.selected], html = '';
-      html += '<div class="l-plan"><label class="field"><span>Ceiling height, whole plan</span><input id="lCeilPlan" value="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + '" autocomplete="off" inputmode="text"></label></div>';
       var stray = state.lights.filter(function (q) { return !roomById(q.room); }).length;
       if (stray) html += '<p class="l-note l-warn">' + (stray === 1 ? 'One light sits' : stray + ' lights sit') + ' outside every room. Drag ' + (stray === 1 ? 'it' : 'them') + ' into a room or remove ' + (stray === 1 ? 'it' : 'them') + '.</p>';
-      if (r) html += roomLightCard(r);
-      else html += '<p class="pane-sub">Pick a room on the plan or in the list to see its lights and change its settings.</p>';
-      html += '<div class="l-section"><p class="eyebrow">Every room</p><div class="l-list">' + state.rooms.map(function (rm, i) {
-        if (!rm.ftShape) return '';
-        if (roomTarget(rm) == null) return '<button class="l-row' + (i === state.selected ? ' on' : '') + '" data-lroom="' + i + '"><span class="l-dot"></span><b>' + esc(rm.name) + '</b><small>Outdoor</small></button>';
-        var ev = roomLight(rm), n = lightChecks(rm).length, all = ev.count + ev.extraLights;
-        return '<button class="l-row' + (i === state.selected ? ' on' : '') + '" data-lroom="' + i + '"><span class="l-dot ' + (n ? 'dim' : ev.status) + '"></span><b>' + esc(rm.name) + '</b>' +
-          '<small>' + all + ' ' + lightWord(all) + ', ' + Math.round(ev.fc) + ' of ' + ev.target + ' fc' + (n ? ', ' + n + ' to check' : '') + '</small></button>';
-      }).join('') + '</div></div>';
-      html += '<p class="hint">Recessed lights start 24" from the walls and line up in rows over where each room is used. Chandeliers go over dining tables, pendants over islands, under-cabinet lights along counters, and a floor lamp beside a reading chair. ' +
-        'Drag a light to move it. Lights you move, add or change stay put when you change a room’s settings. ' +
-        'Foot-candles are worked out with the lumen method' + info('method') + ' for planning; this isn’t an electrical plan.</p>';
+      if (r) html += '<button class="link-btn detail-back" data-lact="allrooms">&larr; All rooms</button>' + roomLightCard(r);
+      else {
+        html += state.lightEditCeil
+          ? '<div class="l-ceil"><label class="field"><span>Ceiling height, whole plan</span><input id="lCeilPlan" value="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + '" autocomplete="off"></label></div>'
+          : '<p class="l-quiet">Ceilings ' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + ' <button class="link-btn" data-lact="ceil">Change</button></p>';
+        html += '<div class="l-list">' + state.rooms.map(function (rm, i) {
+          if (!rm.ftShape) return '';
+          if (roomTarget(rm) == null) return '<button class="l-row" data-lroom="' + i + '"><span class="l-dot"></span><b>' + esc(rm.name) + '</b><small>Outdoor</small></button>';
+          var ev = roomLight(rm), n = lightChecks(rm).length, all = ev.count + ev.extraLights;
+          return '<button class="l-row" data-lroom="' + i + '"><span class="l-dot ' + (n ? 'dim' : ev.status) + '"></span><b>' + esc(rm.name) + '</b>' +
+            '<small>' + (n ? n + ' to check' : all + ' ' + lightWord(all) + ', ' + LSTATUS[ev.status].toLowerCase()) + '</small></button>';
+        }).join('') + '</div>' +
+        '<p class="l-note" style="margin-top:12px">Pick a room to see its lights and change its mood.</p>';
+      }
       html += glossary();
       el.innerHTML = html;
     }
@@ -2770,46 +2804,53 @@
     function roomLightCard(r) {
       var c = lightCfg(r), t = roomLType(r), html = '';
       if (!r.ftShape) return html + '<p class="pane-sub">This room has no outline on the plan yet. Fix it in Measure.</p>';
-      html += '<label class="field"><span>Room type</span><select data-lf="type">' + LIGHT.TYPES.map(function (o) {
+      var typeSel = '<select data-lf="type" aria-label="Room type">' + LIGHT.TYPES.map(function (o) {
         return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label + '</option>';
-      }).join('') + '</select></label>';
+      }).join('') + '</select>';
+      html += '<p class="l-quiet">' + (state.lightTypeOpen ? 'Room type ' + typeSel : 'Room type: ' + LIGHT.type(t).label.toLowerCase() + ' <button class="link-btn" data-lact="type">Change</button>') + '</p>';
       if (roomTarget(r) == null) return html + '<p class="pane-sub">Outdoor spaces aren’t planned here yet. Change the room type to light it.</p>';
       var fcs = LIGHT.type(t).fc, mood = roomMood(r), size = roomSize(r);
-      html += '<span class="l-label">Mood, in foot-candles' + info('mood') + '</span>' + seg('mood', LIGHT.MOODS.map(function (m, k) { return { v: m.id, t: m.label + '<small>' + fcs[k] + '</small>' }; }), mood);
-      html += '<div class="field-row"><div><span class="l-label">Recessed lights' + info('recessed') + '</span>' + seg('size', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], size) + '</div>' +
-        '<label class="field" style="margin-top:4px"><span>Ceiling height</span><input data-lf="ceil" value="' + (c.ceil ? esc(fmtFtIn(c.ceil)) : '') + '" placeholder="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + ' (plan)" autocomplete="off"></label></div>';
+      html += '<span class="l-label">Mood' + info('mood') + '</span>' + seg('mood', LIGHT.MOODS.map(function (m) { return { v: m.id, t: m.label }; }), mood);
       var ev = roomLight(r), tgt = ev.target;
+      // the one number, and its status
+      html += '<div class="l-res"><div class="l-res-top"><b>' + Math.round(ev.fc) + '</b><span>foot-candles' + info('fc') + '</span>' +
+        '<span class="l-st ' + ev.status + '">' + LSTATUS[ev.status] + '</span></div>';
+      if (ev.task && ev.goal > tgt) {
+        if (ev.work != null) html += '<p class="l-goal">Work surfaces' + info('work') + ': about <b>' + Math.round(ev.work) + '</b> of ' + ev.goal + ' <span class="l-st ' + ev.workStatus + '">' + LSTATUS[ev.workStatus] + '</span></p>';
+        else html += '<p class="l-goal">Task lights' + info('task') + ' ' + ev.task + ' bring the work surfaces up to ' + ev.goal + '.</p>';
+      }
+      html += '</div>';
+      var warns = lightChecks(r);
+      html += warns.map(function (n) { return '<p class="l-note l-warn">' + n + '</p>'; }).join('');
+      html += '<div class="btn-row"><button class="btn-primary btn-sm" data-lact="addmenu">Add a light</button><button class="btn-secondary btn-sm" data-lact="redo">Suggest again</button></div>';
+      if (state.lightAdd) html += '<div class="l-add">' + ADD_KINDS.map(function (k) { return '<button class="btn-secondary btn-sm" data-ladd="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>';
+      // Details: the numbers behind the result, and the notes
       var others = {};
       ev.others.forEach(function (q) { var k = kindOf(q); others[k] = (others[k] || 0) + 1; });
       var otherWords = Object.keys(others).map(function (k) {
         var n = others[k], name = LIGHT.KINDS[k].name.toLowerCase();
         return n + ' ' + (n === 1 ? name : name.replace(/light$/, 'lights').replace(/(lier|ant|mount|sconce|lamp)$/, '$1s'));
       });
-      html += '<div class="l-res"><div class="l-res-top"><b>' + Math.round(ev.fc) + '</b><span>foot-candles' + info('fc') + '</span>' +
-        '<span class="l-st ' + ev.status + '">' + LSTATUS[ev.status] + '</span></div>' +
-        '<p>' + (ev.task ? 'General light' + info('general') + ' from the recessed lights. Target ' + tgt + '.' : 'From the recessed lights. Target ' + tgt + ' for ' + MOOD_WORD[mood].toLowerCase() + '.') + ' ' +
-        (ev.count ? ev.count + ' recessed ' + lightWord(ev.count) + ', ' + fmtNum(ev.lm) + ' lumens' + info('lumens') + ' in ' + fmtNum(roomAreaFt(r)) + ' sq ft.' : 'No recessed lights.') + '</p>' +
-        (otherWords.length || ev.lamps ? '<p>With ' + otherWords.concat(ev.lamps ? [(ev.lamps === 1 ? 'the lamp' : 'the ' + ev.lamps + ' lamps') + ' on your furniture'] : []).join(', ').replace(/, ([^,]*)$/, ' and $1') +
-          ' on too: about <b>' + Math.round(ev.fcAll) + ' foot-candles</b>.</p>' : '');
-      if (ev.task && ev.goal > tgt) {
-        if (ev.work != null) html += '<p class="l-goal">Work surfaces' + info('work') + ' with task lights: about <b>' + Math.round(ev.work) + ' of ' + ev.goal + ' foot-candles</b> <span class="l-st ' + ev.workStatus + '">' + LSTATUS[ev.workStatus] + '</span></p>';
-        else html += '<p class="l-goal">Task lights' + info('task') + ' ' + ev.task + ' bring the work surfaces up to ' + ev.goal + ' for ' + MOOD_WORD[mood].toLowerCase() + '.</p>';
-      }
-      html += '</div>';
-      var notes = [], warns = lightChecks(r);
-      var mine = lightsIn(r).some(function (q) { return q.edited; });
+      var notes = [], mine = lightsIn(r).some(function (q) { return q.edited; });
       if (ev.status === 'dim' && c.short && !mine) notes.push('Recessed lights alone can’t reach ' + tgt + ' here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Lamps or task lights make up the rest.');
-      else if (ev.status === 'dim') notes.push('Add a light' + (size === 'r4' ? ', or switch to 6" lights,' : '') + ' to reach the target.');
+      else if (ev.status === 'dim') notes.push('Add a light' + (size === 'r4' ? ', or switch to 6" lights in More settings,' : '') + ' to reach the target.');
       if (ev.status === 'bright') notes.push('Brighter than the target. A dimmer brings it down, or remove a light.');
       if (ev.workStatus === 'dim') notes.push('The work surfaces are a little dim. Brighter task lights, or more of them, close the gap.');
       if (ev.far) notes.push(ev.far === 1 ? 'One light is more than ' + fmtFtIn(roomCeil(r)) + ' from its nearest neighbor, so the floor between them may look patchy.' : ev.far + ' lights are more than ' + fmtFtIn(roomCeil(r)) + ' (the ceiling height) from their nearest neighbors, so the light may look patchy.');
       if (t === 'bath') notes.push('Vanity lights at the mirror do the bright work in a bathroom. Add a wall sconce on each side of the mirror, with its center 60" to 65" off the floor.');
       if (!c.aimed) notes.push('Add furniture in Furnish to aim the lights at where you’ll use the room, then tap <b>Suggest again</b>.');
       if (boxMeasured(r) && r.source === 'estimated') notes.push('This room’s size is estimated, so check its outline in Measure.');
-      html += warns.map(function (n) { return '<p class="l-note l-warn">' + n + '</p>'; }).join('');
-      html += notes.map(function (n) { return '<p class="l-note">' + n + '</p>'; }).join('');
-      html += '<div class="btn-row"><button class="btn-primary btn-sm" data-lact="addmenu">Add a light</button><button class="btn-secondary btn-sm" data-lact="redo">Suggest again</button></div>';
-      if (state.lightAdd) html += '<div class="l-add">' + ADD_KINDS.map(function (k) { return '<button class="btn-secondary btn-sm" data-ladd="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>';
+      var details = '<p>' + (ev.task ? 'General light' + info('general') + ' from the recessed lights, target ' + tgt + '.' : 'From the recessed lights, target ' + tgt + ' for ' + MOOD_WORD[mood].toLowerCase() + ' (' + fcs.join(', ') + ' for cozy, balanced, bright).') + ' ' +
+          (ev.count ? ev.count + ' recessed ' + lightWord(ev.count) + ', ' + fmtNum(ev.lm) + ' lumens' + info('lumens') + ' in ' + fmtNum(roomAreaFt(r)) + ' sq ft.' : 'No recessed lights.') + '</p>' +
+        (otherWords.length || ev.lamps ? '<p>With ' + otherWords.concat(ev.lamps ? [(ev.lamps === 1 ? 'the lamp' : 'the ' + ev.lamps + ' lamps') + ' on your furniture'] : []).join(', ').replace(/, ([^,]*)$/, ' and $1') +
+          ' on too: about ' + Math.round(ev.fcAll) + ' foot-candles.</p>' : '') +
+        notes.map(function (n) { return '<p class="l-note">' + n + '</p>'; }).join('');
+      html += '<details class="l-more" data-open="details"' + (state.lightOpen.details ? ' open' : '') + '><summary>Details' + (notes.length ? ' <span class="l-count">' + notes.length + '</span>' : '') + '</summary><div class="l-more-body">' + details + '</div></details>';
+      // More settings: the light size and this room's own ceiling
+      html += '<details class="l-more" data-open="settings"' + (state.lightOpen.settings ? ' open' : '') + '><summary>More settings</summary><div class="l-more-body">' +
+        '<span class="l-label">Recessed lights' + info('recessed') + '</span>' + seg('size', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], size) +
+        '<label class="field"><span>Ceiling height in this room</span><input data-lf="ceil" value="' + (c.ceil ? esc(fmtFtIn(c.ceil)) : '') + '" placeholder="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + ', like the rest" autocomplete="off"></label>' +
+        '</div></details>';
       return html;
     }
     function lightDetail(l) {
@@ -2859,11 +2900,21 @@
       if (!b) return;
       if (b.hasAttribute('data-term')) { e.preventDefault(); showTerm(b.getAttribute('data-term')); return; }
       var ri = b.getAttribute('data-lroom');
-      if (ri != null) { state.lightSel = -1; state.lightAdd = false; select(+ri, false); return; }
+      if (ri != null) { state.lightSel = -1; state.lightAdd = false; state.lightTypeOpen = false; select(+ri, false); return; }
       var add = b.getAttribute('data-ladd');
       if (add) { addLight(add); return; }
       var act = b.getAttribute('data-lact'), sg = b.closest('[data-lseg]'), r = state.rooms[state.selected], l = state.lights[state.lightSel];
       if (act === 'back') { state.lightSel = -1; renderLight(); draw(); return; }
+      if (act === 'allrooms') { state.lightAdd = false; state.lightTypeOpen = false; select(-1, false); return; }
+      if (act === 'ceil') { state.lightEditCeil = true; renderLight(); var ci = $('lCeilPlan'); if (ci) { ci.focus(); ci.select(); } return; }
+      if (act === 'type') { state.lightTypeOpen = true; renderLight(); return; }
+      if (act === 'lightup') {
+        var hv = parseFtIn($('lCeilAsk').value);
+        if (!hv || hv < 7 || hv > 30) { $('lCeilAsk').classList.add('bad'); return; }
+        state.lightCfg.ceil = hv; state.lightCfg.asked = true;
+        ensureLights(); renderLight(); draw();
+        return;
+      }
       if (act === 'remove') { removeLight(); return; }
       if (act === 'addmenu') { state.lightAdd = !state.lightAdd; renderLight(); return; }
       if (act === 'redo' && r) { pushUndo(); suggestRoom(r, false); renderLight(); draw(); return; }
@@ -2880,7 +2931,7 @@
         var h = parseFtIn(t.value);
         if (!h || h < 7 || h > 30) { t.classList.add('bad'); return; }
         pushUndo();
-        state.lightCfg.ceil = h;
+        state.lightCfg.ceil = h; state.lightEditCeil = false;
         state.rooms.forEach(function (rm) { if (lightable(rm) && !lightCfg(rm).ceil && lightCfg(rm).done) suggestRoom(rm, true); });
         renderLight(); draw();
         return;
@@ -2891,7 +2942,7 @@
         if (!(n >= lo && n <= hi)) { t.classList.add('bad'); return null; }
         return n;
       }
-      if (f === 'type' && r) lightSetting(r, 'type', t.value);
+      if (f === 'type' && r) { state.lightTypeOpen = false; lightSetting(r, 'type', t.value); }
       else if (f === 'ceil' && r) {
         var v = t.value.trim() ? parseFtIn(t.value) : null;
         if (t.value.trim() && (!v || v < 7 || v > 30)) { t.classList.add('bad'); return; }
@@ -3649,9 +3700,9 @@
       state.lightSel = -1;
       if (m === 'light') { state.pieceSel = -1; state.doorSel = -1; state.extra = []; state.extraRugs = []; }
       if (!state.img || !state.rooms.length) return;
-      if (m === 'light') ensureLights();
-      // Coming into Furnish or Light with nothing selected: start on the first living space, if there is one
-      if ((m === 'furnish' || m === 'light') && state.selected < 0) {
+      if (m === 'light') { if (lightAsked()) ensureLights(); state.selected = -1; }
+      // Coming into Furnish with nothing selected: start on the first living space, if there is one
+      if (m === 'furnish' && state.selected < 0) {
         var pick = -1;
         state.rooms.forEach(function (r, k) { if (pick < 0 && RUG.roomType(r.name) === 'living') pick = k; });
         if (pick > -1) state.selected = pick;
@@ -4356,7 +4407,7 @@
       endScaleTool();
       renderAll();
       findOpenings();   // doors and windows wait for a scale to be measured
-      if (state.mode === 'light') { ensureLights(); renderLight(); draw(); }
+      if (state.mode === 'light') { if (lightAsked()) ensureLights(); renderLight(); draw(); }
     }
 
     function renderScaleBar() {
@@ -4959,7 +5010,16 @@
       $('lightBody').addEventListener('click', onLightClick);
       $('lightBody').addEventListener('change', onLightChange);
       $('lightBody').addEventListener('input', function (e) { e.target.classList.remove('bad'); });
-      $('lightBody').addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur(); });
+      $('lightBody').addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+        if (e.target.id === 'lCeilAsk') { var go = document.querySelector('[data-lact=lightup]'); if (go) go.click(); return; }
+        e.target.blur();
+      });
+      // remember which folds on the room card are open across redraws
+      $('lightBody').addEventListener('toggle', function (e) {
+        var k = e.target.getAttribute && e.target.getAttribute('data-open');
+        if (k) state.lightOpen[k] = e.target.open;
+      }, true);
       $('foundNoteM').addEventListener('click', onNoteClick);
       fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (/^pc[NWDT]/.test(e.target.id || '') || e.target.getAttribute('data-dact') === 'width')) e.target.blur(); });
       $('floatBar').addEventListener('click', onFloatClick);
