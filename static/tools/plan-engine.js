@@ -3188,6 +3188,7 @@ var LIGHT = (function () {
     pieces.forEach(function (pc) {
       var q = local(p, pc), hw = pc.w / 2, hd = pc.d / 2, ax = Math.abs(q.x), on = ax <= hw && Math.abs(q.y) <= hd;
       var front = function (depth) { return ax <= hw && q.y > hd && q.y <= hd + depth; };
+      if (pc.lit && on) ban = true;   // a table or island that has its own chandelier or pendants
       switch (pc.role) {
         case 'seat':
           if (front(30)) w += 3;
@@ -3397,6 +3398,65 @@ var LIGHT = (function () {
     return { lights: out2, base: out2.length, extra: 0, layout: 'aimed', short: Math.max(0, N - out2.length) };
   }
 
+  /* ---------- Decorative and task fixtures (session 2) ----------
+     Typical outputs, all editable per light (my picks from common LED fixtures; the person
+     should use the lumens on what they buy):
+       chandelier 1,800 lm (several 300 lm bulbs), pendant 600 lm, flush mount 1,200 lm,
+       wall sconce 400 lm, floor lamp 800 lm, under-cabinet 300 lm per foot of counter.
+     Placement (Visual Comfort):
+       chandelier 1/2 to 2/3 of the table's width (the plan's room length + width in feet, in
+       inches, kept inside that range); bottom 30" above the table or counter plus 3" for each
+       foot of ceiling over 8'; island pendants: two at a quarter of the length from each end,
+       three (islands 7' and longer) centered in thirds; anything hanging that isn't over a
+       table or island leaves 7 ft of floor clearance, and with ceilings at or below 8' a flush
+       mount suits better. */
+  var KINDS = {
+    recessed:   { name: 'Recessed light',      lm: 650 },
+    chandelier: { name: 'Chandelier',          lm: 1800, dia: 24, hangs: true },
+    pendant:    { name: 'Pendant',             lm: 600,  dia: 12, hangs: true },
+    flush:      { name: 'Flush mount',         lm: 1200, dia: 14 },
+    sconce:     { name: 'Wall sconce',         lm: 400,  dia: 6 },
+    floorlamp:  { name: 'Floor lamp',          lm: 800,  dia: 16 },
+    undercab:   { name: 'Under-cabinet light', lmFt: 300 }
+  };
+  var TASK_KINDS = { pendant: 1, undercab: 1 };
+  function snapIn(v, step) { return Math.round(v / step) * step; }
+  // Chandelier diameter in inches for a table whose short side is tableW inches, in a room L x W feet
+  function chandelierDia(tableW, roomL, roomW) {
+    var lo = tableW / 2, hi = tableW * 2 / 3, rule = (roomL || 0) + (roomW || 0);
+    return snapIn(Math.max(lo, Math.min(hi, rule || (lo + hi) / 2)), 1);
+  }
+  function chandelierRange(tableW) { return [Math.round(tableW / 2), Math.round(tableW * 2 / 3)]; }
+  // Height of a hanging fixture's bottom off the floor, in inches, over a surface surfaceH inches high
+  function hangOver(surfaceH, ceil) { return Math.round(surfaceH + 30 + 3 * Math.max(0, ceil - 8)); }
+  // Where pendants go along an island lenIn inches long, as offsets from its center
+  function pendantSpots(lenIn) {
+    return lenIn >= 84 ? [-lenIn / 3, 0, lenIn / 3] : [-lenIn / 4, lenIn / 4];
+  }
+  /* Foot-candles on work surfaces from task lights, by the point method.
+     surfaces: [{ poly (feet), h (inches) }]; fixtures: [{ x, y, lm, z (inches, the light's height) }];
+     strips: [{ surface index, lm }] (under-cabinet light spread across that counter).
+     Returns the average over the surfaces (direct light only; add the general light to it). */
+  function taskFc(surfaces, fixtures, strips) {
+    var tot = 0, n = 0;
+    surfaces.forEach(function (sf, k) {
+      var bb = boundsOf(sf.poly), A = polyArea(sf.poly) || 1, step = Math.max(0.25, Math.sqrt(A / 60));
+      var strip = (strips || []).filter(function (st) { return st.surface === k; }).reduce(function (sum, st) { return sum + st.lm; }, 0);
+      var even = strip * CU * LLF / A;
+      for (var y = bb.y + step / 2; y < bb.y + bb.h; y += step) for (var x = bb.x + step / 2; x < bb.x + bb.w; x += step) {
+        var p = { x: x, y: y };
+        if (!inPoly(p, sf.poly)) continue;
+        var e = even;
+        fixtures.forEach(function (fx) {
+          var h = Math.max(0.75, (fx.z - sf.h) / 12);
+          e += illum({ x: fx.x, y: fx.y, lm: fx.lm, beam: 'wide' }, p, h);
+        });
+        tot += e; n++;
+      }
+    });
+    return n ? tot / n : 0;
+  }
+
   /* ---------- Results for a room ----------
      o: { area, target, lights: [{ x, y, lm }], lampLm, ceil }
      fc is the lumen method on the room's ceiling lights; fcAll adds the lamps.
@@ -3414,6 +3474,8 @@ var LIGHT = (function () {
   }
 
   return { CU: CU, LLF: LLF, WORK: WORK, WALL: WALL, LAMP_LM: LAMP_LM, FIXTURES: FIXTURES, BEAMS: BEAMS, TYPES: TYPES, MOODS: MOODS,
+           KINDS: KINDS, TASK_KINDS: TASK_KINDS, chandelierDia: chandelierDia, chandelierRange: chandelierRange, hangOver: hangOver,
+           pendantSpots: pendantSpots, taskFc: taskFc, edgeDist: edgeDist,
            type: type, typeOf: typeOf, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
            isLamp: isLamp, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
 })();
