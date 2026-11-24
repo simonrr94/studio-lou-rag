@@ -2255,11 +2255,12 @@ var OPENINGS = (function () {
       : { cx: c, cy: m, u: { x: 1, y: 0 }, n: { x: 0, y: 1 }, A: { x: b.g0, y: m }, B: { x: b.g1, y: m } };
   }
   // Share of the piece with something drawn inside the wall (window glass, a sliding door)
-  function filled(a, b) {
+  function filled(a, b, m) {
+    m = m || a.faint;
     var n = 0, hit = 0, v0 = Math.ceil(b.t0) + 1, v1 = Math.floor(b.t1) - 1;
     for (var u = Math.ceil(b.g0); u <= b.g1; u++) {
       n++;
-      for (var v = v0; v <= v1; v++) { var p = pix(a, b, u, v); if (at(a.faint, a, p.x, p.y)) { hit++; break; } }
+      for (var v = v0; v <= v1; v++) { var p = pix(a, b, u, v); if (at(m, a, p.x, p.y)) { hit++; break; } }
     }
     return n ? hit / n : 0;
   }
@@ -2371,6 +2372,8 @@ var OPENINGS = (function () {
       var outside = outP || outM, inside = outP ? { x: -F.n.x, y: -F.n.y } : F.n;
       var sw = wIn <= DOOR_MAX ? swing(a, b, F) : null, fill = filled(a, b), ln = Math.max(lines(a, b), fill >= 0.7 ? 1 : 0), item = null;
       var kind = hint ? String(hint.kind || '').toLowerCase() : '';
+      // A door slid shut in the gap: one panel is a pocket door, wider ones are sliding (bypass)
+      var slider = wIn <= 40 ? 'pocket' : 'bypass';
       var htype = hint && hint.type ? DOOR_TYPES[String(hint.type).toLowerCase()] || null : null;
       if (sw && sw.score >= 0.6 && kind !== 'window') {
         // A swing drawn on the plan: a door, whatever the model said
@@ -2379,12 +2382,14 @@ var OPENINGS = (function () {
         if (outside) item = { kind: 'window', type: 'window', n: inside };
       } else if (kind === 'door' && wIn <= DOOR_MAX) {
         // A door the model saw where the drawing shows no swing: sliding, pocket, bifold, or one drawn plainly
-        var t = htype && htype !== 'swing' ? htype : (ln >= 1 ? 'bypass' : outside ? 'opening' : null);
+        var t = htype && htype !== 'swing' ? htype : (ln >= 1 ? slider : outside ? 'opening' : null);
         if (t) item = { kind: 'door', type: t, n: inside };
       } else if (kind === 'opening' && outside && wIn <= DOOR_MAX) {
         item = { kind: 'door', type: 'opening', n: inside };    // a way in with no door drawn
       } else if (!hint && ln >= 1 && outside) {
         item = { kind: 'window', type: 'window', n: inside };   // lines in an outside wall
+      } else if (!hint && !outside && filled(a, b, a.ink) >= 0.7 && wIn >= 20 && wIn <= DOOR_MAX && kind !== 'opening') {
+        item = { kind: 'door', type: slider, n: inside };       // a panel drawn in a doorway between rooms
       } else if (!hint && ln === 0 && outside && wIn >= 24 && wIn <= DOOR_MAX) {
         item = { kind: 'door', type: 'opening', n: inside };    // a plain gap in an outside wall: a way in
       }
