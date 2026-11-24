@@ -876,6 +876,11 @@ var FURNITURE = (function () {
       { id: 'pouf', name: 'Pouf', w: 20, d: 20, h: 16, kind: 'decor', role: 'decor', shape: 'round' }
     ] }
   ];
+  (function () {
+    var lamp = null;
+    CATALOG.forEach(function (g) { g.items.forEach(function (it) { if (it.id === 'lamp') lamp = it; }); });
+    CATALOG.forEach(function (g) { if (lamp && /^(Living|Bedroom|Office)$/.test(g.group)) g.items.push(lamp); });
+  })();
   function get(id) {
     for (var g = 0; g < CATALOG.length; g++) for (var i = 0; i < CATALOG[g].items.length; i++) if (CATALOG[g].items[i].id === id) return CATALOG[g].items[i];
     return null;
@@ -1035,7 +1040,7 @@ var FURNART = (function () {
     leaf: '#b9c983', leafDark: '#9db25a', vein: '#7f9433',
     pot: '#e4d9c7', soil: '#d9cdb9'
   };
-  var K = 1, LW = 1, FINE = true;
+  var K = 1, LW = 1, FINE = true, NOLAMP = false;   // NOLAMP: this piece has its lamp taken off
 
   /* ---------- Small drawing helpers (inches; K turns them into pixels) ---------- */
   function rr(ctx, x, y, w, h, r) {
@@ -1112,6 +1117,7 @@ var FURNART = (function () {
   }
   // A lamp shade seen from above
   function shade(ctx, x, y, r) {
+    if (NOLAMP) return;
     circ(ctx, x, y, r); paint(ctx, C.cushion, C.line, 0.8);
     circ(ctx, x, y, r * 0.45); paint(ctx, C.frame, C.fine, 0.5);
     circ(ctx, x, y, Math.max(r * 0.12, 0.6)); paint(ctx, C.line, null);
@@ -1572,7 +1578,7 @@ var FURNART = (function () {
   function draw(ctx, pc, k, o) {
     o = o || {};
     var ratio = o.ratio || 1;
-    K = k; FINE = o.detail !== false;
+    K = k; FINE = o.detail !== false; NOLAMP = !!pc.noLamp;
     LW = Math.max(0.9, Math.min(1.6, (k / ratio) * 0.55)) * ratio;
     var fn = pick(pc), round = pc.shape === 'round';
     ctx.save();
@@ -3119,7 +3125,21 @@ var LIGHT = (function () {
 
   // Pieces drawn with a lamp on them (and the floor lamp)
   var LAMPS = { nightstand: 1, dresser: 1, side: 1, sideR: 1, console: 1, desk: 1, lamp: 1 };
-  function isLamp(pc) { return !!(pc && LAMPS[pc.type]); }
+  function isLamp(pc) { return !!(pc && LAMPS[pc.type] && !pc.noLamp); }
+  function hasLampSpot(type) { return !!LAMPS[type] && type !== 'lamp'; }   // pieces drawn with a table lamp on them
+  function lampSpot(pc) {
+    if (!isLamp(pc)) return null;
+    var w = pc.w, d = pc.d, r;
+    switch (pc.type) {
+      case 'nightstand': r = Math.min(w, d) * 0.3; return { x: -w / 2 + r + Math.min(2.5, w * 0.08), y: -d / 2 + r + Math.min(2, d * 0.08), r: r };
+      case 'dresser': r = Math.min(d * 0.32, 7); return { x: -w / 2 + r + 2.5, y: -d / 2 + r + 1.5, r: r };
+      case 'side': case 'sideR': return { x: 0, y: 0, r: Math.min(w, d) * 0.3 };
+      case 'console': r = Math.min(d * 0.4, 6.5); return { x: -w / 2 + r + 2.5, y: 0, r: r };
+      case 'desk': r = Math.min(d * 0.2, 6); return { x: -w / 2 + r + 2.5, y: -d / 2 + r + 2, r: r };
+      case 'lamp': return { x: 0, y: 0, r: w / 2 };
+    }
+    return null;
+  }
 
   /* ---------- Geometry ---------- */
   function inPoly(p, pts) {
@@ -3477,5 +3497,5 @@ var LIGHT = (function () {
            KINDS: KINDS, TASK_KINDS: TASK_KINDS, chandelierDia: chandelierDia, chandelierRange: chandelierRange, hangOver: hangOver,
            pendantSpots: pendantSpots, taskFc: taskFc, edgeDist: edgeDist,
            type: type, typeOf: typeOf, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
-           isLamp: isLamp, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
+           isLamp: isLamp, hasLampSpot: hasLampSpot, lampSpot: lampSpot, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
 })();
