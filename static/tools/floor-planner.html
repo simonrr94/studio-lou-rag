@@ -227,11 +227,26 @@
     .box-note { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #fdf6f7; font-size: 12px; line-height: 1.45; color: #582b36; }
 
     /* Furnish: catalog */
-    .cats { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cats { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; margin: 0 -18px 12px; padding: 2px 18px 4px; scrollbar-width: none; }
+    .cats::-webkit-scrollbar { display: none; }
+    .cats .cat { flex: none; }
     .cat { font-size: 12px; font-weight: 600; color: #433E3C; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 5px 12px; cursor: pointer; }
     .cat:hover { border-color: #582b36; }
     .cat.on { background: #582b36; border-color: #582b36; color: #FAF9F6; }
-    .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .cat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .cat-grid .piece-card { padding: 8px 6px 7px; text-align: center; }
+    .cat-grid .piece-card b { font-size: 12px; font-weight: 600; }
+    .cat-grid .piece-card .piece-art { height: 38px; margin-bottom: 4px; }
+    .own-card { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #582b36; }
+    .own-card span { font-size: 22px; line-height: 1; margin-bottom: 4px; }
+    .erase-link { margin-top: 16px; font-size: 12.5px; }
+    .key-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; font-size: 12px; color: #6b6560; margin-top: 12px; }
+    .kdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 6px; }
+    .kdot:first-child { margin-left: 0; }
+    .kdot.ok { background: #7f9433; } .kdot.tight { background: #b07d14; } .kdot.close { background: #582b36; }
+    .show-more { margin-top: 10px; font-size: 13px; }
+    .all-good { font-size: 13.5px; color: #5f7228; background: #eef3dc; border-radius: 10px; padding: 10px 12px; }
+    .m-doors { margin-top: 22px; }
     .piece-card {
       text-align: left; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 8px 10px 10px; cursor: pointer;
       color: #433E3C; transition: border-color 0.15s;
@@ -461,7 +476,9 @@
       pieceSel: -1,     // index of the selected piece, or -1
       doors: [],        // doors marked in Furnish
       doorSel: -1,      // index of the selected door, or -1
-      ptab: 'add',      // the Furnish panel tab: add, rugs, doors, checks
+      ptab: 'add',      // the Furnish panel tab: add or checks (rugs are a catalog category; doors live in Measure)
+      ownOpen: false,   // the Your own form is open under the catalog
+      showFine: false,  // Checks: also list the spacing that's fine
       cat: 'Living',    // the catalog category shown in Add
       ptSel: -1,        // Measure: the corner tapped on the selected room's shape, which shows a remove (x) button
       lights: [],       // Light: the ceiling lights (see Light mode below)
@@ -1570,7 +1587,7 @@
     }
 
     /* ---------- Catalog (Furnish, Add tab) ---------- */
-    var CATS = FURNITURE.CATALOG.map(function (g) { return g.group; }).concat(['Your own']);
+    var CATS = FURNITURE.CATALOG.map(function (g) { return g.group; }).concat(['Rugs']);
     // The catalog category that suits a room, from its name
     function catFor(r) {
       if (!r) return null;
@@ -1585,19 +1602,22 @@
     function renderCatalog() {
       var cat = CATS.indexOf(state.cat) > -1 ? state.cat : 'Living';
       $('catTabs').innerHTML = CATS.map(function (c) { return '<button class="cat' + (c === cat ? ' on' : '') + '" data-cat="' + c + '">' + c + '</button>'; }).join('');
-      var g = FURNITURE.CATALOG.filter(function (x) { return x.group === cat; })[0];
+      var g = FURNITURE.CATALOG.filter(function (x) { return x.group === cat; })[0], rugs = cat === 'Rugs';
       $('pieceChips').classList.toggle('hidden', !g);
-      $('ownForm').classList.toggle('hidden', !!g);
+      $('rugWrap').classList.toggle('hidden', !rugs);
+      $('ownForm').classList.toggle('hidden', !g || !state.ownOpen);
+      if (rugs) renderFurnish();
+      // just the drawing and the name; the size is in the card's tooltip and shows once the piece is placed
       if (g) $('pieceChips').innerHTML = g.items.map(function (it) {
         var n = FURNITURE.chairLayout(it).length;
-        return '<button class="piece-card" data-piece="' + it.id + '">' + pieceIcon(it) + '<b>' + it.name + '</b><small>' + pieceSize(it) + (n ? ', ' + n + ' chairs' : '') + '</small></button>';
-      }).join('');
+        return '<button class="piece-card" data-piece="' + it.id + '" title="' + pieceSize(it) + (n ? ', ' + n + ' chairs' : '') + '">' + pieceIcon(it) + '<b>' + it.name + '</b></button>';
+      }).join('') + '<button class="piece-card own-card" data-own="1" title="A piece with its own size"><span>+</span><b>Your own</b></button>';
     }
 
     /* ---------- The Furnish panel: tabs, or the selected piece or door ---------- */
     function showPane() {
-      var erasing = state.tool === 'erase', detail = !erasing && (state.pieceSel > -1 || state.doorSel > -1);
-      ['add', 'rugs', 'doors', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', erasing || detail || state.ptab !== t); });
+      var erasing = state.tool === 'erase', detail = !erasing && state.pieceSel > -1;
+      ['add', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', erasing || detail || state.ptab !== t); });
       $('pane-detail').classList.toggle('hidden', !detail);
       $('pane-erase').classList.toggle('hidden', !erasing);
       var tabs = document.querySelectorAll('.ptab');
@@ -1608,9 +1628,7 @@
       state.ptab = t; state.pieceSel = -1; state.doorSel = -1;
       if (state.tool === 'door') endDoorTool();
       renderPieceBar(); renderDoorBar();
-      if (t === 'rugs') renderFurnish();
       if (t === 'checks') renderSpacing();
-      if (t === 'doors') renderDoorList();
       draw();
     }
     function deselect() {
@@ -1621,7 +1639,7 @@
     // Every side of one piece, plus the room checks other pieces make against it
     var SIDE_NAME = { front: 'Front', back: 'Back', left: 'Left side', right: 'Right side' };
     function pieceChecks(k) {
-      var rows = [], ORDER = { front: 0, back: 1, left: 2, right: 3 };
+      var rows = [], fine = [], ORDER = { front: 0, back: 1, left: 2, right: 3 };
       spacing().filter(function (l) { return (l.piece === k && (l.show !== false || l.against)) || (l.hit.type === 'piece' && l.hit.i === k && l.rule !== 'walk'); })
         .sort(function (p, q) { return (p.piece === k ? 0 : 1) - (q.piece === k ? 0 : 1) || ORDER[p.side] - ORDER[q.side]; })
         .forEach(function (l) {
@@ -1631,34 +1649,30 @@
             : l.piece === k ? SIDE_NAME[l.side] + ' to ' + on
             : 'From the ' + nameOf(l.piece).toLowerCase();
           var val = l.rule === 'talk' || l.rule === 'tv' ? fmtFtIn(l.gap) : l.against ? 'against the wall' : inchText(l.inch);
-          rows.push('<div class="space-row"><span class="space-label">' + esc(label) + '</span><span class="space-val">' + val +
+          (l.status === 'ok' || l.against ? fine : rows).push('<div class="space-row"><span class="space-label">' + esc(label) + '</span><span class="space-val">' + val +
             ' <span class="badge ' + BADGE[l.status] + '">' + (l.against ? 'On purpose' : spaceWord(l.rule, l.status, l.inch, l.near)) + '</span></span></div>');
         });
-      return rows.join('');
+      return { bad: rows.join(''), fine: fine.join('') };
     }
     // Details of the selected piece, in the panel
     function renderPieceBar() {
       var bar = $('pieceBar'), pc = state.pieces[state.pieceSel], r = state.rooms[state.selected];
       $('pieceSub').innerHTML = !state.scale ? 'Furniture is drawn to scale, so this plan needs a scale first. Use <b>Set the scale</b> under the plan.'
-        : r ? 'Tap a piece to add it to <b>' + esc(r.name) + '</b> at its real size.'
-        : 'Pick a room, then tap a piece to add it at its real size.';
+        : r ? '' : 'Pick a room, then tap a piece to add it at its real size.';
+      $('pieceSub').classList.toggle('hidden', !$('pieceSub').innerHTML);
       if (!pc) { bar.innerHTML = ''; showPane(); placeFloat(); return; }
       var sel = selList(), rugs = selRugs();
       if (selCount() > 1) {
         var grouped = sel.every(function (o) { return o.gid && o.gid === pc.gid; }) && rugs.every(function (r) { return r.rug.gid === pc.gid; });
         var count = sel.length + ' piece' + (sel.length > 1 ? 's' : '') + (rugs.length ? ' and ' + (rugs.length > 1 ? rugs.length + ' rugs' : 'a rug') : '');
         bar.innerHTML = '<p class="detail-name" style="border:none;padding-left:0">' + count + (grouped ? ', grouped' : '') + '</p>' +
-          '<p class="detail-meta">' + (grouped ? 'They move and turn as one. ' : 'Drag any of them to move them together; the handle on top turns them together. ') +
-            'Tap one below to work on it alone.</p>' +
+          '<p class="detail-meta">' + (grouped ? 'They move and turn as one. ' : '') + 'Tap one below to work on it alone.</p>' +
           '<div class="member-list">' + sel.map(function (o) {
             return '<button class="btn-secondary btn-sm" data-pact="pickone" data-pid="' + o.id + '">' + esc(o.name) + '</button>';
           }).join('') + rugs.map(function (r) { return '<span class="member-rug">' + esc(RUG.get(r.rug.size).label) + ' rug</span>'; }).join('') + '</div>' +
           '<div class="btn-row" style="margin-top:14px">' +
             (grouped ? '<button class="btn-secondary btn-sm" data-pact="ungroup">Ungroup</button>' : '<button class="btn-primary btn-sm" data-pact="group">Group them</button>') +
-            '<button class="btn-secondary btn-sm" data-pact="dup">Duplicate</button>' +
-            '<button class="btn-secondary btn-sm" data-pact="remove">Remove ' + selCount() + '</button>' +
-          '</div>' +
-          '<p class="empty-note" style="margin-top:12px">Shift-click (or long-press on a phone) to add or take out pieces. Drag a box on empty floor to pick several.</p>';
+          '</div>';
         showPane(); placeFloat(); return;
       }
       var k = state.pieceSel, nCh = chairsOf(pc).length, rm = pieceRoom(pc);
@@ -1666,10 +1680,7 @@
       var probs = conflicts().filter(function (c) { return c.a === k || c.b === k; }).map(function (c) { return conflictText(c, k); });
       var checks = pieceChecks(k), round = pc.shape === 'round' && Math.round(pc.w) === Math.round(pc.d);
       bar.innerHTML = '<input class="detail-name" id="pcName" value="' + esc(pc.name) + '" maxlength="30" aria-label="Piece name">' +
-        '<p class="detail-meta">' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (pc.rot ? ', turned ' + pc.rot + '&deg;' : '') +
-          (rm ? ', in ' + esc(rm.name) : '') + '. Drag it on the plan to move it' + (nCh ? '; the chairs come along' : '') +
-          (stretchHandles(pc).length ? '. The handle on top turns it; the handles on its edges stretch it' + (nCh ? ', adding chairs as it grows.' : '.')
-            : '. The handle on top turns it. Type a new size below to resize it' + (nCh ? '; longer tables get more chairs.' : '.')) +
+        '<p class="detail-meta">' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (rm ? ', in ' + esc(rm.name) : '') + '.' +
           (probs.length ? ' <span class="warn-text">It ' + esc(probs.join(' and ')) + '.</span>' : '') + '</p>' +
         '<div class="field-row">' +
           '<label class="field"><span>' + (round ? 'Diameter' : 'Width') + ', inches</span><input id="pcW" value="' + Math.round(pc.w) + '" inputmode="decimal" autocomplete="off"></label>' +
@@ -1678,13 +1689,13 @@
         '</div>' +
         (pc.role === 'media' ? '<label class="field"><span>TV screen size, inches (optional)</span><input id="pcTV" value="' + (pc.tv ? Math.round(pc.tv) : '') + '" placeholder="65" inputmode="decimal" autocomplete="off"></label>' : '') +
         '<p class="section-label">Spacing</p>' +
-        (checks ? '<div class="space-list">' + checks + '</div>' : '<p class="empty-note">Open floor on every side, at least 8 feet.</p>') +
-        (partners.length ? '<button class="btn-secondary btn-sm group-hint" data-pact="groupnear">Group with the ' + esc(listNames(partners)) + (rugUnder(pc) ? ' and the rug' : '') + '</button>' : '') +
-        (pc.gid ? '<p class="empty-note" style="margin-top:12px">Part of a group. <button class="link-btn" data-pact="pickgroup">Pick the whole group</button></p>' : '') +
-        '<div class="btn-row" style="margin-top:14px">' +
-          '<button class="btn-secondary btn-sm" data-pact="dup">Duplicate</button>' +
-          '<button class="btn-secondary btn-sm" data-pact="remove">' + (nCh ? 'Remove with chairs' : 'Remove') + '</button>' +
-        '</div>';
+        (checks.bad ? '<div class="space-list">' + checks.bad + '</div>' : checks.fine ? '<p class="all-good">Room to spare on every side.</p>' : '<p class="empty-note">Open floor on every side, at least 8 feet.</p>') +
+        (checks.fine && checks.bad ? '<p class="show-more"><button class="link-btn" data-fine="1">' + (state.showFine ? 'Hide the sides that are fine' : 'All sides') + '</button></p>' +
+          (state.showFine ? '<div class="space-list">' + checks.fine + '</div>' : '') : '') +
+        (checks.fine && !checks.bad && state.showFine ? '<div class="space-list" style="margin-top:8px">' + checks.fine + '</div>' : '') +
+        (checks.fine && !checks.bad ? '<p class="show-more"><button class="link-btn" data-fine="1">' + (state.showFine ? 'Hide the sides' : 'Show every side') + '</button></p>' : '') +
+        (partners.length ? '<button class="btn-secondary btn-sm group-hint" data-pact="groupnear" title="With the ' + esc(listNames(partners)) + (rugUnder(pc) ? ' and the rug' : '') + '">Group with nearby pieces</button>' : '') +
+        (pc.gid ? '<p class="empty-note" style="margin-top:12px">Part of a group. <button class="link-btn" data-pact="pickgroup">Pick the whole group</button></p>' : '');
       showPane(); placeFloat();
     }
     // Size or name typed into the details
@@ -2121,7 +2132,9 @@
       var fb = $('floatBar'), c = $('planCanvas');
       if (!fb) return;
       var pc = state.pieces[state.pieceSel], dr = state.doors[state.doorSel];
-      if (state.mode !== 'furnish' || !state.scale || (!pc && !dr) || state.tool || (state.drag && state.drag.moved)) { fb.classList.add('hidden'); return; }
+      if (pc && state.mode !== 'furnish') pc = null;
+      if (dr && state.mode !== 'measure') dr = null;
+      if (!state.scale || (!pc && !dr) || state.tool || (state.drag && state.drag.moved)) { fb.classList.add('hidden'); return; }
       var bb, key;
       var many = pc && multi(), grouped = many && selList().every(function (o) { return o.gid && o.gid === pc.gid; }) && selRugs().every(function (r) { return r.rug.gid === pc.gid; });
       if (pc) { var q = piecePx(pc); bb = many ? selBounds(selList()) : FURNITURE.bounds(pc, q.cx, q.cy, q.k); key = 'p' + pc.id + pc.shape + (many ? 'm' + selCount() + (grouped ? 'g' : '') : ''); }
@@ -2923,8 +2936,9 @@
       if (!btn) return;
       var id = btn.getAttribute('data-piece'), act = btn.getAttribute('data-pact'), cat = btn.getAttribute('data-cat'), tab = btn.getAttribute('data-ptab');
       if (tab) { setTab(tab); return; }
-      if (cat) { state.cat = cat; renderCatalog(); return; }
-      if (btn.getAttribute('data-door') != null) { state.doorSel = +btn.getAttribute('data-door'); state.pieceSel = -1; renderPieceBar(); renderDoorBar(); draw(); return; }
+      if (btn.getAttribute('data-fine')) { state.showFine = !state.showFine; renderSpacing(); renderPieceBar(); return; }
+      if (cat) { state.cat = cat; state.ownOpen = false; renderCatalog(); return; }
+      if (btn.getAttribute('data-own')) { state.ownOpen = !state.ownOpen; renderCatalog(); if (state.ownOpen) $('customName').focus(); return; }
       if (act === 'done') { deselect(); return; }
       if (act === 'group') { groupSel(); return; }
       if (act === 'ungroup') { ungroupSel(); return; }
@@ -3068,15 +3082,17 @@
       var issues = spaceRows(null).filter(function (rw) { return rw.status !== 'ok'; }).length;
       $('checkCount').textContent = issues; $('checkCount').classList.toggle('hidden', !issues);
       $('spaceSub').innerHTML = !state.scale ? 'Spacing is measured to scale, so this plan needs a scale first.'
-        : 'Measured square off each piece, so turned pieces are checked too' + (r ? ', in <b>' + esc(r.name) + '</b>.' : '.') +
-          ' Guides: walkways 36", sofa to coffee table 14" to 18", beside a bed 24", foot of the bed 30", around a dining table 36" (44" where people walk behind the chairs), behind a desk and in front of a dresser 36", and facing seats within 8 feet.' +
-          (walkways() ? ' Walkways follow the real routes from your doors, drawn as dashed lines on the plan.'
-            : state.walls && state.walls.map ? ' <b>Mark your doors</b> to check the real walkways from them.' : '');
+        : !walkways() && state.walls && state.walls.map && !realDoors().length ? 'Mark your doors in Measure to check the real walkways.' : '';
+      $('spaceSub').classList.toggle('hidden', !$('spaceSub').innerHTML);
       if (!rows.length) { el.innerHTML = '<p class="rug-empty">' + (state.pieces.length || state.doors.length ? 'Nothing to check here yet. Place seating with a coffee table, a bed, a dining table, or a door.' : 'Place a few pieces and the spacing between them shows up here.') + '</p>'; return; }
-      el.innerHTML = rows.map(function (rw) {
+      function row(rw) {
         return '<div class="space-row"><span class="space-label">' + esc(rw.label) + '</span>' +
           '<span class="space-val">' + esc(rw.value) + ' <span class="badge ' + BADGE[rw.status] + '">' + rw.word + '</span></span></div>';
-      }).join('');
+      }
+      var bad = rows.filter(function (rw) { return rw.status !== 'ok'; }), fine = rows.filter(function (rw) { return rw.status === 'ok'; });
+      el.innerHTML = (bad.length ? '<div class="space-list">' + bad.map(row).join('') + '</div>' : '<p class="all-good">Everything' + (r ? ' in ' + esc(r.name) : '') + ' has room to spare.</p>') +
+        (fine.length ? '<p class="show-more"><button class="link-btn" data-fine="1">' + (state.showFine ? 'Hide the ones that are fine' : (fine.length === 1 ? 'Show the one that\u2019s fine' : 'Show the ' + fine.length + ' that are fine')) + '</button></p>' +
+          (state.showFine ? '<div class="space-list">' + fine.map(row).join('') + '</div>' : '') : '');
     }
 
     /* ---------- Doors (Furnish mode) ----------
@@ -3274,16 +3290,16 @@
         if (!el) return;
         el.classList.toggle('hidden', !show);
         if (!show) { el.innerHTML = ''; return; }
-        el.innerHTML = x + (id === 'foundNoteM'
-          ? '<b>We found ' + what + ' on your plan.</b> Check them: they\'re marked in green.<br><button class="btn-secondary btn-sm" data-note="check">Check the doors</button>'
-          : '<b>We found ' + what + ' on your plan</b> and marked them for you. Check each one: drag it into place, flip the way it opens, change its type, or remove it. Mark any we missed below.');
+        el.innerHTML = x + '<b>Found ' + what + ' on your plan,</b> marked in green. Tap one to check it: drag it into place, flip it, change its type, or remove it.' +
+          '<br><button class="btn-secondary btn-sm" data-note="check">Show them</button>';
       });
     }
     function onNoteClick(e) {
       var btn = e.target.closest('[data-note]');
       if (!btn) return;
       if (btn.getAttribute('data-note') === 'hide') { if (state.found) state.found.hidden = true; renderFoundNote(); return; }
-      setMode('furnish'); showPaneTab('doors');
+      if (state.mode !== 'measure') setMode('measure');
+      var sec = $('doorsSection'); if (sec && sec.scrollIntoView) sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
     function showPaneTab(t) { setTab(t); showPane(); }
 
@@ -3293,7 +3309,7 @@
       if (!el) return;
       if (!state.doors.length) { el.innerHTML = ''; return; }
       var pcs = piecesFt(), order = state.doors.map(function (d, k) { return k; }).sort(function (a, b) { return (isWin(state.doors[a]) ? 1 : 0) - (isWin(state.doors[b]) ? 1 : 0) || a - b; });
-      el.innerHTML = '<p class="section-label">On this plan</p><div class="space-list">' + order.map(function (k) {
+      el.innerHTML = '<div class="space-list" style="margin-top:10px">' + order.map(function (k) {
         var d = state.doors[k], st = doorStatus(d, pcs), rm = state.rooms.filter(function (r) { return r.id === d.room; })[0];
         return '<div class="space-row" style="cursor:pointer" data-door="' + k + '"><span class="space-label">' + doorName(d) + (rm ? ', ' + esc(rm.name) : '') + '</span>' +
           '<span class="space-val">' + d.w + '" ' + (isWin(d) ? '' : DOOR.TYPES[d.type || 'swing'].name.toLowerCase() + ' ') +
@@ -3306,7 +3322,7 @@
     function doorHandles(d) { return doorGeomPx(d).jambs; }
     function hitDoorHandle(p) {
       var d = state.doors[state.doorSel];
-      if (!d || state.mode !== 'furnish' || state.tool) return -1;
+      if (!d || state.mode !== 'measure' || state.tool) return -1;
       var hs = doorHandles(d), reach = (window.matchMedia && matchMedia('(pointer: coarse)').matches ? 16 : 10) * displayRatio();
       for (var k = 0; k < 2; k++) if (Math.hypot(p.x - hs[k].x, p.y - hs[k].y) <= reach) return k;
       return -1;
@@ -3371,7 +3387,7 @@
       if (!state.doors.length) return;
       var ratio = displayRatio(), pcs = piecesFt(), f = state.scale.ftPerPx;
       state.doors.forEach(function (d, k) {
-        var g = doorGeomPx(d), sel = !forExport && state.mode === 'furnish' && k === state.doorSel;
+        var g = doorGeomPx(d), sel = !forExport && state.mode === 'measure' && k === state.doorSel;
         var st = doorStatus(d, pcs), hit = st && st.bad, col = hit ? '#582b36' : '#7f9433';
         ctx.save();
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -3436,6 +3452,8 @@
     function renderDoorBar() {
       var bar = $('doorBar'), d = state.doors[state.doorSel];
       if (!bar) return;
+      var mDoor = !!(d && state.scale && state.mode === 'measure');
+      if ($('measureMain')) { $('measureMain').classList.toggle('hidden', mDoor); $('measureDoor').classList.toggle('hidden', !mDoor); }
       if (!d || !state.scale) { bar.classList.add('hidden'); bar.innerHTML = ''; showPane(); placeFloat(); return; }
       var t = d.type || 'swing', st = doorStatus(d), win = isWin(d), widths = DOOR.TYPES[t].widths.slice(), fl = DOOR_FLIPS[t];
       if (widths.indexOf(d.w) < 0) { widths.push(d.w); widths.sort(function (a, b) { return a - b; }); }
@@ -3550,8 +3568,7 @@
       }
       var res = rugCheckFor(r), type = RUG.roomType(r.name);
       var bestLabel = res && res.best ? RUG.get(res.best).label : null;
-      $('rugSub').innerHTML = bestLabel ? 'The largest rug that fits <b>' + esc(r.name) + '</b> comfortably is <b>' + bestLabel + '</b>.'
-                                        : 'None of the standard sizes leave 12" of floor in <b>' + esc(r.name) + '</b>.';
+      $('rugSub').innerHTML = (bestLabel ? 'Best fit: <b>' + bestLabel + '</b>. ' : 'None of the standard sizes leave 12" of floor here. ') + 'Tap a size to lay it in the room.';
       var cards = res.list.map(function (it) {
         var on = r.rug && r.rug.size === it.size.id;
         return '<button class="rug-card' + (on ? ' on' : '') + '" data-rug="' + it.size.id + '">' +
@@ -3570,9 +3587,7 @@
             '<button class="btn-secondary btn-sm" data-act="remove">Remove</button>' +
           '</div></div>';
       }
-      body.innerHTML = '<p class="rug-advice">' + RUG_ADVICE[type] +
-        ' Tap a size to lay it on the plan, then drag it into place.</p>' +
-        '<div class="rug-grid">' + cards + '</div>' + placed;
+      body.innerHTML = '<div class="rug-grid">' + cards + '</div>' + placed;
     }
 
     // Put a rug in the selected room at the spot that leaves the most floor
@@ -3628,6 +3643,8 @@
       $('lightPanel').classList.toggle('hidden', m !== 'light');
       $('panelHead').classList.toggle('hidden', m === 'measure');
       $('planCanvas').classList.toggle('furnishing', m === 'furnish' || m === 'light');
+      if (m !== 'measure') state.doorSel = -1;
+      renderDoorBar();
       if (m === 'furnish') { renderCatalog(); showPane(); }
       state.lightSel = -1;
       if (m === 'light') { state.pieceSel = -1; state.doorSel = -1; state.extra = []; state.extraRugs = []; }
@@ -3711,6 +3728,18 @@
       var p = toCanvas(e), xb = removeBtn();
       if (xb && Math.hypot(p.x - xb.x, p.y - xb.y) <= xb.r * 1.3) { removePoint(state.selected, state.ptSel); e.preventDefault(); return; }
       var h = hitHandle(p), added = false;
+      var dh = hitDoorHandle(p);
+      if (dh > -1) { startDoorStretch(e, dh, p); return; }
+      var dk = h && h.type === 'pt' && h.corner ? -1 : hitDoor(p);
+      if (dk > -1) {
+        state.doorSel = dk; state.ptSel = -1;
+        state.drag = { mode: 'door', start: p, moved: false, snap: snap() };
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        renderDoorBar(); draw();
+        return;
+      }
+      if (state.doorSel > -1) { state.doorSel = -1; renderDoorBar(); }
       if (h && h.type === 'pt' && h.corner) { state.ptSel = -1; startDrag(e, 'resize', h.corner, p); return; }
       if (h && h.type === 'mid') {
         added = true;
@@ -3741,8 +3770,6 @@
     // Furnish: grab a rug to move it, or tap a room to pick it
     function furnishDown(e) {
       var p = toCanvas(e), hh = e.shiftKey || e.metaKey || e.ctrlKey ? null : hitPieceHandle(p);   // a modifier click always means 'add this piece'
-      var dh = hitDoorHandle(p);
-      if (dh > -1) { startDoorStretch(e, dh, p); return; }
       if (hh) { startHandleDrag(e, hh, p); return; }
       var pk = state.space || e.button === 1 ? -1 : hitPiece(p);
       if (pk > -1) {
@@ -3777,16 +3804,6 @@
         }
       }
       if (state.pieceSel > -1 && !state.space && e.button !== 1) { state.pieceSel = -1; state.extra = []; state.extraRugs = []; renderPieceBar(); }
-      var dk = hitDoor(p);
-      if (dk > -1) {
-        state.doorSel = dk;
-        state.drag = { mode: 'door', start: p, moved: false, snap: snap() };
-        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
-        e.preventDefault();
-        renderDoorBar(); draw();
-        return;
-      }
-      if (state.doorSel > -1) { state.doorSel = -1; renderDoorBar(); }
       var i = hitRug(p);
       if (i > -1) {
         if (i !== state.selected) select(i, false);
@@ -3874,7 +3891,18 @@
         }
         return;
       }
+      if (state.drag && state.drag.mode === 'dstretch') { moveDoorStretch(p); return; }
+      if (state.drag && state.drag.mode === 'door') {
+        if (!state.drag.moved && Math.hypot(p.x - state.drag.start.x, p.y - state.drag.start.y) < 4 * displayRatio()) return;
+        state.drag.moved = true;
+        moveDoor(state.doors[state.doorSel], p);
+        draw();
+        return;
+      }
       if (!state.drag) {
+        var dhv = state.tool ? -1 : hitDoorHandle(p);
+        if (dhv > -1) { var dd0 = state.doors[state.doorSel]; c.style.cursor = Math.abs(dd0.ux) > Math.abs(dd0.uy) ? 'ew-resize' : 'ns-resize'; return; }
+        if (!state.tool && hitDoor(p) > -1) { c.style.cursor = 'move'; return; }
         var h = hitHandle(p);
         c.style.cursor = !h ? (hitRoom(p) > -1 ? 'move' : 'default') : h.type === 'mid' ? 'copy' :
           !h.corner ? 'grab' : (h.corner === 'nw' || h.corner === 'se' ? 'nwse-resize' : 'nesw-resize');
@@ -3965,7 +3993,7 @@
         if (state.drag.mode === 'piece' && state.drag.pending && !state.drag.moved) pickPiece(state.drag.pk, false);   // a tap picks it alone
         if (state.drag.moved) pushUndo(state.drag.snap);
         state.drag = null;
-        renderSpacing(); renderDoorBar(); renderPieceBar();
+        renderSpacing(); renderDoorBar(); renderPieceBar(); renderDoorList();
         if (state.mode === 'furnish' && state.rooms[state.selected] && state.rooms[state.selected].rug) renderFurnish();
         return;
       }
@@ -4362,7 +4390,7 @@
       if (i !== state.selected) {
         state.ptSel = -1;
         var cf = catFor(state.rooms[i]);
-        if (cf && cf !== state.cat) { state.cat = cf; renderCatalog(); }   // show the pieces that suit the room
+        if (cf && cf !== state.cat && state.cat !== 'Rugs') { state.cat = cf; renderCatalog(); }   // show the pieces that suit the room
       }
       state.selected = i;
       $('planCanvas').classList.toggle('editing', i > -1);
@@ -4435,7 +4463,7 @@
       $('statEst').textContent = est;
     }
 
-    function renderAll() { syncGeometry(); renderFoundNote(); renderCards(); renderStats(); renderScaleBar(); renderRoomPick(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderDoorBar(); renderDoorList(); } if (state.mode === 'light') renderLight(); draw(); }
+    function renderAll() { syncGeometry(); renderFoundNote(); renderCards(); renderStats(); renderScaleBar(); renderRoomPick(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); } renderDoorBar(); renderDoorList(); if (state.mode === 'light') renderLight(); draw(); }
 
     function cardIndex(el) {
       var card = el.closest('.room-card');
@@ -4917,18 +4945,22 @@
       $('rugBody').addEventListener('click', onFurnishClick);
       renderCatalog();
       var fp = $('furnishPanel');
-      fp.addEventListener('click', function (e) {
+      fp.addEventListener('click', onPieceClick);
+      fp.addEventListener('change', onDetailChange);
+      var mp = $('measurePanel');
+      mp.addEventListener('click', function (e) {
+        if (e.target.closest('[data-dback]')) { state.doorSel = -1; renderDoorBar(); draw(); return; }
         var row = e.target.closest('[data-door]');
-        if (row && !e.target.closest('button')) { state.doorSel = +row.getAttribute('data-door'); state.pieceSel = -1; renderPieceBar(); renderDoorBar(); draw(); return; }
-        onPieceClick(e); onDoorClick(e);
+        if (row && !e.target.closest('button')) { state.doorSel = +row.getAttribute('data-door'); renderDoorBar(); draw(); return; }
+        onDoorClick(e);
       });
-      fp.addEventListener('change', function (e) { onDoorChange(e); onDetailChange(e); });
+      mp.addEventListener('change', onDoorChange);
+      mp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.getAttribute('data-dact') === 'width') e.target.blur(); });
       $('lightBody').addEventListener('click', onLightClick);
       $('lightBody').addEventListener('change', onLightChange);
       $('lightBody').addEventListener('input', function (e) { e.target.classList.remove('bad'); });
       $('lightBody').addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur(); });
       $('foundNoteM').addEventListener('click', onNoteClick);
-      $('foundNoteD').addEventListener('click', onNoteClick);
       fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (/^pc[NWDT]/.test(e.target.id || '') || e.target.getAttribute('data-dact') === 'width')) e.target.blur(); });
       $('floatBar').addEventListener('click', onFloatClick);
       $('undoBtn').addEventListener('click', undo);
@@ -4938,7 +4970,7 @@
       $('zoomFit').addEventListener('click', zoomFit);
       document.addEventListener('keyup', function (e) { if (e.key === ' ') state.space = false; });
       window.addEventListener('blur', function () { state.space = false; });
-      $('doorTool').addEventListener('click', function () { if (state.tool === 'door') endDoorTool(); else { setTab('doors'); startDoorTool(); } });
+      $('doorTool').addEventListener('click', function () { if (state.tool === 'door') endDoorTool(); else { setMode('measure'); startDoorTool(); } });
       grid.addEventListener('focusin', function (e) { if (e.target.tagName === 'INPUT') state.editSnap = snap(); });
       $('customAdd').addEventListener('click', addCustom);
       ['customName', 'customW', 'customD'].forEach(function (id) {
@@ -4990,7 +5022,7 @@
           else if (e.key === 'Escape') { if (state.lightSel > -1) { state.lightSel = -1; renderLight(); draw(); } else select(-1); }
           return;
         }
-        if (state.mode === 'furnish' && state.doorSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+        if (state.mode === 'measure' && state.doorSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
           if (e.key === 'Delete' || e.key === 'Backspace') { removeDoor(); e.preventDefault(); }
           if (e.key === 'Escape') deselect();
           return;
@@ -5137,6 +5169,7 @@
         </div>
         <!-- Measure -->
         <div id="measurePanel" class="pane">
+         <div id="measureMain">
           <div class="found-note hidden" id="foundNoteM"></div>
           <div class="stats">
             <div class="stat"><b id="statRooms">0</b><span>Spaces</span></div>
@@ -5153,14 +5186,23 @@
             <span class="legend"><span class="swatch dash"></span>Estimated</span><br>
             Click a room to select it, drag to move it, drag a corner to resize. For rooms that aren't rectangles, drag a + on a side to add a corner. To remove a corner, tap it and then the &times; beside it. With no corner picked, Delete removes the room.
           </p>
+          <div class="m-doors" id="doorsSection">
+            <div class="rooms-head"><p class="eyebrow">Doors and windows</p></div>
+            <div class="btn-row"><button class="btn-secondary btn-sm" id="doorBtn">Mark a door</button><button class="btn-secondary btn-sm" id="winBtn">Mark a window</button></div>
+            <p class="hint" id="doorHint"></p>
+            <div id="doorList"></div>
+          </div>
+         </div>
+         <div class="hidden" id="measureDoor">
+           <button class="link-btn detail-back" data-dback="1">&larr; Back</button>
+           <div id="doorBar"></div>
+         </div>
         </div>
 
         <!-- Furnish -->
         <div id="furnishPanel" class="hidden">
           <div class="ptabs" role="tablist" aria-label="Furnish">
             <button class="ptab on" data-ptab="add">Add</button>
-            <button class="ptab" data-ptab="rugs">Rugs</button>
-            <button class="ptab" data-ptab="doors">Doors</button>
             <button class="ptab" data-ptab="checks">Checks<span class="count hidden" id="checkCount"></span></button>
           </div>
 
@@ -5180,9 +5222,9 @@
 
           <div class="pane" id="pane-add">
             <p class="pane-sub" id="pieceSub"></p>
-            <button class="btn-secondary btn-sm erase-open" id="eraseOpen">Plan has furniture drawn on it? Clear it off</button>
             <div class="cats" id="catTabs"></div>
             <div class="cat-grid" id="pieceChips"></div>
+            <div class="hidden" id="rugWrap"><p class="pane-sub" id="rugSub"></p><div id="rugBody"></div></div>
             <div class="own hidden" id="ownForm">
               <label class="field"><span>Name</span><input id="customName" placeholder="Vintage credenza" maxlength="30" autocomplete="off"></label>
               <label class="field"><span>Shape</span><select id="customShape"><option value="rect">Rectangle</option><option value="round">Round or oval</option></select></label>
@@ -5191,39 +5233,20 @@
                 <label class="field"><span>Depth, inches</span><input id="customD" placeholder="18" autocomplete="off" inputmode="decimal"></label>
               </div>
               <button class="btn-primary btn-sm" id="customAdd">Add to the plan</button>
-              <p class="hint" style="margin-top:10px">Use the listed size of the exact piece you're shopping for. For round pieces the width is the diameter; add a depth to make it an oval.</p>
+              <p class="hint" style="margin-top:10px">Use the listed size of the piece you're shopping for. For round pieces the width is the diameter.</p>
             </div>
-          </div>
-
-          <div class="pane hidden" id="pane-rugs">
-            <p class="pane-sub" id="rugSub"></p>
-            <div id="rugBody"></div>
-            <p class="hint">Rugs want 12" of floor at the walls (6" is tight). Sizes are checked against the room outline, so fix the outline in Measure first if it's off.</p>
-          </div>
-
-          <div class="pane hidden" id="pane-doors">
-            <div class="found-note hidden" id="foundNoteD"></div>
-            <p class="pane-sub">Mark the doors and windows on the walls. Doors show the space they swing or slide through and start the walking routes; windows show whether tall furniture stands in front of them. Pick a door to change its type: swing, double, pocket, barn, sliding or bifold.</p>
-            <div class="btn-row"><button class="btn-primary btn-sm" id="doorBtn">Mark a door</button><button class="btn-secondary btn-sm" id="winBtn">Mark a window</button></div>
-            <p class="hint" id="doorHint"></p>
-            <div id="doorList"></div>
+            <p class="erase-link"><button class="link-btn" id="eraseOpen">Furniture drawn on the plan? Clear it off</button></p>
           </div>
 
           <div class="pane hidden" id="pane-checks">
             <p class="pane-sub" id="spaceSub"></p>
-            <div class="space-list" id="spaceList"></div>
-            <p class="hint">
-              <span class="legend"><span class="swatch" style="border-top-color:#7f9433"></span>Comfortable</span>
-              <span class="legend"><span class="swatch" style="border-top-color:#b07d14"></span>Tight</span>
-              <span class="legend"><span class="swatch"></span>Doesn't work</span><br>
-              Lines on the plan show these checks and any walkway under 36". Dashed lines are the walking routes from your doors; a route turns amber or burgundy where it gets narrow. Select a piece to see every side of it. A piece outlined in burgundy runs into a wall or another piece.
-            </p>
+            <div id="spaceList"></div>
+            <p class="key-line"><span class="kdot ok"></span>Comfortable <span class="kdot tight"></span>Tight <span class="kdot close"></span>Doesn't work</p>
           </div>
 
           <div class="pane hidden" id="pane-detail">
             <button class="link-btn detail-back" data-pact="done">&larr; Back</button>
             <div id="pieceBar"></div>
-            <div id="doorBar"></div>
           </div>
         </div>
 
