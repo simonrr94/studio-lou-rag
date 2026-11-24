@@ -882,11 +882,6 @@ var FURNITURE = (function () {
       { id: 'pouf', name: 'Pouf', w: 20, d: 20, h: 16, kind: 'decor', role: 'decor', shape: 'round' }
     ] }
   ];
-  (function () {
-    var lamp = null;
-    CATALOG.forEach(function (g) { g.items.forEach(function (it) { if (it.id === 'lamp') lamp = it; }); });
-    CATALOG.forEach(function (g) { if (lamp && /^(Living|Bedroom|Office)$/.test(g.group)) g.items.push(lamp); });
-  })();
   function get(id) {
     for (var g = 0; g < CATALOG.length; g++) for (var i = 0; i < CATALOG[g].items.length; i++) if (CATALOG[g].items[i].id === id) return CATALOG[g].items[i];
     return null;

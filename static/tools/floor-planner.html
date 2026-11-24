@@ -258,6 +258,11 @@
     .cat.on { background: #582b36; border-color: #582b36; color: #FAF9F6; }
     .cat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
     .cat-grid .piece-card { padding: 8px 6px 7px; text-align: center; }
+    .cat-grid .cat-head { grid-column: 1 / -1; margin: 10px 0 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6b6560; }
+    .cat-grid .cat-head:first-of-type { margin-top: 2px; }
+    .cat-grid .cat-type { grid-column: 1 / -1; font-size: 13px; color: #6b6560; margin-bottom: 4px; }
+    .cat-grid .cat-type select { font: inherit; font-size: 13px; color: #433E3C; border: 1px solid #d0c9bc; border-radius: 6px; padding: 2px 4px; background: #ffffff; }
+    .cat-grid .cat-more { grid-column: 1 / -1; margin: 8px 0 0; font-size: 13px; }
     .cat-grid .piece-card b { font-size: 12px; font-weight: 600; }
     .cat-grid .piece-card .piece-art { height: 38px; margin-bottom: 4px; }
     .own-card { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #582b36; }
@@ -476,7 +481,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=26"></script>
+  <script src="/static/tools/plan-engine.js?v=27"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -537,7 +542,7 @@
       ptab: 'add',      // the Furnish panel tab: add or checks (rugs are a catalog category; doors live in Measure)
       ownOpen: false,   // the Your own form is open under the catalog
       showFine: false,  // Checks: also list the spacing that's fine
-      cat: 'Living',    // the catalog category shown in Add
+      cat: 'Furniture', // the Add tab shown: Furniture, Rugs or Decor
       ptSel: -1,        // Measure: the corner tapped on the selected room's shape, which shows a remove (x) button
       lights: [],       // Light: the ceiling lights (see Light mode below)
       lightSel: -1,     // index of the picked light, or -1
@@ -1649,32 +1654,55 @@
     }
 
     /* ---------- Catalog (Furnish, Add tab) ---------- */
-    var CATS = FURNITURE.CATALOG.map(function (g) { return g.group; }).concat(['Rugs']);
-    // The catalog category that suits a room, from its name
-    function catFor(r) {
-      if (!r) return null;
-      if (/office|study/i.test(r.name)) return 'Office';
-      if (/kitchen|kitchenette/i.test(r.name)) return 'Kitchen';
-      if (/bath|powder|ensuite|en-suite|\bwc\b/i.test(r.name)) return 'Bath';
-      var t = RUG.roomType(r.name);
-      return t === 'bedroom' ? 'Bedroom' : t === 'dining' ? 'Dining' : t === 'living' ? 'Living' : null;
+    /* Furnish has three tabs. Furniture shows the pieces for the room's type (the same type Light uses,
+       so changing it in either place changes both), with every list a combined room's name calls for
+       (a great room gets Living and Dining). "More pieces" opens the rest. */
+    var CATS = ['Furniture', 'Rugs', 'Decor'];
+    var TYPE_GROUP = { living: 'Living', bedroom: 'Bedroom', dining: 'Dining', kitchen: 'Kitchen', bath: 'Bath', office: 'Office',
+                       laundry: 'Kitchen', hall: 'Living', closet: 'Bedroom', outdoor: 'Living' };
+    function groupItems(name) { var g = FURNITURE.CATALOG.filter(function (x) { return x.group === name; })[0]; return g ? g.items : []; }
+    function furnGroups(r) {
+      if (!r) return ['Living'];
+      var out = [TYPE_GROUP[roomLType(r)] || 'Living'], n = r.name || '';
+      [[/living|family|great|den\b|lounge|sitting/i, 'Living'], [/dining|breakfast|nook|great/i, 'Dining'], [/kitchen/i, 'Kitchen'],
+       [/office|study/i, 'Office'], [/bed/i, 'Bedroom']].forEach(function (m) { if (m[0].test(n) && out.indexOf(m[1]) < 0) out.push(m[1]); });
+      return out;
     }
+    function catFor(r) { return null; }
     // A small top-down drawing of a catalog piece (with its chairs), as SVG
     // The catalog card's drawing: the piece (and a dining table's chairs) as drawn on the plan
     function pieceIcon(it) { return '<img class="piece-art" src="' + FURNART.thumb(it, 132, 46) + '" alt="">'; }
     function renderCatalog() {
-      var cat = CATS.indexOf(state.cat) > -1 ? state.cat : 'Living';
+      var cat = CATS.indexOf(state.cat) > -1 ? state.cat : (state.cat = 'Furniture');
       $('catTabs').innerHTML = CATS.map(function (c) { return '<button class="cat' + (c === cat ? ' on' : '') + '" data-cat="' + c + '">' + c + '</button>'; }).join('');
-      var g = FURNITURE.CATALOG.filter(function (x) { return x.group === cat; })[0], rugs = cat === 'Rugs';
+      var g = cat !== 'Rugs', rugs = cat === 'Rugs';
       $('pieceChips').classList.toggle('hidden', !g);
       $('rugWrap').classList.toggle('hidden', !rugs);
       $('ownForm').classList.toggle('hidden', !g || !state.ownOpen);
       if (rugs) renderFurnish();
       // just the drawing and the name; the size is in the card's tooltip and shows once the piece is placed
-      if (g) $('pieceChips').innerHTML = g.items.map(function (it) {
-        var n = FURNITURE.chairLayout(it).length;
-        return '<button class="piece-card" data-piece="' + it.id + '" title="' + pieceSize(it) + (n ? ', ' + n + ' chairs' : '') + '">' + pieceIcon(it) + '<b>' + it.name + '</b></button>';
-      }).join('') + '<button class="piece-card own-card" data-own="1" title="A piece with its own size"><span>+</span><b>Your own</b></button>';
+      if (!g) return;
+      function cards(items) {
+        return items.map(function (it) {
+          var n = FURNITURE.chairLayout(it).length;
+          return '<button class="piece-card" data-piece="' + it.id + '" title="' + pieceSize(it) + (n ? ', ' + n + ' chairs' : '') + '">' + pieceIcon(it) + '<b>' + it.name + '</b></button>';
+        }).join('');
+      }
+      function head(t) { return '<p class="cat-head">' + t + '</p>'; }
+      var own = '<button class="piece-card own-card" data-own="1" title="A piece with its own size"><span>+</span><b>Your own</b></button>', html = '';
+      if (cat === 'Decor') html = cards(groupItems('Decor')) + own;
+      else {
+        var r = state.rooms[state.selected], gs = furnGroups(r), t = r ? roomLType(r) : 'living';
+        html += '<div class="cat-type">' + (state.furnTypeOpen && r
+          ? 'Pieces for <select data-ftype aria-label="Room type">' + LIGHT.TYPES.map(function (o) { return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label.toLowerCase() + '</option>'; }).join('') + '</select>'
+          : 'Pieces for ' + (gs.length > 1 ? gs.map(function (x) { return x.toLowerCase(); }).join(' and ') : 'a' + (/^[aeiou]/i.test(LIGHT.type(t).label) ? 'n ' : ' ') + LIGHT.type(t).label.toLowerCase()) + (r ? ' <button class="link-btn" data-cact="ftype">Change</button>' : '')) + '</div>';
+        gs.forEach(function (x) { if (gs.length > 1) html += head(x); html += cards(groupItems(x)); });
+        html += own;
+        var rest = FURNITURE.CATALOG.map(function (x) { return x.group; }).filter(function (x) { return x !== 'Decor' && gs.indexOf(x) < 0; });
+        if (state.morePieces) rest.forEach(function (x) { html += head(x) + cards(groupItems(x)); });
+        html += '<p class="cat-more"><button class="link-btn" data-cact="more">' + (state.morePieces ? 'Fewer pieces' : 'More pieces') + '</button></p>';
+      }
+      $('pieceChips').innerHTML = html;
     }
 
     /* ---------- The Furnish panel: tabs, or the selected piece or door ---------- */
@@ -1782,6 +1810,16 @@
     }
     // Size or name typed into the details
     function onDetailChange(e) {
+      if (e.target.hasAttribute('data-ftype')) {   // the room type, shared with Light
+        var rt = state.rooms[state.selected];
+        if (rt) {
+          pushUndo();
+          var c = lightCfg(rt); c.type = e.target.value; c.mood = null; c.size = null;
+          if (c.done) suggestRoom(rt, true);
+        }
+        state.furnTypeOpen = false; state.morePieces = false; renderCatalog(); draw();
+        return;
+      }
       var pc = state.pieces[state.pieceSel], id = e.target.id;
       if (!pc) return;
       if (id === 'pcTV') {
@@ -3308,6 +3346,9 @@
       if (tab) { setTab(tab); return; }
       if (btn.getAttribute('data-fine')) { state.showFine = !state.showFine; renderSpacing(); renderPieceBar(); return; }
       if (cat) { state.cat = cat; state.ownOpen = false; renderCatalog(); return; }
+      var fact = btn.getAttribute('data-cact');
+      if (fact === 'more') { state.morePieces = !state.morePieces; renderCatalog(); return; }
+      if (fact === 'ftype') { state.furnTypeOpen = true; renderCatalog(); return; }
       if (btn.getAttribute('data-own')) { state.ownOpen = !state.ownOpen; renderCatalog(); if (state.ownOpen) $('customName').focus(); return; }
       if (act === 'done') { deselect(); return; }
       if (act === 'lampyes' || act === 'lampno') {
@@ -4762,11 +4803,11 @@
     function select(i, scrollCard) {
       if (i !== state.selected) {
         state.ptSel = -1;
-        var cf = catFor(state.rooms[i]);
-        if (cf && cf !== state.cat && state.cat !== 'Rugs') { state.cat = cf; renderCatalog(); }   // show the pieces that suit the room
+        state.morePieces = false; state.furnTypeOpen = false;
       }
       var changed = state.selected !== i;
       state.selected = i;
+      if (changed && state.cat !== 'Rugs' && state.mode === 'furnish') renderCatalog();   // show the pieces that suit the room
       if (changed) { renderCards(); renderFurnishRooms(); }   // the list, or the picked room's view
       $('planCanvas').classList.toggle('editing', i > -1);
       var cards = document.querySelectorAll('.room-card');
