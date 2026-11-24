@@ -864,6 +864,12 @@ var FURNITURE = (function () {
       { id: 'islandP', name: 'Island', w: 60, d: 30, h: 36, kind: 'kitchen', role: 'island' },
       { id: 'stool', name: 'Counter stool', w: 17, d: 17, h: 26, kind: 'seat', role: 'chair', shape: 'round' }
     ] },
+    // Bath: vanities stand with their backs to a wall. A sconce goes on each side of the mirror
+    // (a double vanity gets one between the two mirrors too), its center 60" to 65" off the floor.
+    { group: 'Bath', items: [
+      { id: 'vanity', name: 'Vanity', w: 36, d: 21, h: 34, kind: 'bath', role: 'vanity' },
+      { id: 'vanity2', name: 'Double vanity', w: 60, d: 22, h: 34, kind: 'bath', role: 'vanity', sinks: 2 }
+    ] },
     // Decor: plants, lamps and a pouf. They block walking routes and door swings and are
     // flagged when they run into a wall or a piece, but they make no spacing lines of their own
     // and don't count as blocking a window.
@@ -1434,6 +1440,17 @@ var FURNART = (function () {
     line(ctx, -w / 2, d / 2 - 2.6, w / 2, d / 2 - 2.6, C.line, 0.6);
     if (w >= 24) line(ctx, 0, d / 2 - 2.6, 0, d / 2, C.line, 0.6);
   }
+  // Vanity: a stone top with an oval basin (two on a double vanity) and a faucet behind each
+  function vanity(ctx, w, d, pc) {
+    var spec = FURNITURE.get(pc && pc.type), n = (pc && pc.sinks) || (spec && spec.sinks) || (w >= 54 ? 2 : 1);
+    countertop(ctx, w, d);
+    var xs = n === 2 ? [-w / 4, w / 4] : [0], bw = Math.min(18, w / n - 10), bd = Math.min(13, d - 8), by = -d / 2 + 4 + bd / 2;
+    xs.forEach(function (x) {
+      ell(ctx, x, by + 1, bw / 2, bd / 2); paint(ctx, '#ffffff', C.line, 0.8);
+      circ(ctx, x, by + 2, 0.8); paint(ctx, C.line, null);   // the drain
+      circ(ctx, x, -d / 2 + 2.2, 1); paint(ctx, C.frame, C.line, 0.7);   // the faucet
+    });
+  }
   // Island: the cabinet base under a stone top; on a seating island the overhang shows as a dashed line
   function island(ctx, w, d, pc) {
     var spec = FURNITURE.get(pc && pc.type), over = spec && spec.chairs ? Math.min(spec.overhang || 12, d * 0.35) : 0;
@@ -1559,7 +1576,7 @@ var FURNART = (function () {
     coffee: coffee, coffeeR: roundCoffee, ottoman: ottoman, side: side, sideR: roundSide, media: media, console: consoleTable,
     full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser,
     chair: diningChair, desk: desk, deskchair: deskChair, bookcase: bookcase,
-    bench: bench, counter: counter, sink: sink, range: range, fridge: fridge, pantry: pantry, island: island, islandP: island, stool: stool,
+    bench: bench, counter: counter, sink: sink, range: range, fridge: fridge, pantry: pantry, island: island, islandP: island, stool: stool, vanity: vanity, vanity2: vanity,
     plant: fiddle, palm: palm, plantS: snake, tree: olive, lamp: floorLamp, pouf: ottoman
   };
   // Pieces of your own, and anything not in the catalog, draw by what they are
@@ -1572,6 +1589,7 @@ var FURNART = (function () {
     if (pc.role === 'chair') return diningChair;
     if (pc.role === 'island') return island;
     if (pc.role === 'counter') return counter;
+    if (pc.role === 'vanity') return vanity;
     return pc.shape === 'round' ? function (ctx, w, d) { roundTop(ctx, w, d, C.cushion); } : function (ctx, w, d) { top(ctx, w, d, C.cushion); };
   }
 
@@ -1634,7 +1652,7 @@ var SPACE = (function () {
   var AGAINST = 4;        // inches: closer than this, the piece is set against it on purpose
   var PASSAGE = 12;       // inches: walkway gaps from here up to 36" are flagged on the plan
   var COFFEE_PAIR = 36;   // inches: a coffee table farther than this from a seat is not part of its group
-  var WALL_PATH = { bench: 1, seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, dresser: 1, media: 1, console: 1, other: 1, counter: 1, island: 1 };
+  var WALL_PATH = { bench: 1, seat: 1, bed: 1, dining: 1, desk: 1, storage: 1, dresser: 1, media: 1, console: 1, other: 1, counter: 1, island: 1, vanity: 1 };
   var KITCHEN = { counter: 1, island: 1 };   // the pieces a work aisle runs between   // pieces whose gap to a wall can be a walkway
   // Pieces set out together on purpose. A gap between them is part of the group, not a walkway:
   // seating with its coffee, side, and console tables; seats side by side; a bed and its nightstands.
@@ -1671,7 +1689,9 @@ var SPACE = (function () {
     // Kitchens (NKBA Kitchen Planning Guidelines 6 to 8)
     aisle: { ok: 48, tight: 42 },       // work aisle: 48" for two cooks, 42" for one
     seat: { ok: 36, tight: 32 },        // behind island stools: 32" if nobody passes, 36" to edge past
-    seatWalk: { ok: 44, tight: 36 }     // behind island stools on a walking route: 44" to walk past
+    seatWalk: { ok: 44, tight: 36 },    // behind island stools on a walking route: 44" to walk past
+    // Bathrooms: 30" clear in front of a vanity (NKBA), 21" the code minimum
+    vanity: { ok: 30, tight: 21 }
   };
   var CONSOLE_PAIR = 12;  // inches: a console table this close behind a seat belongs to it
   var CONSOLE_OK = 8;     // inches: a few inches behind the sofa back is the norm
@@ -1804,6 +1824,7 @@ var SPACE = (function () {
         else if (other && inch >= PASSAGE && KITCHEN[pc.role] && KITCHEN[other.role] && (pc.role === 'island' || sd.name === 'front')) rule = 'aisle';   // closer: counters meeting at a corner
         else if (pc.role === 'desk' && sd.name === 'front') rule = 'desk';
         else if (pc.role === 'dresser' && sd.name === 'front') rule = 'drawers';
+        else if (pc.role === 'vanity' && sd.name === 'front') rule = 'vanity';
         // A bed set right against a wall on a side nobody uses is on purpose (a kids' room, a daybed)
         // (Room outlines sit just inside the drawn walls, so up to 6" still counts as against it.)
         var against = !other && inch <= 6 && (rule === 'bed' || rule === 'bedFoot' || rule === 'diningOpen');
@@ -1811,8 +1832,10 @@ var SPACE = (function () {
         // to make a path (36" or more across, and not a nightstand or side table). Chairs at a table are covered by the dining check.
         // Off the ends of a dresser, desk or console, a gap to the wall is a corner, not a path
         var sideOk = (sd.name !== 'left' && sd.name !== 'right') || SIDE_PATH[pc.role];
+        // A vanity's back and ends fit to the bathroom walls; only its front needs room
+        var vanityFit = pc.role === 'vanity' && sd.name !== 'front' && !other;
         var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || (WALL_PATH[pc.role] && sideOk && Math.max(pc.w, pc.d) >= 36));
-        var show = against || benchAtFoot ? false : rule === 'console' ? (status(rule, inch) === 'ok' ? 'selected' : 'always')
+        var show = against || benchAtFoot || vanityFit ? false : rule === 'console' ? (status(rule, inch) === 'ok' ? 'selected' : 'always')
           : rule !== 'walk' ? 'always' : inch < AGAINST ? false : (passage && !(other && grouped(pc, other))) ? 'always' : 'selected';
         lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, against: against,
                      status: against ? 'ok' : status(rule, inch),
@@ -3109,7 +3132,7 @@ var LIGHT = (function () {
   }
   // Rooms built around tasks: their recessed lights give the general light (the room's Cozy number),
   // and task lights (pendants, under-cabinet, vanity, a desk lamp) bring the work surfaces up to the mood
-  var TASK_ROOMS = { kitchen: 'over the counters and island', bath: 'at the mirror (vanity lights)', office: 'at the desk', laundry: 'over the work surfaces' };
+  var TASK_ROOMS = { kitchen: 'over the counters and island', bath: 'at the vanity', office: 'at the desk', laundry: 'over the work surfaces' };
   function taskRoom(typeId) { return TASK_ROOMS[typeId] || null; }
   // Kitchens get 20 fc of general light (Lauren, Nov 24): close to the common one recessed light per
   // 15 to 20 sq ft, since pendants and under-cabinet lights carry the counters to the mood's target
@@ -3207,7 +3230,7 @@ var LIGHT = (function () {
      light above them: over pillows, over the back of a seat (glare in the eyes), and
      over anything tall (a fridge, a pantry, a bookcase). Over the rest of a bed is
      allowed but avoided. */
-  var TASK = { seat: 1, bed: 1, dresser: 1, desk: 1, counter: 1, island: 1, dining: 1, storage: 1, coffee: 1, bench: 1 };
+  var TASK = { seat: 1, bed: 1, dresser: 1, desk: 1, counter: 1, island: 1, dining: 1, storage: 1, coffee: 1, bench: 1, vanity: 1 };
   function usage(p, pieces) {
     var w = 1, mult = 1, ban = false, soft = 1;
     pieces.forEach(function (pc) {
@@ -3238,6 +3261,7 @@ var LIGHT = (function () {
           else if (ax <= hw + 36 && Math.abs(q.y) <= hd + 36) w += 2;
           break;
         case 'dining': if (on) w += 3; break;
+        case 'vanity': if (front(30)) w += 3; else if (on) w += 1; break;
         case 'storage': if (front(24)) w += 1; if (on) ban = true; break;
       }
     });
@@ -3428,8 +3452,8 @@ var LIGHT = (function () {
      lumens on what they buy):
        chandelier 2,400 lm (dining chandeliers run 1,800 to 3,600), pendant 600 lm (island
        pendants beside recessed lights), flush mount 1,400 lm (common 13" to 14" size),
-       wall sconce 400 lm (800 each beside a vanity mirror, so a pair meets the ALA's 1,600
-       minimum), floor lamp 800 lm (reading range 450 to 800), under-cabinet 400 lm per foot
+       wall sconce 400 lm (beside a vanity mirror 800 each for a pair, 1,000 each for the three at
+       a double vanity, to meet the ALA's 1,600 and 3,000), floor lamp 800 lm (reading range 450 to 800), under-cabinet 400 lm per foot
        of counter (the level that reaches 50 fc on the counter).
      Placement (Visual Comfort):
        chandelier 1/2 to 2/3 of the table's width (the plan's room length + width in feet, in
@@ -3447,7 +3471,18 @@ var LIGHT = (function () {
     floorlamp:  { name: 'Floor lamp',          lm: 800,  dia: 16 },
     undercab:   { name: 'Under-cabinet light', lmFt: 400 }
   };
-  var TASK_KINDS = { pendant: 1, undercab: 1 };
+  var TASK_KINDS = { pendant: 1, undercab: 1, sconce: 1 };
+  // Vanity sconces: offsets along a vanity (inches from its center) for one on each side of the
+  // mirror, and one between the mirrors on a double vanity; centers 63" off the floor
+  var SCONCE_H = 63;
+  // Vanity light from the American Lighting Association: 1,600 lumens or more at a single vanity,
+  // 3,000 at a double (so 800 per sconce for a pair, 1,000 each for three)
+  function vanityNeed(sinks) { return sinks === 2 ? 3000 : 1600; }
+  function vanityLm(sinks) { return sinks === 2 ? 1000 : 800; }
+  function vanitySpots(wIn, sinks) {
+    var e = Math.max(14, wIn / 2 - 2);
+    return sinks === 2 ? [-e, 0, e] : [-e, e];
+  }
   function snapIn(v, step) { return Math.round(v / step) * step; }
   // Chandelier diameter in inches for a table whose short side is tableW inches, in a room L x W feet
   function chandelierDia(tableW, roomL, roomW) {
@@ -3503,7 +3538,7 @@ var LIGHT = (function () {
 
   return { CU: CU, LLF: LLF, WORK: WORK, WALL: WALL, LAMP_LM: LAMP_LM, FIXTURES: FIXTURES, BEAMS: BEAMS, TYPES: TYPES, MOODS: MOODS,
            KINDS: KINDS, TASK_KINDS: TASK_KINDS, chandelierDia: chandelierDia, chandelierRange: chandelierRange, hangOver: hangOver,
-           pendantSpots: pendantSpots, taskFc: taskFc, edgeDist: edgeDist,
+           pendantSpots: pendantSpots, vanitySpots: vanitySpots, vanityNeed: vanityNeed, vanityLm: vanityLm, SCONCE_H: SCONCE_H, taskFc: taskFc, edgeDist: edgeDist,
            type: type, typeOf: typeOf, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
            isLamp: isLamp, hasLampSpot: hasLampSpot, lampSpot: lampSpot, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
 })();

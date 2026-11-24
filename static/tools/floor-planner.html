@@ -476,7 +476,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=25"></script>
+  <script src="/static/tools/plan-engine.js?v=26"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -1655,6 +1655,7 @@
       if (!r) return null;
       if (/office|study/i.test(r.name)) return 'Office';
       if (/kitchen|kitchenette/i.test(r.name)) return 'Kitchen';
+      if (/bath|powder|ensuite|en-suite|\bwc\b/i.test(r.name)) return 'Bath';
       var t = RUG.roomType(r.name);
       return t === 'bedroom' ? 'Bedroom' : t === 'dining' ? 'Dining' : t === 'living' ? 'Living' : null;
     }
@@ -2405,6 +2406,39 @@
       return hit;
     }
     function surfaceH(pc) { return pc.role === 'island' ? (pc.h || 36) : (pc.h || 30); }
+    /* Wall sconces sit on a wall and face into the room. wallAt: the nearest point on the room's
+       outline to p (feet) and the direction into the room from there. */
+    function wallAt(r, p) {
+      var poly = r && r.ftShape, best = null;
+      if (!poly || poly.length < 3) return null;
+      for (var i = 0; i < poly.length; i++) {
+        var a = poly[i], b = poly[(i + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+        if (!L2) continue;
+        var t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / L2, 0, 1), q = { x: a.x + t * dx, y: a.y + t * dy }, d = Math.hypot(p.x - q.x, p.y - q.y);
+        if (!best || d < best.d) {
+          var L = Math.sqrt(L2), n = { x: -dy / L, y: dx / L };
+          if (!LIGHT.inPoly({ x: q.x + n.x * 0.3, y: q.y + n.y * 0.3 }, poly)) n = { x: -n.x, y: -n.y };
+          best = { x: q.x, y: q.y, nx: n.x, ny: n.y, d: d };
+        }
+      }
+      return best;
+    }
+    // Put a sconce on the nearest wall of its room
+    function snapSconce(l) {
+      var r = roomById(l.room);
+      if (!r) return;
+      var w = wallAt(r, lightFt(l));
+      if (w) { l.x = pctX(w.x); l.y = pctY(w.y); }
+    }
+    // Where a vanity's sconces go: on the wall behind it (or at its back edge if it stands clear of a wall)
+    function sinksOf(pc) { var spec = FURNITURE.get(pc.type) || {}; return pc.sinks || spec.sinks || (pc.w >= 54 ? 2 : 1); }
+    function vanitySconceSpots(pc, r) {
+      var pf = pieceFt(pc), sinks = sinksOf(pc);
+      return LIGHT.vanitySpots(pc.w, sinks).map(function (off) {
+        var p = pieceToFt(pf, off, -pf.d / 2), w = r ? wallAt(r, p) : null;
+        return w && w.d < 0.75 ? { x: w.x, y: w.y } : p;
+      });
+    }
     function defaultHang(r, over) { return over ? LIGHT.hangOver(surfaceH(over), roomCeil(r)) : Math.max(84, Math.round(roomCeil(r) * 12 - 24)); }
 
     /* Decorative and task fixtures that come from the furniture: a chandelier over each dining table,
@@ -2429,6 +2463,11 @@
           LIGHT.pendantSpots(pc.w).forEach(function (off) {
             var p = pieceToFt(pf, off, -back);
             state.lights.push(makeFixture('pendant', p.x, p.y, r.id, { piece: pc.id, hang: LIGHT.hangOver(surfaceH(pc), ceil) }));
+          });
+        } else if (pc.role === 'vanity') {
+          if (has('sconce', pc.id)) return;
+          vanitySconceSpots(pc, r).forEach(function (p, slot) {
+            state.lights.push(makeFixture('sconce', p.x, p.y, r.id, { piece: pc.id, slot: slot, lm: LIGHT.vanityLm(sinksOf(pc)), mount: LIGHT.SCONCE_H }));
           });
         } else if ((pc.type === 'counter' || pc.type === 'sink') && (t === 'kitchen' || t === 'laundry')) {
           if (!has('undercab', pc.id)) state.lights.push(makeFixture('undercab', pf.cx, pf.cy, r.id, { piece: pc.id }));
@@ -2474,7 +2513,18 @@
     // Lights whose room was removed or redrawn go to the room they now sit in; under-cabinet lights
     // follow their counter and go when it does
     function tidyLights() {
-      state.lights = state.lights.filter(function (l) { return kindOf(l) !== 'undercab' || pieceById(l.piece); });
+      state.lights = state.lights.filter(function (l) {
+        var k = kindOf(l);
+        if (k === 'undercab') return !!pieceById(l.piece);
+        if (k === 'sconce' && l.piece != null && !pieceById(l.piece)) { if (!l.edited) return false; l.piece = null; }
+        return true;
+      });
+      state.lights.forEach(function (l) {   // a vanity's own sconces move with it (until the person drags one)
+        if (kindOf(l) !== 'sconce' || l.piece == null || l.edited) return;
+        var pc = pieceById(l.piece), rm = pieceRoom(pc), sp = vanitySconceSpots(pc, rm)[l.slot || 0];
+        if (rm) l.room = rm.id;
+        if (sp) { l.x = pctX(sp.x); l.y = pctY(sp.y); }
+      });
       state.lights.forEach(function (l) {
         if (kindOf(l) === 'undercab') {
           var pc = pieceById(l.piece); l.x = pc.x; l.y = pc.y;
@@ -2483,6 +2533,7 @@
         }
         var r = roomById(l.room);
         if (r && PLAN.pointInPoly({ x: l.x / 100 * state.W, y: l.y / 100 * state.H }, ptsPx(r))) return;
+        if (r && kindOf(l) === 'sconce') { var wa = wallAt(r, lightFt(l)); if (wa && wa.d < 0.5) return; }   // on its room's wall
         var rm = pieceRoom(l);
         if (rm || !r) l.room = rm ? rm.id : null;
       });
@@ -2509,11 +2560,29 @@
       var ev = LIGHT.evaluate({ area: roomAreaFt(r), target: roomGeneral(r), lights: rec.map(lightFt), lampLm: lampLm + otherLm, ceil: roomCeil(r) });
       ev.count = rec.length; ev.others = other; ev.lamps = lamps.length; ev.extraLights = other.length;
       ev.target = roomGeneral(r); ev.goal = roomTarget(r); ev.task = LIGHT.taskRoom(roomLType(r));
+      // At a vanity, the sconces beside the mirror are judged on lumens (they light the face, not the counter)
+      var vans = state.pieces.filter(function (pc) { return pc.role === 'vanity' && pieceRoom(pc) === r; });
+      if (vans.length) {
+        var need = 0, have = 0;
+        vans.forEach(function (pc) {
+          need += LIGHT.vanityNeed(sinksOf(pc));
+          var pf = pieceFt(pc), back = pieceToFt(pf, 0, -pf.d / 2), reach = pc.w / 24 + 1.5;
+          have += other.filter(function (l) {
+            if (kindOf(l) !== 'sconce') return false;
+            if (l.piece === pc.id) return true;
+            var q = lightFt(l); return l.piece == null && Math.hypot(q.x - back.x, q.y - back.y) <= reach;
+          }).reduce(function (sum, l) { return sum + l.lm; }, 0);
+        });
+        ev.vanity = { lm: have, need: need, status: have >= need * 0.95 ? 'ok' : 'dim', n: vans.length };
+      }
       if (ev.task) {
         var surf = workSurfaces(r);
         if (surf.length) {
           var sIdx = {}, surfaces = surf.map(function (pc, k) { sIdx[pc.id] = k; var pf = pieceFt(pc); return { poly: pf.poly, h: surfaceH(pc) }; });
-          var fixtures = other.filter(function (l) { return kindOf(l) === 'pendant'; }).map(function (l) { var p = lightFt(l); return { x: p.x, y: p.y, lm: l.lm, z: l.hang || 66 }; });
+          var fixtures = other.filter(function (l) { return kindOf(l) === 'pendant' || kindOf(l) === 'sconce'; }).map(function (l) {
+            var p = lightFt(l);
+            return { x: p.x, y: p.y, lm: l.lm, z: kindOf(l) === 'sconce' ? (l.mount || LIGHT.SCONCE_H) : (l.hang || 66) };
+          });
           surf.forEach(function (pc) {   // the lamp drawn on a desk
             var spot = pc.role === 'desk' ? LIGHT.lampSpot(pc) : null;
             if (!spot) return;
@@ -2554,6 +2623,10 @@
             else if (hang < 84) out.push(where + ' Leave at least 7 ft of floor clearance under it.');
             else if (k === 'pendant') out.push(where);
           }
+        }
+        if (k === 'sconce' && l.piece != null && pieceById(l.piece)) {
+          var mh = l.mount || LIGHT.SCONCE_H;
+          if (mh < 60 || mh > 65) out.push('A vanity sconce’s center is ' + fmtFtIn(mh / 12) + ' off the floor. 60" to 65" lights the face evenly.');
         }
         if (k !== 'sconce' && k !== 'undercab' && k !== 'floorlamp' && LIGHT.edgeDist(lightFt(l), r.ftShape) < 0.34) out.push('A light sits on a wall. Drag it into the room.');
       });
@@ -2650,10 +2723,17 @@
       }
       return { x: l.x / 100 * state.W, y: l.y / 100 * state.H };
     }
+    // A wall sconce's symbol: a plate on the wall, a short arm into the room, and the light (a circle with an X)
+    function sconceGeom(l) {
+      var m = lightPx(l), ratio = displayRatio(), r = roomById(l.room), w = r && state.scale ? wallAt(r, lightFt(l)) : null;
+      var n = w ? { x: w.nx, y: w.ny } : { x: 0, y: 1 }, R = 6.5 * ratio, arm = R * 0.9;
+      return { m: m, n: n, R: R, c: { x: m.x + n.x * (arm + R), y: m.y + n.y * (arm + R) }, arm: arm };
+    }
     // Symbol radius on screen: real size where it's big enough to see, never smaller than a tap target
     function lightRad(l) {
       var k = kindOf(l), ratio = displayRatio(), f = state.scale ? state.scale.ftPerPx : 1;
       if (k === 'recessed') return (l.type === 'r6' ? 7.5 : 6) * ratio;
+      if (k === 'sconce') return 6.5 * ratio;
       var real = (l.dia || LIGHT.KINDS[k].dia || 12) / 2 / 12 / f;
       var min = { chandelier: 10, pendant: 7, flush: 8.5, sconce: 6, floorlamp: 7.5 }[k] || 7;
       return Math.max(real, min * ratio);
@@ -2672,7 +2752,7 @@
           d = segDist(p, { x: s.a.x / f, y: s.a.y / f }, { x: s.b.x / f, y: s.b.y / f });
           if (d > 8 * displayRatio()) return;
         } else {
-          var q = lightPx(l);
+          var q = kindOf(l) === 'sconce' ? sconceGeom(l).c : lightPx(l);
           d = Math.hypot(q.x - p.x, q.y - p.y);
           if (d > Math.max(lightRad(l) * 1.2, 10 * displayRatio())) return;
         }
@@ -2686,7 +2766,7 @@
       var f = state.scale.ftPerPx, ratio = displayRatio();
       // Where each light lands, as a warm wash kept inside its room (multiplied so the plan's lines stay crisp)
       state.lights.forEach(function (l) {
-        var r = roomById(l.room), ceil = r ? roomCeil(r) : state.lightCfg.ceil || 8, k = kindOf(l), p = lightPx(l), reach;
+        var r = roomById(l.room), ceil = r ? roomCeil(r) : state.lightCfg.ceil || 8, k = kindOf(l), p = k === 'sconce' ? sconceGeom(l).c : lightPx(l), reach;
         ctx.save();
         ctx.globalCompositeOperation = 'multiply';
         if (r) { tracePath(ctx, ptsPx(r)); ctx.clip(); }
@@ -2740,6 +2820,23 @@
         ctx.restore();
         return;
       }
+      if (k === 'sconce') {
+        var g = sconceGeom(l), t = { x: -g.n.y, y: g.n.x }, pl = g.R * 1.15;
+        ctx.lineCap = 'round';
+        if (sel) { ctx.beginPath(); ctx.arc(g.c.x, g.c.y, g.R + 4.5 * ratio, 0, Math.PI * 2); ctx.fillStyle = '#A6BE47'; ctx.fill(); }
+        ctx.strokeStyle = ink; ctx.lineWidth = 2.2 * ratio;
+        ctx.beginPath(); ctx.moveTo(g.m.x - t.x * pl, g.m.y - t.y * pl); ctx.lineTo(g.m.x + t.x * pl, g.m.y + t.y * pl); ctx.stroke();   // the plate on the wall
+        ctx.lineWidth = 1.6 * ratio;
+        ctx.beginPath(); ctx.moveTo(g.m.x, g.m.y); ctx.lineTo(g.m.x + g.n.x * g.arm, g.m.y + g.n.y * g.arm); ctx.stroke();   // the arm
+        ctx.shadowColor = 'rgba(67,62,60,0.25)'; ctx.shadowBlur = 3 * ratio;
+        ctx.beginPath(); ctx.arc(g.c.x, g.c.y, g.R, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill();
+        ctx.shadowColor = 'transparent'; ctx.lineWidth = 1.8 * ratio; ctx.stroke();
+        var dd = g.R * 0.7071;
+        ctx.lineWidth = 1.4 * ratio;
+        ctx.beginPath(); ctx.moveTo(g.c.x - dd, g.c.y - dd); ctx.lineTo(g.c.x + dd, g.c.y + dd); ctx.moveTo(g.c.x + dd, g.c.y - dd); ctx.lineTo(g.c.x - dd, g.c.y + dd); ctx.stroke();
+        ctx.restore();
+        return;
+      }
       ctx.shadowColor = 'rgba(67,62,60,0.25)'; ctx.shadowBlur = 3 * ratio;
       if (sel) ring(rad + 4.5 * ratio, '#A6BE47');
       ctx.strokeStyle = ink; ctx.lineWidth = 1.8 * ratio;
@@ -2759,7 +2856,6 @@
         ring(rad * 0.16, ink);
       } else if (k === 'pendant') ring(rad * 0.48, ink);
       else if (k === 'flush') { ctx.lineWidth = 1.2 * ratio; ring(rad * 0.62); ctx.stroke(); ring(rad * 0.18, ink); }
-      else if (k === 'sconce') { ctx.fillRect(p.x - rad * 0.7, p.y - rad * 0.12, rad * 1.4, rad * 0.24); }
       else if (k === 'floorlamp') {
         ctx.lineWidth = 1.4 * ratio; var d = rad * 0.6;
         ctx.beginPath(); ctx.moveTo(p.x - d, p.y - d); ctx.lineTo(p.x + d, p.y + d); ctx.moveTo(p.x + d, p.y - d); ctx.lineTo(p.x - d, p.y + d); ctx.stroke();
@@ -2801,6 +2897,10 @@
         var l = state.lights[state.lightSel];
         l.x = clamp(d.orig.x + (p.x - d.start.x) / state.W * 100, 0, 100);
         l.y = clamp(d.orig.y + (p.y - d.start.y) / state.H * 100, 0, 100);
+        if (kindOf(l) === 'sconce') {   // a sconce slides along the walls of the room it's in
+          var sr = pieceRoom(l) || roomById(l.room);
+          if (sr) { l.room = sr.id; snapSconce(l); }
+        }
         draw();
       } else if (d && d.mode === 'pan') {
         var cx = e.clientX - d.client.x, cy = e.clientY - d.client.y;
@@ -2819,7 +2919,7 @@
       state.drag = null;
       if (d.moved) {
         pushUndo(d.snap);
-        var l = state.lights[state.lightSel], rm = pieceRoom(l), k = kindOf(l);
+        var l = state.lights[state.lightSel], k = kindOf(l), rm = k === 'sconce' ? roomById(l.room) : pieceRoom(l);
         l.edited = true;
         if (rm) l.room = rm.id;
         if (k === 'chandelier' || k === 'pendant') { var over = surfaceUnder(l); l.piece = over ? over.id : null; }
@@ -2865,7 +2965,8 @@
         l = makeFixture(kind, at.x, at.y, r.id, extra, true);
       } else if (kind === 'sconce') {
         var sp = darkestSpot(r, 0.15, 0.6) || center;
-        l = makeFixture('sconce', sp.x, sp.y, r.id, {}, true);
+        l = makeFixture('sconce', sp.x, sp.y, r.id, { mount: LIGHT.SCONCE_H }, true);
+        snapSconce(l);
       } else if (kind === 'floorlamp') {
         var fp = darkestSpot(r, 1) || center;
         l = makeFixture('floorlamp', fp.x, fp.y, r.id, {}, true);
@@ -2936,9 +3037,10 @@
           if (!rm.ftShape) return '';
           if (roomTarget(rm) == null) return roomRow(i, '', 'Outdoor');
           var ev = roomLight(rm), n = lightChecks(rm).length, all = ev.count + ev.extraLights;
-          return roomRow(i, n || ev.status !== 'ok' ? 'dim' : 'ok', n ? n + ' to check' : all + ' ' + lightWord(all) + ', ' + LSTATUS[ev.status].toLowerCase());
+          return roomRow(i, n || ev.status !== 'ok' || (ev.vanity && ev.vanity.status !== 'ok') ? 'dim' : 'ok', n ? n + ' to check' : all + ' ' + lightWord(all) + ', ' + LSTATUS[ev.status].toLowerCase());
         }).join('') + '</div>' +
-        '<p class="l-note" style="margin-top:12px">Pick a room to see its lights and change its mood.</p>';
+        '<p class="l-note" style="margin-top:12px">Pick a room to see its lights and change its mood.</p>' +
+        '<p class="l-note">For bulbs, warm white (2700K to 3000K' + info('kelvin') + ') suits most rooms, and dimmers on the ceiling lights let each room go from bright to cozy.</p>';
       }
       html += glossary();
       el.innerHTML = html;
@@ -2949,13 +3051,15 @@
       ['lumens', 'Lumens', 'How much light a bulb or fixture gives off. A typical lamp bulb gives about 800, and a 4" recessed light about 650.'],
       ['mood', 'Mood', 'How bright the room feels overall: Cozy for relaxing, Balanced for everyday, Bright for working. Each sets the room’s target in foot-candles.'],
       ['general', 'General light', 'The even, all-over light from the ceiling. In kitchens, bathrooms, offices and laundry rooms, the ceiling lights give general light and task lights do the bright work.'],
-      ['task', 'Task light', 'Light aimed at a job: pendants over an island, under-cabinet lights, vanity lights at a mirror, or a desk lamp.'],
-      ['work', 'Work surfaces', 'The counters, island or desk where the work happens. Their foot-candles count the ceiling’s general light plus the task lights right above them.'],
+      ['task', 'Task light', 'Light aimed at a job: pendants over an island, under-cabinet lights, sconces beside a vanity mirror, or a desk lamp.'],
+      ['work', 'Work surfaces', 'The counters, island or desk where the work happens. Their foot-candles count the ceiling’s general light plus the task lights right above or beside them.'],
       ['recessed', 'Recessed light', 'A light set into the ceiling so it sits flush. 4" and 6" are the width of the opening; 6" lights usually give more light.'],
       ['chandelier', 'Chandelier', 'A decorative hanging light, usually over a dining table. It should be about half to two thirds as wide as the table, with its bottom 30" above the table (3" more for each foot of ceiling over 8\').'],
       ['pendant', 'Pendant', 'A single hanging light, usually in a row over an island. Two for most islands, three for islands 7\' and longer, hung 30" above the counter.'],
       ['flush', 'Flush mount', 'A ceiling light that sits close to the ceiling instead of hanging. The right pick for ceilings 8\' and lower, where a hanging light would be in the way.'],
       ['undercab', 'Under-cabinet light', 'A strip of light under the upper cabinets that lights the counter right where you work, without your own shadow in the way.'],
+      ['sconce', 'Wall sconce', 'A light mounted on the wall. Beside a bathroom mirror, one on each side lights your face without shadows, with their centers 60" to 65" off the floor. Together they should give 1,600 lumens or more at a single vanity and 3,000 at a double. On the plan, the short line is the wall plate and the circle with an X is the light.'],
+      ['kelvin', 'Light color (K)', 'How warm or cool a bulb’s light looks, in kelvins (K). 2700K is warm and cozy like a classic bulb, 3000K is a soft warm white, and 4000K and up looks cool and bright. Warm white (2700K to 3000K) suits most rooms in a home.'],
       ['beam', 'Beam', 'How wide a light spreads. Wide lights a whole area. Narrow puts it on one spot, like art or a counter.'],
       ['method', 'Lumen method', 'The standard way to estimate how many lights a room needs from its size and target. It gives planning numbers, not an electrical plan.']
     ];
@@ -2997,7 +3101,8 @@
       // the one number, and its status
       html += '<div class="l-res"><div class="l-res-top"><b>' + Math.round(ev.fc) + '</b><span>foot-candles' + info('fc') + '</span>' +
         '<span class="l-st ' + ev.status + '">' + LSTATUS[ev.status] + '</span></div>';
-      if (ev.task && ev.goal > tgt) {
+      if (ev.vanity) html += '<p class="l-goal">' + (ev.vanity.n > 1 ? 'Vanity lights' : 'Vanity light') + info('sconce') + ': ' + fmtNum(ev.vanity.lm) + ' of ' + fmtNum(ev.vanity.need) + ' lumens <span class="l-st ' + ev.vanity.status + '">' + LSTATUS[ev.vanity.status] + '</span></p>';
+      else if (ev.task && ev.goal > tgt) {
         if (ev.work != null) html += '<p class="l-goal">Work surfaces' + info('work') + ': about <b>' + Math.round(ev.work) + '</b> of ' + ev.goal + ' <span class="l-st ' + ev.workStatus + '">' + LSTATUS[ev.workStatus] + '</span></p>';
         else html += '<p class="l-goal">Task lights' + info('task') + ' ' + ev.task + ' bring the work surfaces up to ' + ev.goal + '.</p>';
       }
@@ -3020,9 +3125,11 @@
       if (ev.status === 'dim' && c.short && !mine) notes.push('Recessed lights alone can’t reach ' + tgt + ' here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Lamps or task lights make up the rest.');
       else if (ev.status === 'dim') notes.push('Add a light' + (size === 'r4' ? ', or switch to 6" lights in More settings,' : '') + ' to reach the target.');
       if (ev.status === 'bright') notes.push('Brighter than the target. A dimmer brings it down, or remove a light.');
+      if (ev.vanity && ev.vanity.status === 'dim') notes.push('The vanity needs ' + fmtNum(ev.vanity.need) + ' lumens or more from the lights beside its mirror' + (ev.vanity.need > 2000 ? ' (a double vanity)' : '') + '. Brighter sconces, or one more, close the gap.');
       if (ev.workStatus === 'dim') notes.push('The work surfaces are a little dim. Brighter task lights, or more of them, close the gap.');
       if (ev.far) notes.push(ev.far === 1 ? 'One light is more than ' + fmtFtIn(roomCeil(r)) + ' from its nearest neighbor, so the floor between them may look patchy.' : ev.far + ' lights are more than ' + fmtFtIn(roomCeil(r)) + ' (the ceiling height) from their nearest neighbors, so the light may look patchy.');
-      if (t === 'bath') notes.push('Vanity lights at the mirror do the bright work in a bathroom. Add a wall sconce on each side of the mirror, with its center 60" to 65" off the floor.');
+      if (t === 'bath' && !state.pieces.some(function (pc) { return pc.role === 'vanity' && pieceRoom(pc) === r; }))
+        notes.push('Vanity lights at the mirror do the bright work in a bathroom. Add a vanity in Furnish (under Bath) and its sconces come with it, one on each side of the mirror.');
       if (!c.aimed) notes.push('Add furniture in Furnish to aim the lights at where you’ll use the room, then tap <b>Suggest again</b>.');
       if (boxMeasured(r) && r.source === 'estimated') notes.push('This room’s size is estimated, so check its outline in Measure.');
       var details = '<p>' + (ev.task ? 'General light' + info('general') + ' from the recessed lights, target ' + tgt + '.' : 'From the recessed lights, target ' + tgt + ' for ' + MOOD_WORD[mood].toLowerCase() + ' (' + fcs.join(', ') + ' for cozy, balanced, bright).') + ' ' +
@@ -3053,7 +3160,7 @@
       else name = LIGHT.KINDS[k].name;
       var html = '<button class="link-btn detail-back" data-lact="back">' + backToRoom(r) + '</button>' +
         '<p class="detail-name" style="border:none;padding-left:0">' + name + (k !== 'recessed' && GLOSS.some(function (g) { return g[0] === k; }) ? info(k) : '') + '</p>' +
-        '<p class="pane-sub">' + (r ? 'In the ' + esc(r.name) + '.' : 'Not in a room.') + (k === 'undercab' ? ' It runs along its counter and moves with it.' : ' Drag it on the plan to move it.') + '</p>';
+        '<p class="pane-sub">' + (r ? 'In the ' + esc(r.name) + '.' : 'Not in a room.') + (k === 'undercab' ? ' It runs along its counter and moves with it.' : k === 'sconce' ? ' Drag it along the walls to move it.' : ' Drag it on the plan to move it.') + '</p>';
       if (k === 'recessed') {
         html += '<span class="l-label">Size</span>' + seg('lsize', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], l.type) +
           '<label class="field"><span>Brightness, lumens</span><input data-lf="lm" value="' + Math.round(l.lm) + '" inputmode="numeric" autocomplete="off"></label>' +
@@ -3074,8 +3181,13 @@
           html += '<label class="field"><span>Bottom, off the floor</span><input data-lf="hang" value="' + esc(fmtFtIn(hang / 12)) + '" autocomplete="off"></label>' +
             '<p class="l-note">' + (over ? 'That’s ' + (hang - surfaceH(over)) + '" above the ' + (over.role === 'island' ? 'island' : 'table') + '. Aim for ' + (LIGHT.hangOver(surfaceH(over), r ? roomCeil(r) : 8) - surfaceH(over)) + '" or a little more.' : 'Not over a table or island, so leave at least 7 ft under it.') + '</p>';
         }
+        if (k === 'sconce') {
+          var atVan = l.piece != null && pieceById(l.piece);
+          html += '<label class="field"><span>Center, off the floor</span><input data-lf="mount" value="' + esc(fmtFtIn((l.mount || LIGHT.SCONCE_H) / 12)) + '" autocomplete="off"></label>' +
+            '<p class="l-note">' + (atVan ? 'Beside a vanity mirror, 60" to 65" lights the face evenly.' : 'Beside a mirror, 60" to 65". Elsewhere, about 66" or a little above eye level.') + '</p>';
+        }
         html += '<label class="field"><span>Brightness, lumens</span><input data-lf="lm" value="' + Math.round(l.lm) + '" inputmode="numeric" autocomplete="off"></label>' +
-          '<p class="l-note">Use the lumens' + info('lumens') + ' on the fixture you’re buying' + (k === 'chandelier' ? ', or add up its bulbs' : '') + '.</p>';
+          '<p class="l-note">Use the lumens' + info('lumens') + ' on the fixture you’re buying' + (k === 'chandelier' ? ', or add up its bulbs' : '') + (k === 'sconce' && l.piece != null ? '. A pair at a vanity should give 1,600 or more together' : '') + '.</p>';
       }
       html += glossary();
       return html;
@@ -3154,6 +3266,10 @@
       } else if (f === 'lamplm' && state.lampSel != null) {
         var lpc = pieceById(state.lampSel), lmv = num(50, 10000);
         if (lpc && lmv != null) { pushUndo(); lpc.lampLm = Math.round(lmv); renderLight(); draw(); }
+      } else if (l && f === 'mount') {
+        var mft = parseFtIn(t.value);
+        if (!mft || mft < 2 || mft > 12) { t.classList.add('bad'); return; }
+        pushUndo(); l.mount = Math.round(mft * 12); l.edited = true; renderLight(); draw();
       } else if (l && f === 'hang') {
         var hft = parseFtIn(t.value);
         if (!hft || hft < 2 || hft > 30) { t.classList.add('bad'); return; }
@@ -4999,7 +5115,7 @@
         });
         y += 10;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 101, 96);
-        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight); sofa to coffee table 14" to 18"; beside a bed 24" (18" is tight) and 30" at the foot (24" is tight); around a dining table 36" (24" on a side with no chairs, 44" if people walk behind seated guests); behind a desk and in front of a dresser 36" (30" is tight); seats facing each other within 8 feet; a TV about 1 to 1.7 times its screen size away. Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
+        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight); sofa to coffee table 14" to 18"; beside a bed 24" (18" is tight) and 30" at the foot (24" is tight); around a dining table 36" (24" on a side with no chairs, 44" if people walk behind seated guests); behind a desk and in front of a dresser 36" (30" is tight); seats facing each other within 8 feet; a TV about 1 to 1.7 times its screen size away; 30" in front of a vanity (21" is tight). Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
         doc.text(sn, margin, y + 4);
         y += sn.length * 12 + 18;
       }
