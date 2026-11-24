@@ -104,7 +104,13 @@
     .more-menu button:hover, .more-menu button:focus-visible { background: #f5f0e8; outline: none; }
     .file-actions .fa-extra { display: none; }
     .more-menu .mm-core { display: none; }
-    @media (max-width: 1280px) { #keysBtn .keys-label { display: none; } #keysBtn { padding: 0 10px; } }
+    /* The panel's title: the picked room, with a dropdown to pick another */
+    .panel-head { padding: 14px 18px 2px; }
+    .panel-head .room-select {
+      appearance: none; -webkit-appearance: none; border: none; background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23582b36' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 4px center;
+      font: 600 20px 'DM Sans', sans-serif; color: #582b36; padding: 2px 24px 2px 0; height: auto; min-width: 0; max-width: 100%; cursor: pointer; border-radius: 6px;
+    }
+    .panel-head .room-select:focus-visible { outline: 2px solid #A6BE47; outline-offset: 2px; }
     @media (max-width: 1100px) {
       .file-actions { display: none; }
       .more-menu .mm-core { display: block; }
@@ -154,6 +160,11 @@
     /* ── SCALE BAR (under the plan) ── */
     .scale-bar { flex-shrink: 0; padding: 10px 20px; border-top: 1.5px solid #d0c9bc; background: #ffffff; }
     .scale-bar.warn { background: #fdf6f7; }
+    .scale-bar.compact { padding: 6px 20px; background: transparent; border-top-color: transparent; }
+    .scale-bar.compact .scale-row { justify-content: flex-start; gap: 10px; }
+    .scale-bar.compact .scale-msg { font-size: 12.5px; }
+    .scale-bar.compact .link-btn { font-size: 12.5px; }
+    @media (max-width: 820px) { .scale-bar.compact .scale-row { flex-direction: row; align-items: center; } }
     .scale-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
     .scale-msg { font-size: 13px; line-height: 1.5; color: #6b6560; }
     .scale-msg b { color: #433E3C; font-weight: 600; }
@@ -367,7 +378,6 @@
       .app { height: auto; min-height: 100%; }
       .toolbar { padding: 8px 12px; }
       .tool-spacer { display: none; }
-      .room-select { min-width: 0; flex: 1 1 100%; order: 2; }
       .toolbar .tool-btn { order: 3; }
       .work { display: block; }
       .stage-col { border-right: none; }
@@ -381,7 +391,6 @@
       .more-wrap { order: 1; margin-left: auto; }
       .toolbar { gap: 6px; padding: 6px 12px 8px; }
       .toolbar .mode, .toolbar .tool-btn { padding: 6px 12px; font-size: 13px; }
-      .room-select { padding-top: 6px; padding-bottom: 6px; }
       .toolbar .tool-btn { order: 1; }   /* modes, Add a door and Undo on one row; the room picker below */
       #undoBtn .undo-label { display: none; }
       #keysBtn .keys-label { display: none; }
@@ -923,11 +932,15 @@
       // (a lighting export leaves them out so the lights read)
       if (state.scale && state.mode !== 'light') {
         if (forExport) state.rooms.forEach(function (r) { drawGaps(ctx, r); });
-        else if (state.mode === 'furnish' && state.selected > -1) drawGaps(ctx, state.rooms[state.selected]);
+        else if (state.mode === 'furnish' && state.selected > -1) drawGaps(ctx, state.rooms[state.selected], !rugPicked());
         if (forExport || state.mode === 'furnish') {
           var selPc = forExport ? -1 : state.pieceSel;
           spacing().forEach(function (l) {
-            if (l.show === 'always' || (l.show === 'selected' && l.piece === selPc)) drawGapLine(ctx, l.from, l.to, SPACE_COL[l.status], fmtGap(l.gap));
+            // on screen, the plan shows only what needs attention; every side shows on the picked piece
+            var mine = l.piece === selPc && selPc > -1;
+            var show = forExport ? (l.show === 'always' || (l.show === 'selected' && mine))
+                                 : (mine && (l.show === 'always' || l.show === 'selected')) || (l.show === 'always' && l.status !== 'ok');
+            if (show) drawGapLine(ctx, l.from, l.to, SPACE_COL[l.status], fmtGap(l.gap));
           });
         }
       }
@@ -1103,10 +1116,16 @@
     }
 
     // Spacing lines from each side of the rug to the nearest wall, colored by how much floor is left
-    function drawGaps(ctx, r) {
+    // badOnly: just the gaps that are tight or too small (the plan's quiet view)
+    function drawGaps(ctx, r, badOnly) {
       if (!rugOK(r)) return;
-      rugInfo(r).gaps.forEach(function (g) { drawGapLine(ctx, g.from, g.to, gapColor(g.gap), fmtGap(g.gap)); });
+      rugInfo(r).gaps.forEach(function (g) {
+        if (badOnly && gapColor(g.gap) === SPACE_COL.ok) return;
+        drawGapLine(ctx, g.from, g.to, gapColor(g.gap), fmtGap(g.gap));
+      });
     }
+    // The picked room's rug is selected on the plan (alone or with pieces)
+    function rugPicked() { return typeof selRugs === 'function' && selRugs().length > 0; }
     // One spacing line between two points in feet, with end ticks and its measurement
     var SPACE_COL = { ok: '#7f9433', tight: '#b07d14', close: '#582b36' };
     function drawGapLine(ctx, from, to, col, label) {
@@ -1329,7 +1348,7 @@
         var nw = ctx.measureText(pc.name).width;
         ctx.font = '500 ' + (fs * 0.9) + 'px "DM Sans", sans-serif';
         var sw = ctx.measureText(size).width;
-        var twoLines = depth > fs * 2.6;
+        var twoLines = depth > fs * 2.6 && (sel || forExport);
         if ((nw <= room && pc.role !== 'decor' && !(pc.role === 'chair' && pc.group)) || sel) {   // plants, lamps and chairs at a table go unlabelled unless picked
           // a soft cream tag so the words read over the drawing
           var two = twoLines && sw <= room, tw = Math.max(nw, two ? sw : 0) + 10 * ratio, th = two ? fs * 2.5 : fs * 1.55;
@@ -2673,6 +2692,7 @@
         return;
       }
       tidyLights();
+      renderRoomPick();
       var l = state.lights[state.lightSel];
       if (l) { el.innerHTML = lightDetail(l); return; }
       var r = state.rooms[state.selected], html = '';
@@ -2735,7 +2755,7 @@
       }).join('') + '</div>';
     }
     function roomLightCard(r) {
-      var c = lightCfg(r), t = roomLType(r), html = '<p class="detail-name" style="border:none;padding-left:0">' + esc(r.name) + '</p>';
+      var c = lightCfg(r), t = roomLType(r), html = '';
       if (!r.ftShape) return html + '<p class="pane-sub">This room has no outline on the plan yet. Fix it in Measure.</p>';
       html += '<label class="field"><span>Room type</span><select data-lf="type">' + LIGHT.TYPES.map(function (o) {
         return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label + '</option>';
@@ -3606,7 +3626,7 @@
       $('measurePanel').classList.toggle('hidden', m !== 'measure');
       $('furnishPanel').classList.toggle('hidden', m !== 'furnish');
       $('lightPanel').classList.toggle('hidden', m !== 'light');
-      $('doorTool').classList.toggle('hidden', m !== 'furnish');
+      $('panelHead').classList.toggle('hidden', m === 'measure');
       $('planCanvas').classList.toggle('furnishing', m === 'furnish' || m === 'light');
       if (m === 'furnish') { renderCatalog(); showPane(); }
       state.lightSel = -1;
@@ -4315,6 +4335,7 @@
       var bar = $('scaleBar'), msg = $('scaleMsg'), btn = $('scaleBtn'), sc = state.scale;
       if (!bar) return;
       bar.classList.toggle('warn', !sc && state.tool !== 'scale');
+      bar.classList.toggle('compact', !!sc && state.tool !== 'scale');
       if (state.tool === 'scale') {
         msg.innerHTML = '<b>Set the scale.</b> Drag along a wall or dimension line whose length you know. Hold Shift to keep the line straight.';
         btn.textContent = 'Cancel'; btn.className = 'btn-secondary btn-sm';
@@ -4322,17 +4343,18 @@
         msg.innerHTML = '<b>No scale found on this plan.</b> Set it once by tracing one wall you know the length of, so furniture and lights can be drawn to size.';
         btn.textContent = 'Set the scale'; btn.className = 'btn-primary btn-sm';
       } else if (sc.source === 'manual') {
-        msg.innerHTML = '<b>Scale set by you</b> from a ' + esc(fmtFtIn(sc.line.feet)) + ' line. Use the ruler on the plan to check it.';
-        btn.textContent = 'Set it again'; btn.className = 'btn-secondary btn-sm';
+        msg.innerHTML = '<b>Scale set</b> from a ' + esc(fmtFtIn(sc.line.feet)) + ' line.';
+        btn.textContent = 'Set it again'; btn.className = 'link-btn';
       } else {
-        msg.innerHTML = '<b>Scale found</b> from ' + (sc.from === 'area' ? 'the printed square footage of ' : '') + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + ' on the plan. Compare the ruler on the plan with a printed dimension to check it.';
-        btn.textContent = 'Check scale'; btn.className = 'btn-secondary btn-sm';
+        msg.innerHTML = '<b>Scale found</b> on the plan.';
+        msg.title = 'From ' + (sc.from === 'area' ? 'the printed square footage of ' : '') + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + '. Compare the ruler on the plan with a printed dimension to check it.';
+        btn.textContent = 'Check it'; btn.className = 'link-btn';
       }
     }
 
     // The room picker in the toolbar
     function renderRoomPick() {
-      $('rugRoom').innerHTML = '<option value="-1">Pick a room</option>' + state.rooms.map(function (rm, i) {
+      $('rugRoom').innerHTML = '<option value="-1">' + (state.mode === 'light' ? 'All rooms' : 'Pick a room') + '</option>' + state.rooms.map(function (rm, i) {
         return '<option value="' + i + '"' + (i === state.selected ? ' selected' : '') + '>' + esc(rm.name) + '</option>';
       }).join('');
     }
@@ -5049,17 +5071,15 @@
         <button class="mode active" role="tab" aria-selected="true" data-mode="measure">Measure</button>
         <button class="mode" role="tab" aria-selected="false" data-mode="furnish">Furnish</button>
         <button class="mode" role="tab" aria-selected="false" data-mode="light">Light</button>
-        <button class="mode" role="tab" aria-selected="false" data-mode="3d" disabled>3D <small>Soon</small></button>
       </div>
       <span class="tool-spacer"></span>
-      <select class="room-select" id="rugRoom" aria-label="Room"></select>
       <button class="tool-btn hidden" id="doorTool" title="Mark a door on a wall">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V4M4 4a16 16 0 0 1 16 16M4 20h16"/></svg>Add a door
       </button>
       <button class="tool-btn" id="undoBtn" title="Undo (Ctrl or Cmd + Z)" aria-label="Undo" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg><span class="undo-label">Undo</span>
       </button>
-      <button class="tool-btn" id="keysBtn" title="Keys and gestures (?)" aria-label="Keys and gestures" aria-haspopup="dialog">
+      <button class="tool-btn" id="keysBtn" style="display:none" title="Keys and gestures (?)" aria-label="Keys and gestures" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg><span class="keys-label">Keys and gestures</span>
       </button>
       <!-- The plan's own actions, at the end of the toolbar. Narrower windows tuck some or all
@@ -5079,6 +5099,7 @@
           <button role="menuitem" class="mm-core" data-more="pdfBtn">Download PDF</button>
           <button role="menuitem" data-more="pngBtn">Download PNG</button>
           <button role="menuitem" data-more="resetBtn">New plan</button>
+          <button role="menuitem" data-more="keysBtn">Keys and gestures</button>
         </div>
       </div>
     </div>
@@ -5110,6 +5131,10 @@
       </div>
 
       <aside class="panel" id="panel">
+        <!-- The picked room, as the panel's title (Furnish and Light) -->
+        <div class="panel-head hidden" id="panelHead">
+          <select class="room-select" id="rugRoom" aria-label="Room"></select>
+        </div>
         <!-- Measure -->
         <div id="measurePanel" class="pane">
           <div class="found-note hidden" id="foundNoteM"></div>
