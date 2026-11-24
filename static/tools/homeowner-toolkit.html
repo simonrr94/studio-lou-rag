@@ -61,7 +61,7 @@
     transition: background 150ms ease;
   }
   .tab:hover { background: #d4ac52; }
-  /* Six tabs at 140px need about 940px of window. Narrower windows get narrower tabs;
+  /* Five tabs at 140px need about 800px of window. Narrower windows get narrower tabs;
      each clip-path is the same shape redrawn for the new width. */
   @media (max-width: 960px) {
     .tab {
@@ -244,8 +244,7 @@
   .m-folder:nth-child(2) .m-tab-row { justify-content: flex-end;   padding-right: 32%; }
   .m-folder:nth-child(3) .m-tab-row { justify-content: flex-end;   padding-right: 20px; }
   .m-folder:nth-child(4) .m-tab-row { justify-content: flex-start; padding-left: 34%; }
-  .m-folder:nth-child(5) .m-tab-row { justify-content: flex-start; padding-left: 6%; }
-  .m-folder:nth-child(6) .m-tab-row { justify-content: flex-end;   padding-right: 10%; }
+  .m-folder:nth-child(5) .m-tab-row { justify-content: flex-end;   padding-right: 10%; }
 
   .m-tab {
     padding: 12px 22px 22px;
@@ -329,7 +328,6 @@
     <div class="tab"        data-tool="palette" role="tab" tabindex="0" aria-selected="false">Palette</div>
     <div class="tab"        data-tool="layout"  role="tab" tabindex="0" aria-selected="false">Layout</div>
     <div class="tab"        data-tool="budget"  role="tab" tabindex="0" aria-selected="false">Budget</div>
-    <div class="tab"        data-tool="plans"   role="tab" tabindex="0" aria-selected="false">Plans</div>
     <div class="tab"        data-tool="shop"    role="tab" tabindex="0" aria-selected="false">Shop</div>
   </div>
 
@@ -406,15 +404,6 @@
     </div>
   </div>
 
-  <div class="m-folder" data-tool="plans">
-    <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Plans</div></div>
-    <div class="m-body">
-      <div class="m-paper-behind"></div>
-      <div class="m-graph-paper">
-      </div>
-    </div>
-  </div>
-
   <div class="m-folder" data-tool="shop">
     <div class="m-tab-row"><div class="m-tab" role="tab" tabindex="0" aria-selected="false">Shop</div></div>
     <div class="m-body">
@@ -449,7 +438,6 @@
     palette: { url: 'https://studio-lou-rag.onrender.com/tools/color-palette-generator'     },
     layout:  { url: 'https://studio-lou-rag.onrender.com/tools/room-layout-helper'          },
     budget:  { url: 'https://studio-lou-rag.onrender.com/tools/renovation-budget-estimator' },
-    plans:   { url: 'https://studio-lou-rag.onrender.com/tools/floor-plan-parser?embed=toolkit' },
     shop:    { url: 'https://studio-lou-rag.onrender.com/tools/shop-the-room?embed=toolkit' }
   };
 
