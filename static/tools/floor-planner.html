@@ -274,6 +274,33 @@
     .space-label { display: block; color: #433E3C; }
     .space-val { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #6b6560; margin-top: 2px; }
 
+    /* Light */
+    .l-label { display: block; font-size: 10px; font-weight: 600; color: #6b6560; text-transform: uppercase; letter-spacing: 0.1em; margin: 4px 0 0; }
+    .l-label + .seg-row { margin-top: 4px; }
+    .seg-row button small { font-weight: 500; opacity: 0.75; margin-left: 3px; }
+    .l-res { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 12px 14px; margin: 4px 0 12px; }
+    .l-res-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .l-res-top b { font-size: 28px; font-weight: 500; color: #582b36; letter-spacing: -0.03em; line-height: 1; }
+    .l-res-top span { font-size: 13px; color: #6b6560; }
+    .l-res p { font-size: 13px; color: #433E3C; line-height: 1.5; margin-top: 8px; }
+    .l-st { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; border-radius: 50px; padding: 2px 9px; margin-left: auto; }
+    .l-st.ok { background: #eef3dc; color: #5f7228; }
+    .l-st.dim { background: #f8efd9; color: #8a610e; }
+    .l-st.bright { background: #f3e6e9; color: #582b36; }
+    .l-note { font-size: 12.5px; color: #6b6560; line-height: 1.5; margin: 0 0 10px; }
+    .l-list { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; overflow: hidden; margin-top: 6px; }
+    .l-row { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: transparent; padding: 9px 12px; text-align: left; font: 500 13px 'DM Sans', sans-serif; color: #433E3C; cursor: pointer; }
+    .l-row + .l-row { border-top: 1px solid #f0ebe3; }
+    .l-row:hover { background: #f5f0e8; }
+    .l-row.on { background: #f5f0e8; box-shadow: inset 3px 0 0 #582b36; }
+    .l-row b { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .l-row small { color: #6b6560; font-size: 12px; white-space: nowrap; }
+    .l-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #d0c9bc; }
+    .l-dot.ok { background: #7f9433; } .l-dot.dim { background: #b07d14; } .l-dot.bright { background: #582b36; }
+    .l-plan { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
+    .l-plan .field { flex: 1; margin: 0; }
+    .l-section { border-top: 1.5px solid #d0c9bc; margin-top: 18px; padding-top: 14px; }
+
     /* ── PHONE AND NARROW SCREENS: plan on top, panel below, page scrolls ── */
     /* Saved plans */
     .saved { margin-top: 28px; }
@@ -352,7 +379,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=22"></script>
+  <script src="/static/tools/plan-engine.js?v=23"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -404,7 +431,7 @@
       scale: null,   // { ftPerPx, source: 'auto' | 'manual', rooms, line }
       tool: null,    // 'scale' while the person is drawing a scale line
       scaleLine: null,
-      mode: 'measure',  // 'measure' or 'furnish'
+      mode: 'measure',  // 'measure', 'furnish' or 'light'
       rugCheck: null,   // { room, key, result }: the rug sizes checked for the selected room
       pieces: [],       // furniture placed in Furnish
       pieceSel: -1,     // index of the selected piece, or -1
@@ -412,7 +439,10 @@
       doorSel: -1,      // index of the selected door, or -1
       ptab: 'add',      // the Furnish panel tab: add, rugs, doors, checks
       cat: 'Living',    // the catalog category shown in Add
-      ptSel: -1         // Measure: the corner tapped on the selected room's shape, which shows a remove (x) button
+      ptSel: -1,        // Measure: the corner tapped on the selected room's shape, which shows a remove (x) button
+      lights: [],       // Light: the ceiling lights (see Light mode below)
+      lightSel: -1,     // index of the picked light, or -1
+      lightCfg: { ceil: 8, rooms: {} }
     };
 
     /* ---------- Geometry in feet ---------- */
@@ -664,6 +694,7 @@
       state.view = { z: 1, px: 0, py: 0 };
       state.erase = []; state.eraseVer++; state.floorCol = floorColorOf(img); ERASE.mask = ERASE.layer = null;
       state.openHints = null; state.openingsDone = false; state.found = null;
+      state.lights = []; state.lightSel = -1; state.lightCfg = { ceil: 8, rooms: {} };
       UNDO = []; $('undoBtn').disabled = true;
       setMode('measure');
     }
@@ -799,7 +830,15 @@
         ctx.restore();
       });
 
-      if (state.scale) { drawRugs(ctx, forExport); drawPieces(ctx, forExport); drawDoors(ctx, forExport); drawWalkways(ctx, forExport, 'routes'); }
+      if (state.scale) {
+        // In Light the furniture steps back so the lights read first
+        var lit = state.mode === 'light';
+        if (lit) { ctx.save(); ctx.globalAlpha = 0.5; }
+        drawRugs(ctx, forExport); drawPieces(ctx, forExport);
+        if (lit) ctx.restore();
+        drawDoors(ctx, forExport); drawWalkways(ctx, forExport, 'routes');
+        if (lit) drawLights(ctx, forExport);
+      }
 
       // Tags for rooms placed from the plan go first; a space that couldn't be placed steps aside for them
       var tagOrder = state.rooms.map(function (r, i) { return i; }).sort(function (p, q) { return (state.rooms[p].weak ? 1 : 0) - (state.rooms[q].weak ? 1 : 0) || p - q; });
@@ -865,7 +904,8 @@
 
       // Spacing lines: the selected room's rug on screen, every rug in exports; then
       // the furniture checks, plus every side of the selected piece while it's picked
-      if (state.scale) {
+      // (a lighting export leaves them out so the lights read)
+      if (state.scale && state.mode !== 'light') {
         if (forExport) state.rooms.forEach(function (r) { drawGaps(ctx, r); });
         else if (state.mode === 'furnish' && state.selected > -1) drawGaps(ctx, state.rooms[state.selected]);
         if (forExport || state.mode === 'furnish') {
@@ -907,7 +947,7 @@
         }
       }
 
-      if (state.scale) drawWalkways(ctx, forExport, 'pinches');
+      if (state.scale && state.mode !== 'light') drawWalkways(ctx, forExport, 'pinches');
       if (!forExport && state.scale) { drawPieceHandles(ctx); drawHandleTag(ctx); }
       if (!forExport) drawBrush(ctx);
 
@@ -2112,10 +2152,334 @@
       }
     }
 
+    /* ---------- Light mode ----------
+       Recessed lights recommended room by room (LIGHT in plan-engine.js), then moved, added,
+       removed and changed by the person. A light is { id, type: 'r4' | 'r6', lm, beam, x, y, room, edited }:
+       its center in percent of the image, room the id of the room it lights, edited once the
+       person has moved, added or changed it (a new suggestion for the room keeps it).
+       state.lightCfg = { ceil: the plan's ceiling height in feet, rooms: { room id: { type, mood, size,
+       ceil, done, extra } } }; type, mood, size and ceil stay null until the person picks one. */
+    function lightCfg(r) {
+      var c = state.lightCfg.rooms[r.id];
+      if (!c) c = state.lightCfg.rooms[r.id] = { type: null, mood: null, size: null, ceil: null, done: false };
+      return c;
+    }
+    function roomCeil(r) { return lightCfg(r).ceil || state.lightCfg.ceil || 8; }
+    function roomLType(r) { return lightCfg(r).type || LIGHT.typeOf(r.name); }
+    function roomMood(r) { return lightCfg(r).mood || LIGHT.type(roomLType(r)).mood; }
+    function roomSize(r) { return lightCfg(r).size || LIGHT.defaultSize(roomLType(r), roomCeil(r)); }
+    function roomTarget(r) { return LIGHT.target(roomLType(r), roomMood(r)); }
+    function roomAreaFt(r) { return r.ftShape ? LIGHT.polyArea(r.ftShape) : 0; }
+    function lightable(r) { return !!(r && state.scale && r.ftShape && roomTarget(r) != null); }
+    function roomById(id) { return state.rooms.filter(function (r) { return r.id === id; })[0] || null; }
+    function lightsIn(r) { return state.lights.filter(function (l) { return l.room === r.id; }); }
+    function lightFt(l) { var f = state.scale.ftPerPx; return { x: l.x / 100 * state.W * f, y: l.y / 100 * state.H * f, lm: l.lm, beam: l.beam || 'wide' }; }
+    function makeLight(size, x, y, room, edited) {
+      var fx = LIGHT.FIXTURES[size];
+      return { id: state.nextId++, type: size, lm: fx.lm, beam: 'wide', x: x, y: y, room: room, edited: !!edited };
+    }
+    // A fresh recommendation for one room. keep: lights the person placed or changed stay put and count toward the total.
+    function suggestRoom(r, keep) {
+      if (!lightable(r)) return;
+      var f = state.scale.ftPerPx, size = roomSize(r), c = lightCfg(r);
+      var kept = keep ? lightsIn(r).filter(function (l) { return l.edited; }) : [];
+      state.lights = state.lights.filter(function (l) { return l.room !== r.id || kept.indexOf(l) > -1; });
+      var res;
+      try {
+        res = LIGHT.suggest({ poly: r.ftShape, target: roomTarget(r), lm: LIGHT.FIXTURES[size].lm, beam: 'wide', ceil: roomCeil(r),
+                              pieces: groupFor(r), fixed: kept.map(lightFt) });
+      } catch (e) { if (window.console) console.warn('Lighting skipped:', e); res = { lights: [], extra: 0 }; }
+      res.lights.forEach(function (p) { state.lights.push(makeLight(size, p.x / f / state.W * 100, p.y / f / state.H * 100, r.id, false)); });
+      c.done = true; c.extra = res.extra || 0; c.short = res.short || 0; c.aimed = groupFor(r).some(function (pc) { return pc.role !== 'decor' && pc.role !== 'chair'; });
+    }
+    // Rooms never lit yet get their recommendation (on coming into Light, or once the scale is set)
+    function ensureLights() {
+      if (!state.scale) return;
+      var todo = state.rooms.filter(function (r) { return lightable(r) && !lightCfg(r).done; });
+      if (!todo.length) return;
+      pushUndo();
+      todo.forEach(function (r) { suggestRoom(r, false); });
+    }
+    // Lights whose room was removed or redrawn go to the room they now sit in
+    function tidyLights() {
+      state.lights.forEach(function (l) {
+        var r = roomById(l.room);
+        if (r && PLAN.pointInPoly({ x: l.x / 100 * state.W, y: l.y / 100 * state.H }, ptsPx(r))) return;
+        var rm = pieceRoom(l);
+        if (rm || !r) l.room = rm ? rm.id : null;
+      });
+    }
+    // How a room reads: the ceiling lights by the lumen method, then with the lamps drawn on its furniture
+    function roomLight(r) {
+      var ls = lightsIn(r), lamps = state.pieces.filter(function (pc) { return LIGHT.isLamp(pc) && pieceRoom(pc) === r; });
+      var ev = LIGHT.evaluate({ area: roomAreaFt(r), target: roomTarget(r), lights: ls.map(lightFt), lampLm: lamps.length * LIGHT.LAMP_LM, ceil: roomCeil(r) });
+      ev.count = ls.length; ev.lamps = lamps.length; ev.target = roomTarget(r);
+      return ev;
+    }
+
+    function lightPx(l) { return { x: l.x / 100 * state.W, y: l.y / 100 * state.H }; }
+    function lightRad(l) { return (l.type === 'r6' ? 7.5 : 6) * displayRatio(); }
+    function hitLight(p) {
+      var best = -1, bd = Infinity;
+      state.lights.forEach(function (l, k) {
+        var q = lightPx(l), d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d <= lightRad(l) * 1.8 && d < bd) { bd = d; best = k; }
+      });
+      return best;
+    }
+    function drawLights(ctx, forExport) {
+      if (!state.lights.length || !state.scale) return;
+      var f = state.scale.ftPerPx, ratio = displayRatio();
+      // Where each light's beam lands on the floor, as a warm wash kept inside its room
+      // (multiplied so the plan's lines stay crisp)
+      state.lights.forEach(function (l) {
+        var r = roomById(l.room), ceil = r ? roomCeil(r) : state.lightCfg.ceil || 8;
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        if (r) { tracePath(ctx, ptsPx(r)); ctx.clip(); }
+        var half = LIGHT.BEAMS[l.beam || 'wide'] / 2 * Math.PI / 180;
+        var reach = Math.max(1.5, (ceil - LIGHT.WORK) * Math.tan(half)) / f, p = lightPx(l);
+        var g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, reach);
+        g.addColorStop(0, 'rgba(245, 214, 140, 0.34)');
+        g.addColorStop(0.5, 'rgba(245, 214, 140, 0.12)');
+        g.addColorStop(1, 'rgba(245, 214, 140, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(p.x, p.y, reach, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      });
+      // Each light the way plans mark a downlight: a ring with a dot
+      state.lights.forEach(function (l, k) {
+        var p = lightPx(l), rad = lightRad(l), sel = !forExport && state.mode === 'light' && k === state.lightSel;
+        ctx.save();
+        ctx.shadowColor = 'rgba(67,62,60,0.25)'; ctx.shadowBlur = 3 * ratio;
+        if (sel) { ctx.fillStyle = '#A6BE47'; ctx.beginPath(); ctx.arc(p.x, p.y, rad + 4.5 * ratio, 0, Math.PI * 2); ctx.fill(); }
+        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#582b36'; ctx.lineWidth = 1.8 * ratio;
+        ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowColor = 'transparent'; ctx.stroke();
+        ctx.fillStyle = '#582b36';
+        ctx.beginPath(); ctx.arc(p.x, p.y, rad * 0.36, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    // Light mode on the plan: grab a light to move it; a tap on the floor picks the room, a drag pans
+    function lightDown(e) {
+      var p = toCanvas(e), k = state.space || e.button === 1 ? -1 : hitLight(p);
+      if (k > -1) {
+        state.lightSel = k;
+        state.drag = { mode: 'light', start: p, snap: snap(), orig: { x: state.lights[k].x, y: state.lights[k].y } };
+        try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+        e.preventDefault();
+        renderLight(); draw();
+        return;
+      }
+      if (state.lightSel > -1) { state.lightSel = -1; renderLight(); draw(); }
+      state.drag = { mode: 'pan', start: p, cur: p, client: { x: e.clientX, y: e.clientY }, pan0: { x: state.view.px, y: state.view.py } };
+      try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    }
+    function lightMove(e, p) {
+      var d = state.drag, c = $('planCanvas');
+      if (d && d.mode === 'light') {
+        if (!d.moved && Math.hypot(p.x - d.start.x, p.y - d.start.y) < 3 * displayRatio()) return;
+        d.moved = true;
+        var l = state.lights[state.lightSel];
+        l.x = clamp(d.orig.x + (p.x - d.start.x) / state.W * 100, 0, 100);
+        l.y = clamp(d.orig.y + (p.y - d.start.y) / state.H * 100, 0, 100);
+        draw();
+      } else if (d && d.mode === 'pan') {
+        var cx = e.clientX - d.client.x, cy = e.clientY - d.client.y;
+        if (!d.moved && Math.hypot(cx, cy) < 5) return;
+        d.moved = true;
+        state.view.px = d.pan0.x + cx; state.view.py = d.pan0.y + cy;
+        draw();
+      } else c.style.cursor = hitLight(p) > -1 ? 'move' : hitRoom(p) > -1 ? 'pointer' : 'default';
+    }
+    function lightUp(e) {
+      var d = state.drag;
+      try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
+      state.drag = null;
+      if (d.moved) {
+        pushUndo(d.snap);
+        var l = state.lights[state.lightSel], rm = pieceRoom(l);
+        l.edited = true;
+        if (rm) l.room = rm.id;
+        var li = rm ? state.rooms.indexOf(rm) : -1;
+        if (li > -1 && li !== state.selected) { select(li, false); return; }
+      }
+      renderLight(); draw();
+    }
+
+    // A new light in the picked room, at its darkest open spot (24" off the walls where the room allows)
+    function addLight() {
+      var r = state.rooms[state.selected];
+      if (!lightable(r)) return;
+      var f = state.scale.ftPerPx, poly = r.ftShape, bb = PLAN.bounds(poly), ceil = roomCeil(r);
+      var others = lightsIn(r).map(lightFt), best = null;
+      [LIGHT.WALL, 1, 0.5].some(function (off) {
+        for (var y = bb.y + 0.25; y < bb.y + bb.h; y += 0.5) for (var x = bb.x + 0.25; x < bb.x + bb.w; x += 0.5) {
+          var p = { x: x, y: y };
+          if (!LIGHT.inPoly(p, poly) || others.some(function (o) { return Math.hypot(o.x - x, o.y - y) < 2; })) continue;
+          var edge = Infinity;
+          for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            var a = poly[j], b = poly[i], dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+            var t = L ? clamp(((x - a.x) * dx + (y - a.y) * dy) / L, 0, 1) : 0;
+            edge = Math.min(edge, Math.hypot(x - a.x - t * dx, y - a.y - t * dy));
+          }
+          if (edge < off) continue;
+          var e = LIGHT.at(p, others, ceil);
+          if (!best || e < best.e) best = { x: x, y: y, e: e };
+        }
+        return !!best;
+      });
+      if (!best) { var c = PLAN.bounds(poly); best = { x: c.x + c.w / 2, y: c.y + c.h / 2 }; }
+      pushUndo();
+      state.lights.push(makeLight(roomSize(r), best.x / f / state.W * 100, best.y / f / state.H * 100, r.id, true));
+      state.lightSel = state.lights.length - 1;
+      renderLight(); draw();
+    }
+    function removeLight() {
+      if (state.lightSel < 0) return;
+      pushUndo();
+      state.lights.splice(state.lightSel, 1);
+      state.lightSel = -1;
+      renderLight(); draw();
+    }
+
+    /* The Light panel: the plan's ceiling height, the picked room's settings and results, and every room
+       at a glance. With a light picked, that light's details instead. */
+    var MOOD_WORD = { cozy: 'Cozy', balanced: 'Balanced', bright: 'Bright' };
+    var LSTATUS = { ok: 'On target', dim: 'A little dim', bright: 'Brighter than needed' };
+    function fmtNum(n) { return Math.round(n).toLocaleString(); }
+    function lightWord(n) { return n === 1 ? 'light' : 'lights'; }
+    function renderLight() {
+      var el = $('lightBody');
+      if (!el || state.mode !== 'light') return;
+      if (!state.scale) {
+        el.innerHTML = '<p class="pane-sub">Lighting needs the plan’s scale. Set it with <b>Set the scale</b> below the plan, then come back to Light.</p>';
+        return;
+      }
+      tidyLights();
+      var l = state.lights[state.lightSel];
+      if (l) { el.innerHTML = lightDetail(l); return; }
+      var r = state.rooms[state.selected], html = '';
+      html += '<div class="l-plan"><label class="field"><span>Ceiling height, whole plan</span><input id="lCeilPlan" value="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + '" autocomplete="off" inputmode="text"></label></div>';
+      if (r) html += roomLightCard(r);
+      else html += '<p class="pane-sub">Pick a room on the plan or in the list to see its lights and change its settings.</p>';
+      html += '<div class="l-section"><p class="eyebrow">Every room</p><div class="l-list">' + state.rooms.map(function (rm, i) {
+        if (!rm.ftShape) return '';
+        var tgt = roomTarget(rm);
+        if (tgt == null) return '<button class="l-row' + (i === state.selected ? ' on' : '') + '" data-lroom="' + i + '"><span class="l-dot"></span><b>' + esc(rm.name) + '</b><small>Outdoor</small></button>';
+        var ev = roomLight(rm);
+        return '<button class="l-row' + (i === state.selected ? ' on' : '') + '" data-lroom="' + i + '"><span class="l-dot ' + ev.status + '"></span><b>' + esc(rm.name) + '</b>' +
+          '<small>' + ev.count + ' ' + lightWord(ev.count) + ', ' + Math.round(ev.fc) + ' of ' + tgt + ' fc</small></button>';
+      }).join('') + '</div></div>';
+      html += '<p class="hint">Lights start 24" from the walls and aim at where each room is used: in front of seats, beside and at the foot of a bed, at the drawers, over a desk or a counter. ' +
+        'Drag a light to move it. Lights you move, add or change stay put when you change a room’s settings. ' +
+        'Foot-candles are worked out with the lumen method for planning; this isn’t an electrical plan.</p>';
+      el.innerHTML = html;
+    }
+    function seg(name, opts, on) {
+      return '<div class="seg-row" data-lseg="' + name + '">' + opts.map(function (o) {
+        return '<button data-v="' + o.v + '"' + (o.v === on ? ' class="on"' : '') + '>' + o.t + '</button>';
+      }).join('') + '</div>';
+    }
+    function roomLightCard(r) {
+      var c = lightCfg(r), t = roomLType(r), html = '<p class="detail-name" style="border:none;padding-left:0">' + esc(r.name) + '</p>';
+      if (!r.ftShape) return html + '<p class="pane-sub">This room has no outline on the plan yet. Fix it in Measure.</p>';
+      html += '<label class="field"><span>Room type</span><select data-lf="type">' + LIGHT.TYPES.map(function (o) {
+        return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label + '</option>';
+      }).join('') + '</select></label>';
+      if (roomTarget(r) == null) return html + '<p class="pane-sub">Outdoor spaces aren’t planned here yet. Change the room type to light it.</p>';
+      var fcs = LIGHT.type(t).fc, mood = roomMood(r), size = roomSize(r);
+      html += '<span class="l-label">Mood, in foot-candles</span>' + seg('mood', LIGHT.MOODS.map(function (m, k) { return { v: m.id, t: m.label + '<small>' + fcs[k] + '</small>' }; }), mood);
+      html += '<div class="field-row"><div><span class="l-label">Recessed lights</span>' + seg('size', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], size) + '</div>' +
+        '<label class="field" style="margin-top:4px"><span>Ceiling height</span><input data-lf="ceil" value="' + (c.ceil ? esc(fmtFtIn(c.ceil)) : '') + '" placeholder="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + ' (plan)" autocomplete="off"></label></div>';
+      var ev = roomLight(r), tgt = ev.target;
+      html += '<div class="l-res"><div class="l-res-top"><b>' + Math.round(ev.fc) + ' fc</b><span>Target ' + tgt + ' for ' + MOOD_WORD[mood].toLowerCase() + '</span>' +
+        '<span class="l-st ' + ev.status + '">' + LSTATUS[ev.status] + '</span></div>' +
+        '<p>' + (ev.count ? ev.count + ' recessed ' + lightWord(ev.count) + ', ' + fmtNum(ev.lm) + ' lumens in ' + fmtNum(roomAreaFt(r)) + ' sq ft.' : 'No lights yet.') + '</p>' +
+        (ev.lamps ? '<p>With the ' + (ev.lamps === 1 ? 'lamp' : ev.lamps + ' lamps') + ' on your furniture switched on: about <b>' + Math.round(ev.fcAll) + ' fc</b>.</p>' : '') +
+        '</div>';
+      var notes = [];
+      var mine = lightsIn(r).some(function (q) { return q.edited; });
+      if (ev.status === 'dim' && c.short && !mine) notes.push('Recessed lights alone can\u2019t reach the target here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Pendants, under-cabinet or vanity lights make up the rest.');
+      else if (ev.status === 'dim') notes.push('Add a light' + (size === 'r4' ? ', or switch to 6" lights,' : '') + ' to reach the target.');
+      if (ev.status === 'bright') notes.push('Brighter than the target. A dimmer brings it down, or remove a light.');
+      if (c.extra && !mine) notes.push(c.extra === 1 ? 'One light was added to brighten a dark stretch of floor.' : c.extra + ' lights were added to brighten dark stretches of floor.');
+      if (ev.far) notes.push(ev.far === 1 ? 'One light is more than ' + fmtFtIn(roomCeil(r)) + ' from its nearest neighbor, so the floor between them may look patchy.' : ev.far + ' lights are more than ' + fmtFtIn(roomCeil(r)) + ' (the ceiling height) from their nearest neighbors, so the light may look patchy.');
+      if (!c.aimed) notes.push('Add furniture in Furnish to aim the lights at where you’ll use the room, then tap <b>Suggest again</b>.');
+      if (boxMeasured(r) && r.source === 'estimated') notes.push('This room’s size is estimated, so check its outline in Measure.');
+      html += notes.map(function (n) { return '<p class="l-note">' + n + '</p>'; }).join('');
+      html += '<div class="btn-row"><button class="btn-primary btn-sm" data-lact="add">Add a light</button><button class="btn-secondary btn-sm" data-lact="redo">Suggest again</button></div>';
+      return html;
+    }
+    function lightDetail(l) {
+      var r = roomById(l.room), fx = LIGHT.FIXTURES[l.type] || LIGHT.FIXTURES.r4;
+      return '<button class="link-btn detail-back" data-lact="back">&larr; Back</button>' +
+        '<p class="detail-name" style="border:none;padding-left:0">' + fx.name.charAt(0).toUpperCase() + fx.name.slice(1) + '</p>' +
+        '<p class="pane-sub">' + (r ? 'In the ' + esc(r.name) + '.' : 'Not in a room.') + ' Drag it on the plan to move it.</p>' +
+        '<span class="l-label">Size</span>' + seg('lsize', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], l.type) +
+        '<label class="field"><span>Brightness, lumens</span><input data-lf="lm" value="' + Math.round(l.lm) + '" inputmode="numeric" autocomplete="off"></label>' +
+        '<p class="l-note">Use the lumens on the light you’re buying. A 4" light is usually 500 to 900, a 6" light 800 to 1,400.</p>' +
+        '<span class="l-label">Beam</span>' + seg('beam', [{ v: 'wide', t: 'Wide' }, { v: 'narrow', t: 'Narrow' }], l.beam || 'wide') +
+        '<p class="l-note">Wide spreads light across the room. Narrow puts it on one spot, like a counter or a piece of art.</p>' +
+        '<div class="btn-row"><button class="btn-secondary btn-sm" data-lact="remove">Remove this light</button></div>';
+    }
+    // A room setting changed: its own lights follow; the person's own lights stay where they are
+    function lightSetting(r, key, v) {
+      pushUndo();
+      var c = lightCfg(r);
+      c[key] = v;
+      if (key === 'type') { c.mood = null; c.size = null; }
+      suggestRoom(r, true);
+      renderLight(); draw();
+    }
+    function onLightClick(e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      var ri = b.getAttribute('data-lroom');
+      if (ri != null) { state.lightSel = -1; select(+ri, false); return; }
+      var act = b.getAttribute('data-lact'), sg = b.closest('[data-lseg]'), r = state.rooms[state.selected], l = state.lights[state.lightSel];
+      if (act === 'back') { state.lightSel = -1; renderLight(); draw(); return; }
+      if (act === 'remove') { removeLight(); return; }
+      if (act === 'add') { addLight(); return; }
+      if (act === 'redo' && r) { pushUndo(); suggestRoom(r, false); renderLight(); draw(); return; }
+      if (!sg) return;
+      var key = sg.getAttribute('data-lseg'), v = b.getAttribute('data-v');
+      if (key === 'mood' && r) lightSetting(r, 'mood', v);
+      else if (key === 'size' && r) lightSetting(r, 'size', v);
+      else if (l && key === 'lsize') { pushUndo(); l.type = v; l.lm = LIGHT.FIXTURES[v].lm; l.edited = true; renderLight(); draw(); }
+      else if (l && key === 'beam') { pushUndo(); l.beam = v; l.edited = true; renderLight(); draw(); }
+    }
+    function onLightChange(e) {
+      var t = e.target, r = state.rooms[state.selected], l = state.lights[state.lightSel];
+      if (t.id === 'lCeilPlan') {
+        var h = parseFtIn(t.value);
+        if (!h || h < 7 || h > 30) { t.classList.add('bad'); return; }
+        pushUndo();
+        state.lightCfg.ceil = h;
+        state.rooms.forEach(function (rm) { if (lightable(rm) && !lightCfg(rm).ceil && lightCfg(rm).done) suggestRoom(rm, true); });
+        renderLight(); draw();
+        return;
+      }
+      var f = t.getAttribute('data-lf');
+      if (f === 'type' && r) lightSetting(r, 'type', t.value);
+      else if (f === 'ceil' && r) {
+        var v = t.value.trim() ? parseFtIn(t.value) : null;
+        if (t.value.trim() && (!v || v < 7 || v > 30)) { t.classList.add('bad'); return; }
+        lightSetting(r, 'ceil', v);
+      } else if (f === 'lm' && l) {
+        var n = parseFloat(String(t.value).replace(/[^\d.]/g, ''));
+        if (!(n >= 50 && n <= 10000)) { t.classList.add('bad'); return; }
+        pushUndo(); l.lm = Math.round(n); l.edited = true; renderLight(); draw();
+      }
+    }
+
     /* ---------- Undo ----------
        A snapshot of everything the person can change, taken just before each change. */
     var UNDO = [];
-    function snap() { return JSON.stringify({ rooms: state.rooms, pieces: state.pieces, doors: state.doors, scale: state.scale, erase: state.erase }); }
+    function snap() { return JSON.stringify({ rooms: state.rooms, pieces: state.pieces, doors: state.doors, scale: state.scale, erase: state.erase, lights: state.lights, lightCfg: state.lightCfg }); }
     function pushUndo(s) {
       state.dirty = true; updateSaveBtn();
       UNDO.push(s || snap());
@@ -2130,6 +2494,7 @@
       state.dirty = true; updateSaveBtn();
       state.rooms = o.rooms; state.pieces = o.pieces; state.doors = o.doors; state.scale = o.scale;
       state.erase = o.erase || []; state.eraseVer++;
+      state.lights = o.lights || []; state.lightCfg = o.lightCfg || { ceil: 8, rooms: {} }; state.lightSel = -1;
       state.pieceSel = -1; state.doorSel = -1; state.ptSel = -1; state.rugCheck = null; state.drag = null;
       if (state.selected >= state.rooms.length) state.selected = -1;
       renderAll(); renderPieceBar(); renderDoorBar();
@@ -2842,11 +3207,16 @@
       }
       $('measurePanel').classList.toggle('hidden', m !== 'measure');
       $('furnishPanel').classList.toggle('hidden', m !== 'furnish');
+      $('lightPanel').classList.toggle('hidden', m !== 'light');
       $('doorTool').classList.toggle('hidden', m !== 'furnish');
+      $('planCanvas').classList.toggle('furnishing', m === 'furnish' || m === 'light');
       if (m === 'furnish') { renderCatalog(); showPane(); }
+      state.lightSel = -1;
+      if (m === 'light') { state.pieceSel = -1; state.doorSel = -1; state.extra = []; state.extraRugs = []; }
       if (!state.img || !state.rooms.length) return;
-      // Coming into Furnish with nothing selected: start on the first living space, if there is one
-      if (m === 'furnish' && state.selected < 0) {
+      if (m === 'light') ensureLights();
+      // Coming into Furnish or Light with nothing selected: start on the first living space, if there is one
+      if ((m === 'furnish' || m === 'light') && state.selected < 0) {
         var pick = -1;
         state.rooms.forEach(function (r, k) { if (pick < 0 && RUG.roomType(r.name) === 'living') pick = k; });
         if (pick > -1) state.selected = pick;
@@ -2919,6 +3289,7 @@
       if (state.tool === 'door') { placeDoorAt(toCanvas(e)); e.preventDefault(); return; }
       if (state.tool === 'erase') { eraseDown(e); return; }
       if (state.mode === 'furnish') { furnishDown(e); return; }
+      if (state.mode === 'light') { lightDown(e); return; }
       var p = toCanvas(e), xb = removeBtn();
       if (xb && Math.hypot(p.x - xb.x, p.y - xb.y) <= xb.r * 1.3) { removePoint(state.selected, state.ptSel); e.preventDefault(); return; }
       var h = hitHandle(p), added = false;
@@ -3039,6 +3410,7 @@
         return;
       }
       if (state.tool === 'erase') { c.style.cursor = 'none'; eraseMove(p); return; }
+      if (state.mode === 'light') { lightMove(e, p); return; }
       if (state.mode === 'furnish') {
         if (state.drag && state.drag.mode === 'dstretch') {
           moveDoorStretch(p);
@@ -3142,6 +3514,7 @@
         pushUndo(state.drag.snap); state.drag = null; renderErasePane();
         return;
       }
+      if (state.drag && state.drag.mode === 'light') { lightUp(e); return; }
       if (state.drag && (state.drag.mode === 'pan' || state.drag.mode === 'box')) {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
         var dz = state.drag;
@@ -3285,6 +3658,7 @@
         image: image, thumb: t.toDataURL('image/jpeg', 0.82),
         W: state.W, H: state.H, fileName: state.fileName || '',
         rooms: plan.rooms, scale: plan.scale, pieces: plan.pieces, doors: plan.doors, erase: plan.erase || [],
+        lights: plan.lights || [], lightCfg: plan.lightCfg || null,
         words: state.walls && state.walls.words ? state.walls.words.map(function (w) { return { text: w.text, x: w.x, y: w.y, w: w.w, h: w.h }; }) : null,
         hasWalls: !!(state.walls && state.walls.map), mode: state.mode, openingsDone: !!state.openingsDone
       };
@@ -3374,15 +3748,16 @@
           state.rooms = rec.rooms || []; state.scale = rec.scale || null;
           state.pieces = rec.pieces || []; state.doors = rec.doors || [];
           state.erase = rec.erase || []; state.eraseVer++;
+          state.lights = rec.lights || []; state.lightCfg = rec.lightCfg || { ceil: 8, rooms: {} };
           // A plan saved before it had a scale still looks for its doors once the scale is set
           // (from the drawing alone: the model's list isn't kept). Older saves never do.
           state.openingsDone = rec.openingsDone !== false; state.openHints = null; state.found = null;
           var ids = [0];
-          state.rooms.concat(state.pieces, state.doors).forEach(function (o) { if (typeof o.id === 'number') ids.push(o.id); });
+          state.rooms.concat(state.pieces, state.doors, state.lights).forEach(function (o) { if (typeof o.id === 'number') ids.push(o.id); });
           state.nextId = Math.max.apply(null, ids) + 1;
           state.savedId = rec.id; state.planName = rec.name; state.dirty = false;
           showScreen('result');
-          if (rec.mode === 'furnish' && state.scale) setMode('furnish');
+          if ((rec.mode === 'furnish' || rec.mode === 'light') && state.scale) setMode(rec.mode);
           renderAll(); renderPieceBar(); renderDoorBar(); updateSaveBtn();
         };
         img.onerror = function () { showStatus('error', 'This saved plan couldn’t be opened.', 'Its picture may have been damaged. Try another, or upload the plan again.', false); };
@@ -3426,6 +3801,11 @@
           ['Slide along the wall', 'Drag it'],
           ['Make it wider or narrower', 'Drag an end handle, or type the width']
         ]],
+        ['Lights (Light)', [
+          ['Pick a light', 'Tap it'],
+          ['Move it', 'Drag it'],
+          ['Add, remove or change one', 'The panel <small>(Add a light, or pick one)</small>']
+        ]],
         ['Undo and save', [['Undo the last change', 'The Undo button'], ['Save the plan', 'Save, at the top']]]
       ];
       return [
@@ -3460,6 +3840,11 @@
           ['Make it wider or narrower', 'Drag an end handle, or type the width'],
           ['Remove the picked one', del],
           ['Stop marking', k('Esc')]
+        ]],
+        ['Lights (Light)', [
+          ['Move a light', 'Drag it'],
+          ['Remove the picked light', del],
+          ['Let go of it', k('Esc')]
         ]],
         ['Setting the scale', [
           ['Keep the line straight', 'Hold ' + k('Shift') + ' while you drag'],
@@ -3525,6 +3910,7 @@
       endScaleTool();
       renderAll();
       findOpenings();   // doors and windows wait for a scale to be measured
+      if (state.mode === 'light') { ensureLights(); renderLight(); draw(); }
     }
 
     function renderScaleBar() {
@@ -3568,6 +3954,7 @@
       }
       renderRoomPick();
       if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderPieceBar(); }
+      if (state.mode === 'light') renderLight();
       draw();
     }
 
@@ -3628,7 +4015,7 @@
       $('statEst').textContent = est;
     }
 
-    function renderAll() { syncGeometry(); renderFoundNote(); renderCards(); renderStats(); renderScaleBar(); renderRoomPick(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderDoorBar(); renderDoorList(); } draw(); }
+    function renderAll() { syncGeometry(); renderFoundNote(); renderCards(); renderStats(); renderScaleBar(); renderRoomPick(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderDoorBar(); renderDoorList(); } if (state.mode === 'light') renderLight(); draw(); }
 
     function cardIndex(el) {
       var card = el.closest('.room-card');
@@ -4027,6 +4414,7 @@
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
       state.openHints = null; state.openingsDone = false; state.found = null;
+      state.lights = []; state.lightSel = -1; state.lightCfg = { ceil: 8, rooms: {} };
       state.view = { z: 1, px: 0, py: 0 };
       UNDO = []; $('undoBtn').disabled = true;
       endScaleTool(); endDoorTool();
@@ -4115,6 +4503,10 @@
         onPieceClick(e); onDoorClick(e);
       });
       fp.addEventListener('change', function (e) { onDoorChange(e); onDetailChange(e); });
+      $('lightBody').addEventListener('click', onLightClick);
+      $('lightBody').addEventListener('change', onLightChange);
+      $('lightBody').addEventListener('input', function (e) { e.target.classList.remove('bad'); });
+      $('lightBody').addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur(); });
       $('foundNoteM').addEventListener('click', onNoteClick);
       $('foundNoteD').addEventListener('click', onNoteClick);
       fp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (/^pc[NWDT]/.test(e.target.id || '') || e.target.getAttribute('data-dact') === 'width')) e.target.blur(); });
@@ -4171,6 +4563,13 @@
         if (state.tool === 'scale') { if (e.key === 'Escape' && !/INPUT/.test(document.activeElement.tagName)) endScaleTool(); return; }
         if (state.tool === 'door') { if (e.key === 'Escape') endDoorTool(); return; }
         if (state.tool === 'erase') { if (e.key === 'Escape') endEraseTool(); else if (e.key === '[' || e.key === ']') { state.brush = clamp(state.brush + (e.key === ']' ? 6 : -6), 8, 120); renderErasePane(); draw(); } return; }
+        if (state.mode === 'light') {
+          // Light: Delete removes the picked light (never the room), Esc lets go of it, then of the room
+          if (typing) return;
+          if (state.lightSel > -1 && (e.key === 'Delete' || e.key === 'Backspace')) { removeLight(); e.preventDefault(); }
+          else if (e.key === 'Escape') { if (state.lightSel > -1) { state.lightSel = -1; renderLight(); draw(); } else select(-1); }
+          return;
+        }
         if (state.mode === 'furnish' && state.doorSel > -1 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
           if (e.key === 'Delete' || e.key === 'Backspace') { removeDoor(); e.preventDefault(); }
           if (e.key === 'Escape') deselect();
@@ -4251,7 +4650,7 @@
       <div class="modes" role="tablist" aria-label="What to do with this plan">
         <button class="mode active" role="tab" aria-selected="true" data-mode="measure">Measure</button>
         <button class="mode" role="tab" aria-selected="false" data-mode="furnish">Furnish</button>
-        <button class="mode" role="tab" aria-selected="false" data-mode="light" disabled>Light <small>Soon</small></button>
+        <button class="mode" role="tab" aria-selected="false" data-mode="light">Light</button>
         <button class="mode" role="tab" aria-selected="false" data-mode="3d" disabled>3D <small>Soon</small></button>
       </div>
       <span class="tool-spacer"></span>
@@ -4403,6 +4802,11 @@
             <div id="pieceBar"></div>
             <div id="doorBar"></div>
           </div>
+        </div>
+
+        <!-- Light -->
+        <div id="lightPanel" class="hidden">
+          <div class="pane" id="lightBody"></div>
         </div>
       </aside>
     </div>

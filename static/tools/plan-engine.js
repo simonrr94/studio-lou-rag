@@ -3036,3 +3036,361 @@ var WALK = (function () {
 
   return { RULE: RULE, CAP: CAP, routes: routes, status: status };
 })();
+
+/* =====================================================================
+   LIGHT: the lighting planner (Phase 2). Everything here is in feet.
+
+   The tool recommends, the person edits. For each room it works out
+   how much light the room needs (the lumen method), places recessed
+   lights where the room is used (from the furniture), fills any dark
+   gaps, and reports foot-candles against the target for the room's
+   type and mood. It never draws an electrical plan.
+
+   Numbers (researched Nov 23, 2026):
+     targets      foot-candles on the work plane, per room type and mood
+     lumen method lumens needed = target x area / (CU x LLF), CU 0.65, LLF 0.8
+     recessed     4" about 650 lm, 6" about 1,000 lm (retail ranges 500 to 900
+                  and 800 to 1,400); 24" from walls and cabinets, 2 to 5 ft
+                  apart (Visual Comfort)
+     lamps        800 lm, a standard 60-watt-equivalent bulb
+   ===================================================================== */
+var LIGHT = (function () {
+  var CU = 0.65, LLF = 0.8;   // coefficient of utilization and light loss factor (lumen method)
+  var WORK = 2.5;             // the work plane, 30" off the floor, where foot-candles are judged
+  var WALL = 2;               // recessed lights start 24" from walls and cabinets
+  var LAMP_LM = 800;          // a table or floor lamp
+
+  var FIXTURES = {
+    r4: { id: 'r4', name: '4" recessed light', short: '4"', lm: 650 },
+    r6: { id: 'r6', name: '6" recessed light', short: '6"', lm: 1000 }
+  };
+  var BEAMS = { wide: 90, narrow: 40 };   // full beam angle, degrees
+
+  // Foot-candle targets for Cozy, Balanced and Bright, the mood a room starts on, and its usual light size
+  var TYPES = [
+    { id: 'living',  label: 'Living room',      fc: [10, 15, 20], mood: 'balanced', size: 'r6' },
+    { id: 'bedroom', label: 'Bedroom',          fc: [10, 15, 20], mood: 'cozy',     size: 'r6' },
+    { id: 'dining',  label: 'Dining room',      fc: [15, 20, 30], mood: 'balanced', size: 'r6' },
+    { id: 'kitchen', label: 'Kitchen',          fc: [30, 40, 50], mood: 'bright',   size: 'r4' },
+    { id: 'bath',    label: 'Bathroom',         fc: [20, 30, 40], mood: 'bright',   size: 'r4' },
+    { id: 'office',  label: 'Office',           fc: [30, 40, 50], mood: 'bright',   size: 'r4' },
+    { id: 'laundry', label: 'Laundry',          fc: [30, 40, 50], mood: 'bright',   size: 'r4' },
+    { id: 'closet',  label: 'Closet or pantry', fc: [10, 20, 30], mood: 'balanced', size: 'r4' },
+    { id: 'hall',    label: 'Hall or entry',    fc: [10, 15, 20], mood: 'balanced', size: 'r4' },
+    { id: 'outdoor', label: 'Outdoor',          fc: null,         mood: 'balanced', size: 'r4' }
+  ];
+  var MOODS = [{ id: 'cozy', label: 'Cozy' }, { id: 'balanced', label: 'Balanced' }, { id: 'bright', label: 'Bright' }];
+  function type(id) { return TYPES.filter(function (t) { return t.id === id; })[0] || TYPES[0]; }
+
+  // A room's type from its name
+  function typeOf(name) {
+    var n = String(name || '').toLowerCase();
+    if (/porch|patio|deck|balcon|terrace|veranda|lanai|yard/.test(n)) return 'outdoor';
+    if (/bath|powder|\bwc\b|shower|toilet|lav/.test(n)) return 'bath';
+    if (/kitchen|kitchenette|galley/.test(n)) return 'kitchen';
+    if (/laundry|utility|garage|workshop/.test(n)) return 'laundry';
+    if (/closet|\bwic\b|w\.i\.c|pantry|storage|linen|wardrobe/.test(n)) return 'closet';
+    if (/office|study|library|work/.test(n)) return 'office';
+    if (/dining|breakfast|nook/.test(n)) return 'dining';
+    if (/bed|primary|master|sleep|guest|nursery|kid/.test(n)) return 'bedroom';
+    if (/hall|entry|foyer|stair|corridor|mud|landing|gallery|vestibule/.test(n)) return 'hall';
+    return 'living';
+  }
+  function target(typeId, mood) {
+    var t = type(typeId);
+    if (!t.fc) return null;
+    return t.fc[{ cozy: 0, balanced: 1, bright: 2 }[mood] != null ? { cozy: 0, balanced: 1, bright: 2 }[mood] : 1];
+  }
+  function defaultSize(typeId, ceil) { return ceil >= 10 ? 'r6' : type(typeId).size; }
+
+  // The lumen method, both ways
+  function needed(area, fc) { return fc * area / (CU * LLF); }
+  function fcOf(lm, area) { return area > 0 ? lm * CU * LLF / area : 0; }
+  // How the room reads against its target
+  function status(fc, tgt) { return fc < tgt * 0.85 ? 'dim' : fc > tgt * 1.6 ? 'bright' : 'ok'; }
+
+  // Pieces drawn with a lamp on them (and the floor lamp)
+  var LAMPS = { nightstand: 1, dresser: 1, side: 1, sideR: 1, console: 1, desk: 1, lamp: 1 };
+  function isLamp(pc) { return !!(pc && LAMPS[pc.type]); }
+
+  /* ---------- Geometry ---------- */
+  function inPoly(p, pts) {
+    var c = false;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var a = pts[i], b = pts[j];
+      if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) c = !c;
+    }
+    return c;
+  }
+  function edgeDist(p, pts) {
+    var best = Infinity;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var a = pts[j], b = pts[i], dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+      var t = L ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L)) : 0;
+      best = Math.min(best, Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy));
+    }
+    return best;
+  }
+  function boundsOf(pts) {
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    pts.forEach(function (p) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+  function polyArea(pts) {
+    var a = 0;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) a += (pts[j].x + pts[i].x) * (pts[j].y - pts[i].y);
+    return Math.abs(a / 2);
+  }
+  // A point in a piece's own frame, in inches: x across its width, y from back (-) to front (+)
+  function local(p, pc) {
+    var a = -(pc.rot || 0) * Math.PI / 180, dx = (p.x - pc.cx) * 12, dy = (p.y - pc.cy) * 12;
+    return { x: dx * Math.cos(a) - dy * Math.sin(a), y: dx * Math.sin(a) + dy * Math.cos(a) };
+  }
+
+  /* ---------- Light from one fixture ----------
+     A downlight treated as a point with a cosine-power spread: intensity I0 cos^m(angle),
+     m set so the intensity halves at the edge of the beam. Illuminance on the work plane
+     is I cos(angle) / r^2, in foot-candles when lumens and feet are used. */
+  function spread(beam) {
+    var half = (BEAMS[beam] || BEAMS.wide) / 2 * Math.PI / 180;
+    return Math.log(0.5) / Math.log(Math.cos(half));
+  }
+  function illum(fx, p, h) {
+    var m = spread(fx.beam), d2 = (fx.x - p.x) * (fx.x - p.x) + (fx.y - p.y) * (fx.y - p.y), r2 = d2 + h * h;
+    var cos = h / Math.sqrt(r2), I0 = fx.lm * (m + 1) / (2 * Math.PI);
+    return I0 * Math.pow(cos, m + 1) / r2;
+  }
+  // Direct light at p from every fixture (relative: no bounce off walls and ceiling)
+  function at(p, fixtures, ceil) {
+    var h = Math.max(2, ceil - WORK), e = 0;
+    fixtures.forEach(function (fx) { e += illum(fx, p, h); });
+    return e;
+  }
+
+  /* ---------- Where the room is used ----------
+     Each floor spot gets a weight: 1 for open floor, more where something happens
+     (in front of seats, beside and at the foot of a bed, at the drawers, on a desk,
+     along counter fronts, around an island, on a dining table). Some spots take no
+     light above them: over pillows, over the back of a seat (glare in the eyes), and
+     over anything tall (a fridge, a pantry, a bookcase). Over the rest of a bed is
+     allowed but avoided. */
+  var TASK = { seat: 1, bed: 1, dresser: 1, desk: 1, counter: 1, island: 1, dining: 1, storage: 1, coffee: 1, bench: 1 };
+  function usage(p, pieces) {
+    var w = 1, mult = 1, ban = false, soft = 1;
+    pieces.forEach(function (pc) {
+      var q = local(p, pc), hw = pc.w / 2, hd = pc.d / 2, ax = Math.abs(q.x), on = ax <= hw && Math.abs(q.y) <= hd;
+      var front = function (depth) { return ax <= hw && q.y > hd && q.y <= hd + depth; };
+      switch (pc.role) {
+        case 'seat':
+          if (front(30)) w += 3;
+          if (on) { mult = Math.min(mult, 0.6); if (q.y < 0) ban = true; }
+          break;
+        case 'bench': if (front(24)) w += 1; break;
+        case 'coffee': if (on) w += 2; break;
+        case 'side': case 'nightstand': if (on) w += 1; break;
+        case 'bed':
+          if (ax > hw && ax <= hw + 24 && Math.abs(q.y) <= hd) w += 3;
+          if (front(30)) w += 2;
+          if (on) { mult = Math.min(mult, 0.5); if (q.y < -hd + pc.d * 0.4) ban = true; else soft = Math.min(soft, 0.55); }
+          break;
+        case 'dresser': if (front(36)) w += 3; if (on) w += 1; break;
+        case 'desk': if (on) w += 4; else if (front(24)) w += 1; break;
+        case 'counter':
+          if ((pc.h || 0) >= 60) { if (front(30)) w += 2; if (on) ban = true; }
+          else { if (on && q.y > 0) w += 4; else if (on) w += 1; if (front(36)) w += 2; }
+          break;
+        case 'island':
+          if (on) w += 4;
+          else if (ax <= hw + 36 && Math.abs(q.y) <= hd + 36) w += 2;
+          break;
+        case 'dining': if (on) w += 3; break;
+        case 'storage': if (front(24)) w += 1; if (on) ban = true; break;
+      }
+    });
+    return { w: w * mult, ban: ban, soft: soft };
+  }
+
+  /* ---------- The recommendation ----------
+     o: { poly (room outline, feet), target (fc), lm (per light), beam, ceil (feet),
+          pieces (in feet, with role, type, w, d in inches, cx, cy, rot), fixed (lights
+          kept from before: { x, y, lm, beam }) }
+     Returns { lights: [{ x, y }], base: lights placed for the lumen method, extra: lights
+     added to fill a dark gap, short: lights the lumen method asked for that wouldn't fit
+     without crowding the ceiling, layout: 'grid' | 'aimed' }. */
+  function suggest(o) {
+    var poly = o.poly, bb = boundsOf(poly), A = polyArea(poly), h = Math.max(2, o.ceil - WORK);
+    var fixed = (o.fixed || []).map(function (f) { return { x: f.x, y: f.y, lm: f.lm, beam: f.beam || 'wide' }; });
+    var have = fixed.reduce(function (s, f) { return s + f.lm; }, 0);
+    var N = Math.max(0, Math.ceil((needed(A, o.target) - have) / o.lm - 0.05));
+    if (!fixed.length) N = Math.max(1, N);
+    N = Math.min(N, 60);
+    var pieces = (o.pieces || []).filter(function (pc) { return pc.role !== 'chair' && pc.role !== 'decor'; });
+    var tasks = pieces.some(function (pc) { return TASK[pc.role]; });
+
+    // Floor spots, on a grid fine enough for small rooms and coarse enough for big ones
+    var step = Math.max(0.5, Math.pow(0.6 * A * A / 1.5e6, 0.25));
+    var S = [], inr = 0;
+    for (var y = bb.y + step / 2; y < bb.y + bb.h; y += step) {
+      for (var x = bb.x + step / 2; x < bb.x + bb.w; x += step) {
+        var p = { x: x, y: y };
+        if (!inPoly(p, poly)) continue;
+        p.e = edgeDist(p, poly); inr = Math.max(inr, p.e);
+        var u = usage(p, pieces);
+        p.w = u.w; p.ban = u.ban; p.soft = u.soft;
+        S.push(p);
+      }
+    }
+    if (!S.length) return { lights: [], base: 0, extra: 0, layout: 'none' };
+    var off = Math.min(WALL, inr * 0.7);
+    var minSp = Math.max(2, Math.min(3, o.ceil * 0.3));   // closest two lights may sit (2 to 5 ft is the usual range)
+    var C = S.filter(function (p) { return p.e >= off - 1e-6 && !p.ban; });
+    if (!C.length) C = S.slice().sort(function (a, b) { return b.e - a.e; }).slice(0, 1);
+    var spec = { lm: o.lm, beam: o.beam || 'wide' };
+    var out = [];
+
+    function near(p, list, d) { return list.some(function (q) { return Math.hypot(q.x - p.x, q.y - p.y) < d; }); }
+    var rectRoom = poly.length === 4 && Math.abs(A - bb.w * bb.h) < 0.5;
+
+    if (!tasks && !fixed.length) {
+      // An empty room: an even grid, 24" or more from the walls
+      if (rectRoom) {
+        // a plain rectangle: rows and columns spaced as evenly both ways as the room allows
+        // never closer together than minSp, so a small room gets fewer lights rather than a crowded ceiling
+        var capC = Math.max(1, Math.floor((bb.w - 2 * off) / minSp + 1e-6) + 1), capR = Math.max(1, Math.floor((bb.h - 2 * off) / minSp + 1e-6) + 1);
+        var best = null;
+        for (var cols = 1; cols <= Math.min(N, capC); cols++) {
+          var rows = Math.min(capR, Math.ceil(N / cols)), sx = bb.w / cols, sy = bb.h / rows, n = cols * rows;
+          var score = Math.max(0, N - n) * 3 + Math.max(0, n - N) * 0.6 + Math.abs(Math.log(sx / sy)) * 1.2;
+          if (!best || score < best.score) best = { cols: cols, rows: rows, score: score };
+        }
+        var ex = Math.max(off, bb.w / best.cols / 2), ey = Math.max(off, bb.h / best.rows / 2);
+        if (bb.w - 2 * ex < 0) ex = bb.w / 2;
+        if (bb.h - 2 * ey < 0) ey = bb.h / 2;
+        for (var rr = 0; rr < best.rows; rr++) for (var cc = 0; cc < best.cols; cc++) {
+          out.push({ x: best.cols > 1 ? bb.x + ex + cc * (bb.w - 2 * ex) / (best.cols - 1) : bb.x + bb.w / 2,
+                     y: best.rows > 1 ? bb.y + ey + rr * (bb.h - 2 * ey) / (best.rows - 1) : bb.y + bb.h / 2 });
+        }
+        return { lights: out, base: out.length, extra: 0, layout: 'grid', short: Math.max(0, N - out.length) };
+      }
+      // any other shape (an L, a T): one square grid across the whole outline, kept 24" off the walls,
+      // tightened until it holds enough lights
+      var most = [];
+      for (var sp = Math.sqrt(A / N) * 1.1, tries = 0; tries < 40 && sp >= minSp; sp *= 0.96, tries++) {
+        var nc = Math.max(1, Math.floor((bb.w - 2 * off) / sp) + 1), nr = Math.max(1, Math.floor((bb.h - 2 * off) / sp) + 1);
+        var gx = bb.x + (bb.w - (nc - 1) * sp) / 2, gy = bb.y + (bb.h - (nr - 1) * sp) / 2, pts = [];
+        for (var gr = 0; gr < nr; gr++) for (var gc = 0; gc < nc; gc++) {
+          var gp = { x: gx + gc * sp, y: gy + gr * sp };
+          if (inPoly(gp, poly) && edgeDist(gp, poly) >= off - 1e-6) pts.push(gp);
+        }
+        if (pts.length >= N) return { lights: pts, base: pts.length, extra: 0, layout: 'grid', short: 0 };
+        if (pts.length > most.length) most = pts;
+      }
+      if (most.length) return { lights: most, base: most.length, extra: 0, layout: 'grid', short: N - most.length };
+    }
+
+    // Aimed: one light at a time, each where it adds the most light to the spots that need it
+    var E = S.map(function (p) { return at(p, fixed, o.ceil); });
+    var T = o.target, reach2 = (3.5 * h) * (3.5 * h);
+    function gainAt(c, list) {
+      var g = 0, fx = { x: c.x, y: c.y, lm: spec.lm, beam: spec.beam };
+      for (var s = 0; s < S.length; s++) {
+        var dx = S[s].x - c.x, dy = S[s].y - c.y;
+        if (dx * dx + dy * dy > reach2) continue;   // too far to add much
+        var add = illum(fx, S[s], h), e = list[s];
+        g += S[s].w * (Math.min(e + add, T) - Math.min(e, T));
+      }
+      return g * c.soft;
+    }
+    function addLight(c) {
+      var fx = { x: c.x, y: c.y, lm: spec.lm, beam: spec.beam };
+      out.push({ x: c.x, y: c.y });
+      for (var s = 0; s < S.length; s++) E[s] += illum(fx, S[s], h);
+    }
+    // Gains only shrink as lights are added, so a stale gain is an upper bound: re-check
+    // the leader only (lazy greedy), which keeps big open plans quick
+    var heap = C.map(function (c) { return { c: c, g: gainAt(c, E), at: 0 }; });
+    for (var n = 0; n < N; n++) {
+      var taken = fixed.concat(out), pick = null;
+      heap.sort(function (a, b) { return b.g - a.g; });
+      for (var hi = 0; hi < heap.length; hi++) {
+        var it = heap[hi];
+        if (near(it.c, taken, minSp)) { it.g = -1; continue; }
+        if (it.at !== n) { it.g = gainAt(it.c, E); it.at = n; }
+        var next = heap[hi + 1];
+        if (!next || it.g >= next.g) { pick = it; break; }
+        // fell behind: put it back in order and look again
+        heap.sort(function (a, b) { return b.g - a.g; }); hi = -1;
+      }
+      if (!pick || pick.g <= 0) break;
+      addLight(pick.c);
+      heap = heap.filter(function (x) { return x !== pick && x.g >= 0; });
+    }
+
+    // Line the lights up: lights nearly in a row or column share it, where the spot still works
+    var tol = Math.max(1.6, step * 2);
+    function ok(p) {
+      if (!inPoly(p, poly) || edgeDist(p, poly) < off - 1e-6) return false;
+      return !usage(p, pieces).ban;
+    }
+    ['x', 'y', 'x', 'y'].forEach(function (ax) {
+      var order = out.slice().sort(function (a, b) { return a[ax] - b[ax]; }), group = [];
+      function settle() {
+        if (group.length < 2) { group = []; return; }
+        var m = group.reduce(function (s, q) { return s + q[ax]; }, 0) / group.length;
+        group.forEach(function (q) {
+          var t = { x: q.x, y: q.y }; t[ax] = m;
+          // only where the spot works and no other light is already too close to it
+          var crowd = fixed.concat(out).some(function (o) { return o !== q && Math.hypot(o.x - t.x, o.y - t.y) < minSp * 0.85; });
+          if (ok(t) && !crowd) q[ax] = m;
+        });
+        group = [];
+      }
+      order.forEach(function (q) {
+        if (group.length && q[ax] - group[group.length - 1][ax] > tol) settle();
+        group.push(q);
+      });
+      settle();
+    });
+    E = S.map(function (p) { return at(p, fixed.concat(out.map(function (q) { return { x: q.x, y: q.y, lm: spec.lm, beam: spec.beam }; })), o.ceil); });
+
+    // Fill dark gaps: away from the walls, any stretch of floor left far darker than the rest
+    var base = out.length, extra = 0, short = Math.max(0, N - out.length);
+    for (var round = 0; round < 3; round++) {
+      var inner = S.map(function (p, s) { return s; }).filter(function (s) { return S[s].e >= 1.5; });
+      if (!inner.length) break;
+      var mean = inner.reduce(function (sum, s) { return sum + E[s]; }, 0) / inner.length;
+      var dark = inner.filter(function (s) { return E[s] < mean * 0.3; });
+      if (dark.length * step * step < 9) break;
+      var pickC = null, pickG = 0, taken2 = fixed.concat(out);
+      C.forEach(function (c) {
+        if (near(c, taken2, minSp)) return;
+        var fx = { x: c.x, y: c.y, lm: spec.lm, beam: spec.beam }, g = 0;
+        dark.forEach(function (s) { g += Math.min(illum(fx, S[s], h), mean * 0.6 - E[s]); });
+        if (g > pickG) { pickG = g; pickC = c; }
+      });
+      if (!pickC) break;
+      addLight(pickC); extra++;
+    }
+    return { lights: out, base: base, extra: extra, layout: 'aimed', short: short };
+  }
+
+  /* ---------- Results for a room ----------
+     o: { area, target, lights: [{ x, y, lm }], lampLm, ceil }
+     fc is the lumen method on the room's ceiling lights; fcAll adds the lamps.
+     far: ceiling lights more than the ceiling height from their nearest neighbor. */
+  function evaluate(o) {
+    var lm = o.lights.reduce(function (s, l) { return s + l.lm; }, 0);
+    var fc = fcOf(lm, o.area), fcAll = fcOf(lm + (o.lampLm || 0), o.area);
+    var far = 0;
+    if (o.lights.length > 1) o.lights.forEach(function (l) {
+      var d = Infinity;
+      o.lights.forEach(function (m) { if (m !== l) d = Math.min(d, Math.hypot(m.x - l.x, m.y - l.y)); });
+      if (d > o.ceil + 0.01) far++;
+    });
+    return { lm: lm, fc: fc, fcAll: fcAll, status: o.target ? status(fc, o.target) : null, far: far };
+  }
+
+  return { CU: CU, LLF: LLF, WORK: WORK, WALL: WALL, LAMP_LM: LAMP_LM, FIXTURES: FIXTURES, BEAMS: BEAMS, TYPES: TYPES, MOODS: MOODS,
+           type: type, typeOf: typeOf, target: target, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
+           isLamp: isLamp, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
+})();
