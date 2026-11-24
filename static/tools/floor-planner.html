@@ -208,10 +208,20 @@
     .stat span { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #6b6560; }
     .rooms-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .rooms-head .eyebrow { margin: 0; }
-    .room-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
-    .room-card { background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 10px 12px 12px; cursor: pointer; }
-    .room-card:hover { border-color: #582b36; }
-    .room-card.selected { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
+    .m-sum { font-size: 14px; color: #6b6560; margin: 0 0 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
+    .m-sum b { color: #582b36; font-weight: 600; }
+    .m-sum .badge { margin-left: 6px; }
+    .room-grid { display: block; background: #ffffff; border: 1px solid #e3dccf; border-radius: 12px; overflow: hidden; }
+    .room-card { background: #ffffff; border: none; border-top: 1px solid #f0ebe3; border-radius: 0; padding: 10px 12px 12px; cursor: pointer; }
+    .room-card:first-child { border-top: none; }
+    .room-card.compact { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+    .room-card.compact:hover { background: #f5f0e8; }
+    .room-card.selected { background: #fbfaf6; box-shadow: inset 3px 0 0 #A6BE47; }
+    .rc-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; color: #433E3C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rc-size { font-size: 13px; color: #6b6560; white-space: nowrap; }
+    .rc-flag { width: 18px; height: 18px; border-radius: 50%; background: #f6e6e9; color: #582b36; font: 700 11px 'DM Sans', sans-serif; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+    .m-add { margin: 8px 0 0; font-size: 13.5px; }
+    .m-count { font-weight: 500; color: #6b6560; margin-left: 4px; }
     .card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
     .name-input { flex: 1; min-width: 0; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; color: #582b36; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 3px 6px; margin-left: -6px; }
     .name-input:hover { border-color: #d0c9bc; }
@@ -251,7 +261,7 @@
     .kdot.ok { background: #7f9433; } .kdot.tight { background: #b07d14; } .kdot.close { background: #582b36; }
     .show-more { margin-top: 10px; font-size: 13px; }
     .all-good { font-size: 13.5px; color: #5f7228; background: #eef3dc; border-radius: 10px; padding: 10px 12px; }
-    .m-doors { margin-top: 22px; }
+    .m-doors { margin-top: 18px; }
     .piece-card {
       text-align: left; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 8px 10px 10px; cursor: pointer;
       color: #433E3C; transition: border-color 0.15s;
@@ -3330,6 +3340,7 @@
       d.room = sn.room.id;
     }
     function startDoorTool(kind) {
+      if ($('doorsSection')) $('doorsSection').open = true;
       if (!state.scale) return;
       state.tool = 'door'; state.toolKind = kind === 'window' ? 'window' : 'door';
       state.pieceSel = -1; state.doorSel = -1;
@@ -3474,7 +3485,7 @@
       if (!btn) return;
       if (btn.getAttribute('data-note') === 'hide') { if (state.found) state.found.hidden = true; renderFoundNote(); return; }
       if (state.mode !== 'measure') setMode('measure');
-      var sec = $('doorsSection'); if (sec && sec.scrollIntoView) sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      var sec = $('doorsSection'); if (sec) { sec.open = true; if (sec.scrollIntoView) sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     }
     function showPaneTab(t) { setTab(t); showPane(); }
 
@@ -3482,6 +3493,8 @@
     function renderDoorList() {
       var el = $('doorList');
       if (!el) return;
+      var nd = state.doors.filter(function (d) { return !isWin(d); }).length, nw = state.doors.length - nd;
+      if ($('doorCount')) $('doorCount').textContent = state.doors.length ? nd + (nd === 1 ? ' door' : ' doors') + ', ' + nw + (nw === 1 ? ' window' : ' windows') : 'none marked';
       if (!state.doors.length) { el.innerHTML = ''; return; }
       var pcs = piecesFt(), order = state.doors.map(function (d, k) { return k; }).sort(function (a, b) { return (isWin(state.doors[a]) ? 1 : 0) - (isWin(state.doors[b]) ? 1 : 0) || a - b; });
       el.innerHTML = '<div class="space-list" style="margin-top:10px">' + order.map(function (k) {
@@ -4567,13 +4580,15 @@
         var cf = catFor(state.rooms[i]);
         if (cf && cf !== state.cat && state.cat !== 'Rugs') { state.cat = cf; renderCatalog(); }   // show the pieces that suit the room
       }
+      var changed = state.selected !== i;
       state.selected = i;
+      if (changed && state.mode === 'measure') renderCards();   // the picked room opens into its card
       $('planCanvas').classList.toggle('editing', i > -1);
       var cards = document.querySelectorAll('.room-card');
       for (var k = 0; k < cards.length; k++) cards[k].classList.toggle('selected', +cards[k].getAttribute('data-i') === i);
       if (scrollCard && i > -1 && cards[i] && cards[i].scrollIntoView) {
-        var rect = cards[i].getBoundingClientRect();
-        if (rect.top > window.innerHeight || rect.bottom < 0) cards[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        var rect = cards[i].getBoundingClientRect(), pr = $('panel').getBoundingClientRect();
+        if (rect.top < pr.top || rect.bottom > Math.min(pr.bottom, window.innerHeight)) cards[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
       renderRoomPick();
       if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); renderPieceBar(); }
@@ -4590,9 +4605,15 @@
       return '<span class="badge estimated">Estimated</span>';
     }
 
+    // The rooms as a compact list (name and size); the picked room opens into its editable card
     function renderCards() {
       var html = state.rooms.map(function (r, i) {
-        return '<div class="room-card' + (i === state.selected ? ' selected' : '') + '" data-i="' + i + '">' +
+        if (i !== state.selected) {
+          var flag = r.source === 'estimated' ? '<span class="badge estimated">Estimated</span>' : r.weak || PLAN.areaConflict(r) || PLAN.shapeConflict(r) ? '<span class="rc-flag" title="Needs a look">!</span>' : '';
+          return '<div class="room-card compact" data-i="' + i + '"><span class="rc-name">' + esc(r.name) + '</span>' +
+            '<span class="rc-size">' + (r.width && r.length ? esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) : 'No size yet') + '</span>' + flag + '</div>';
+        }
+        return '<div class="room-card selected" data-i="' + i + '">' +
           '<div class="card-top">' +
             '<input class="name-input" data-f="name" value="' + esc(r.name) + '" aria-label="Room name">' +
             '<button class="del" data-act="del" title="Remove room" aria-label="Remove room">&times;</button>' +
@@ -4635,7 +4656,7 @@
       state.rooms.forEach(function (r) { total += area(r); if (r.source === 'estimated') est++; });
       $('statRooms').textContent = state.rooms.length;
       $('statArea').textContent = Math.round(total).toLocaleString();
-      $('statEst').textContent = est;
+      $('statEst').innerHTML = est ? ' <span class="badge estimated">' + est + ' estimated</span>' : '';
     }
 
     function renderAll() { syncGeometry(); renderFoundNote(); renderCards(); renderStats(); renderScaleBar(); renderRoomPick(); if (state.mode === 'furnish') { renderFurnish(); renderSpacing(); } renderDoorBar(); renderDoorList(); if (state.mode === 'light') renderLight(); draw(); }
@@ -5414,26 +5435,17 @@
          <div id="measureMain">
           <div class="found-note hidden" id="foundNoteM"></div>
           <div class="tip-slot" data-tipslot="measure"></div>
-          <div class="stats">
-            <div class="stat"><b id="statRooms">0</b><span>Spaces</span></div>
-            <div class="stat"><b id="statArea">0</b><span>Total sq ft</span></div>
-            <div class="stat"><b id="statEst">0</b><span>Estimated</span></div>
-          </div>
-          <div class="rooms-head">
-            <p class="eyebrow">Rooms</p>
-            <button class="btn-secondary btn-sm" id="addBtn">+ Add a room</button>
-          </div>
+          <p class="m-sum"><b id="statRooms">0</b> rooms, <b id="statArea">0</b> sq ft<span id="statEst"></span></p>
           <div class="room-grid" id="roomGrid"></div>
-          <p class="hint">
-            <span class="legend"><span class="swatch"></span>From the plan</span>
-            <span class="legend"><span class="swatch dash"></span>Estimated</span>
-          </p>
-          <div class="m-doors" id="doorsSection">
-            <div class="rooms-head"><p class="eyebrow">Doors and windows</p></div>
-            <div class="btn-row"><button class="btn-secondary btn-sm" id="doorBtn">Mark a door</button><button class="btn-secondary btn-sm" id="winBtn">Mark a window</button></div>
-            <p class="hint" id="doorHint"></p>
-            <div id="doorList"></div>
-          </div>
+          <p class="m-add"><button class="link-btn" id="addBtn">+ Add a room</button></p>
+          <details class="l-more m-doors" id="doorsSection">
+            <summary>Doors and windows <span class="m-count" id="doorCount"></span></summary>
+            <div class="l-more-body">
+              <div class="btn-row"><button class="btn-secondary btn-sm" id="doorBtn">Mark a door</button><button class="btn-secondary btn-sm" id="winBtn">Mark a window</button></div>
+              <p class="hint" id="doorHint"></p>
+              <div id="doorList"></div>
+            </div>
+          </details>
          </div>
          <div class="hidden" id="measureDoor">
            <button class="link-btn detail-back" data-dback="1">&larr; Back</button>
