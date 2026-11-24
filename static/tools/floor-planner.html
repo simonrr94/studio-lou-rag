@@ -355,7 +355,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=20"></script>
+  <script src="/static/tools/plan-engine.js?v=21"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -1154,12 +1154,37 @@
         WALK_CACHE.key = key;
         try {
           WALK_CACHE.res = WALK.routes({ pieces: piecesFtRaw(), rooms: wallsFt(), wallTest: wallTestFt(),
-                                         doors: realDoors().map(doorFt) });
+                                         doors: realDoors().map(doorFt), enclosed: enclosedFt() });
           // the rooms the engine was given, in the same order, to name rooms and openings
           if (WALK_CACHE.res) WALK_CACHE.res.roomList = state.rooms.filter(function (r) { return r.ftShape; });
         } catch (e) { if (window.console) console.warn('Walkways skipped:', e); WALK_CACHE.res = null; }
       }
       return WALK_CACHE.res;
+    }
+    // Floor inside the outside walls, with every marked door and window closed, as a test on
+    // points in feet (kept until the doors or the plan change). Null if the walls don't close.
+    var ENCL = { key: null, mask: null };
+    function enclosedFt() {
+      var wm = state.walls && state.walls.map;
+      if (!wm || !state.scale) return null;
+      var k = wm.w / state.W, f = state.scale.ftPerPx;
+      var key = JSON.stringify([state.doors.map(function (d) { return [d.x, d.y, d.w, d.ux, d.uy, d.nx, d.ny]; }), wm.w, f, state.img && state.img.src.length]);
+      if (key !== ENCL.key) {
+        ENCL.key = key;
+        // Each door or window closed off from just inside its room out across the wall (18")
+        var segs = state.doors.map(function (d) {
+          var c = { x: d.x / 100 * state.W * k, y: d.y / 100 * state.H * k }, half = d.w / 24 / f * k, out = 9 / 12 / f * k;
+          var sg = d.out ? -1 : 1, m = { x: c.x - d.nx * sg * out, y: c.y - d.ny * sg * out };   // away from its room, into the wall
+          return { a: { x: m.x - d.ux * half, y: m.y - d.uy * half }, b: { x: m.x + d.ux * half, y: m.y + d.uy * half }, r: out + 2 };
+        });
+        try { ENCL.mask = OPENINGS.enclosed(wm, segs); } catch (e) { ENCL.mask = null; }
+      }
+      var mask = ENCL.mask;
+      if (!mask) return null;
+      return function (p) {
+        var x = Math.round(p.x / f * k), y = Math.round(p.y / f * k);
+        return x >= 0 && y >= 0 && x < wm.w && y < wm.h && mask[y * wm.w + x] === 1;
+      };
     }
     // A route's end, in words: "the bed's left side", "the sofa", "door 2"
     var SIDE_WORD = { left: 'left side', right: 'right side', front: 'front', back: 'back' };

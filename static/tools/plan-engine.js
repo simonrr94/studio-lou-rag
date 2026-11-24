@@ -267,6 +267,12 @@ var SNAP = (function () {
       if (errB < 0.25 && errB + 0.15 < errA) { var tmp = r.width; r.width = r.length; r.length = tmp; }
     }
     var fw = printed ? r.width : null, fh = printed ? r.length : null;
+    // Printed sizes measured outside the walls (a one-room plan's overall 13'10" x 12'0"):
+    // when the scanned walls already give the printed square footage, the walls are right
+    // and the sizes don't hold the box
+    if (printed && ppf && r.printedArea && q.l != null && q.r != null && q.t != null && q.b != null &&
+        Math.abs((q.r - q.l) * (q.b - q.t) / (ppf * ppf) / r.printedArea - 1) <= 0.1 &&
+        Math.abs(r.width * r.length / r.printedArea - 1) > 0.1) { fw = null; fh = null; }
     var yLo = q.t != null ? q.t : g.y - g.h / 2, yHi = q.b != null ? q.b : g.y + g.h / 2;
     var x = fixAxis(q.l, q.r, S.seed.x, fw, ppf, g.x - g.w / 2, g.x + g.w / 2, a.w,
       function (pos) { return wallNear(a, pos, yLo, yHi, true); });
@@ -2389,7 +2395,39 @@ var OPENINGS = (function () {
     });
     return out;
   }
-  return { find: find, breaks: breaks, pieces: pieces };
+  // The floor inside the plan's outside walls: everything that can't be reached from the edge
+  // of the image without crossing a wall, with the marked doors and windows closed (segs:
+  // [{ a, b, r }] in map px, r the half width to block). For walking routes over floor that no
+  // room box covers. Null when the outside walls don't close (a gap nobody marked), so nothing
+  // changes then.
+  function enclosed(a, segs) {
+    if (!a || !a.wall) return null;
+    var W = a.w, H = a.h, N = W * H, block = new Uint8Array(N), seen = new Uint8Array(N), i;
+    for (i = 0; i < N; i++) block[i] = a.wall[i];
+    (segs || []).forEach(function (sg) {
+      var L = Math.hypot(sg.b.x - sg.a.x, sg.b.y - sg.a.y), steps = Math.max(1, Math.ceil(L)), r = Math.ceil(sg.r);
+      for (var t = 0; t <= steps; t++) {
+        var cx = Math.round(sg.a.x + (sg.b.x - sg.a.x) * t / steps), cy = Math.round(sg.a.y + (sg.b.y - sg.a.y) * t / steps);
+        for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
+          var x = cx + dx, y = cy + dy;
+          if (x >= 0 && y >= 0 && x < W && y < H) block[y * W + x] = 1;
+        }
+      }
+    });
+    var q = new Int32Array(N), head = 0, tail = 0;
+    function push(j) { if (!seen[j] && !block[j]) { seen[j] = 1; q[tail++] = j; } }
+    for (var x0 = 0; x0 < W; x0++) { push(x0); push((H - 1) * W + x0); }
+    for (var y0 = 0; y0 < H; y0++) { push(y0 * W); push(y0 * W + W - 1); }
+    while (head < tail) {
+      var j = q[head++], x1 = j % W;
+      if (x1 > 0) push(j - 1); if (x1 < W - 1) push(j + 1);
+      if (j >= W) push(j - W); if (j < N - W) push(j + W);
+    }
+    var out = new Uint8Array(N), count = 0;
+    for (i = 0; i < N; i++) if (!seen[i] && !a.wall[i]) { out[i] = 1; count++; }
+    return count > N * 0.02 ? out : null;
+  }
+  return { find: find, breaks: breaks, pieces: pieces, enclosed: enclosed };
 })();
 
 /* =====================================================================
@@ -2710,7 +2748,8 @@ var WALK = (function () {
         if (PLAN.pointInPoly(p, rooms[r])) inR = true;
         else if (!near && GEO.edgeDist(p, rooms[r]) <= edgePad) near = true;
       }
-      if ((inR || near) && !wallTest(p)) { free[i] = 1; inside[i] = inR ? 1 : 0; }
+      // ...or inside the plan's outside walls where no room box reaches (a box drawn short)
+      if ((inR || near || (o.enclosed && o.enclosed(p))) && !wallTest(p)) { free[i] = 1; inside[i] = inR ? 1 : 0; }
     }
     // Furniture is in the way
     var owner = new Int32Array(N).fill(-1);
