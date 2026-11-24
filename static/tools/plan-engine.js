@@ -3111,9 +3111,14 @@ var LIGHT = (function () {
   // and task lights (pendants, under-cabinet, vanity, a desk lamp) bring the work surfaces up to the mood
   var TASK_ROOMS = { kitchen: 'over the counters and island', bath: 'at the mirror (vanity lights)', office: 'at the desk', laundry: 'over the work surfaces' };
   function taskRoom(typeId) { return TASK_ROOMS[typeId] || null; }
+  // Kitchens get 20 fc of general light (Lauren, Nov 24): close to the common one recessed light per
+  // 15 to 20 sq ft, since pendants and under-cabinet lights carry the counters to the mood's target
+  var GENERAL_FC = { kitchen: 20 };
   function general(typeId, mood) {
     var t = type(typeId), tg = target(typeId, mood);
-    return tg == null ? null : TASK_ROOMS[typeId] ? Math.min(tg, t.fc[0]) : tg;
+    if (tg == null) return null;
+    if (!TASK_ROOMS[typeId]) return tg;
+    return Math.min(tg, GENERAL_FC[typeId] != null ? GENERAL_FC[typeId] : t.fc[0]);
   }
   function defaultSize(typeId, ceil) { return ceil >= 10 ? 'r6' : type(typeId).size; }
 
@@ -3419,10 +3424,13 @@ var LIGHT = (function () {
   }
 
   /* ---------- Decorative and task fixtures (session 2) ----------
-     Typical outputs, all editable per light (my picks from common LED fixtures; the person
-     should use the lumens on what they buy):
-       chandelier 1,800 lm (several 300 lm bulbs), pendant 600 lm, flush mount 1,200 lm,
-       wall sconce 400 lm, floor lamp 800 lm, under-cabinet 300 lm per foot of counter.
+     Typical outputs, all editable per light (researched Nov 24; the person should use the
+     lumens on what they buy):
+       chandelier 2,400 lm (dining chandeliers run 1,800 to 3,600), pendant 600 lm (island
+       pendants beside recessed lights), flush mount 1,400 lm (common 13" to 14" size),
+       wall sconce 400 lm (800 each beside a vanity mirror, so a pair meets the ALA's 1,600
+       minimum), floor lamp 800 lm (reading range 450 to 800), under-cabinet 400 lm per foot
+       of counter (the level that reaches 50 fc on the counter).
      Placement (Visual Comfort):
        chandelier 1/2 to 2/3 of the table's width (the plan's room length + width in feet, in
        inches, kept inside that range); bottom 30" above the table or counter plus 3" for each
@@ -3432,12 +3440,12 @@ var LIGHT = (function () {
        mount suits better. */
   var KINDS = {
     recessed:   { name: 'Recessed light',      lm: 650 },
-    chandelier: { name: 'Chandelier',          lm: 1800, dia: 24, hangs: true },
+    chandelier: { name: 'Chandelier',          lm: 2400, dia: 24, hangs: true },
     pendant:    { name: 'Pendant',             lm: 600,  dia: 12, hangs: true },
-    flush:      { name: 'Flush mount',         lm: 1200, dia: 14 },
-    sconce:     { name: 'Wall sconce',         lm: 400,  dia: 6 },
+    flush:      { name: 'Flush mount',         lm: 1400, dia: 14 },
+    sconce:     { name: 'Wall sconce',         lm: 400,  vanityLm: 800, dia: 6 },
     floorlamp:  { name: 'Floor lamp',          lm: 800,  dia: 16 },
-    undercab:   { name: 'Under-cabinet light', lmFt: 300 }
+    undercab:   { name: 'Under-cabinet light', lmFt: 400 }
   };
   var TASK_KINDS = { pendant: 1, undercab: 1 };
   function snapIn(v, step) { return Math.round(v / step) * step; }
