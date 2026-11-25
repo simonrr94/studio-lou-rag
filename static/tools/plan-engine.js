@@ -2008,10 +2008,15 @@ var SPACE = (function () {
         // A vanity's back and ends fit to the bathroom walls; only its front needs room
         var vanityFit = pc.role === 'vanity' && sd.name !== 'front' && !other;
         var passage = inch >= PASSAGE && inch < RULES.walk.ok && !(pc.role === 'chair' && pc.group) && (other || (WALL_PATH[pc.role] && sideOk && Math.max(pc.w, pc.d) >= 36));
+        // A plain wall that isn't a walkway: up to 12" the piece is set against it on purpose (room
+        // outlines sit a little inside the drawn walls); farther than that it's just a gap, measured
+        // but not judged (nobody walks behind an armchair)
+        var free = false;
+        if (rule === 'walk' && !other && !passage) { if (inch <= 12) against = true; else if (inch < RULES.walk.ok) free = true; }
         var show = against || benchAtFoot || vanityFit ? false : rule === 'console' ? (status(rule, inch) === 'ok' ? 'selected' : 'always')
           : rule !== 'walk' ? 'always' : inch < AGAINST ? false : (passage && !(other && grouped(pc, other))) ? 'always' : 'selected';
-        lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, against: against,
-                     status: against ? 'ok' : status(rule, inch),
+        lines.push({ piece: i, side: sd.name, from: best.from, gap: best.gap, inch: inch, rule: rule, against: against, free: free,
+                     status: against || free ? 'ok' : status(rule, inch),
                      to: { x: best.from.x + sd.dir.x * best.gap, y: best.from.y + sd.dir.y * best.gap },
                      hit: best.hit, show: show });
       });

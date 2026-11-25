@@ -1416,7 +1416,12 @@
     function spacing() {
       if (!state.scale || !state.pieces.length) return [];
       var lines = SPACE.check(piecesFt(), wallsFt(), wallTestFt());
-      if (walkways()) lines.forEach(function (l) { if (l.rule === 'walk' && l.show === 'always') l.show = 'selected'; });
+      // With doors marked the walking routes judge walkways: plain gaps show only on the picked piece,
+      // and a gap to a wall is just measured
+      if (walkways()) lines.forEach(function (l) {
+        if (l.rule === 'walk' && l.show === 'always') l.show = 'selected';
+        if (l.rule === 'walk' && l.hit.type !== 'piece' && !l.against) { l.free = true; l.status = 'ok'; }
+      });
       return lines;
     }
     // Smallest room whose outline holds the piece's center, for the PDF list
@@ -1804,11 +1809,45 @@
       renderPieceBar(); renderDoorBar(); draw();
     }
 
+    // An island whose work aisle is too narrow, with a wall on its other side: one sentence about the
+    // room's width instead of two separate gaps. Across = counter + aisle + island + the gap behind;
+    // it needs the counter, a 42" aisle (one cook), the island and 30" to walk past behind it.
+    var OPPOSITE = { front: 'back', back: 'front', left: 'right', right: 'left' };
+    function islandSqueeze(lines) {
+      var out = {};
+      lines.forEach(function (l) {
+        if (l.rule !== 'aisle' || l.status === 'ok' || l.hit.type !== 'piece') return;
+        var a = state.pieces[l.piece], b = state.pieces[l.hit.i];
+        if (!a || !b || (a.role === 'island') === (b.role === 'island')) return;   // one island and one counter
+        var k = a.role === 'island' ? l.piece : l.hit.i, pc = state.pieces[k], counter = a.role === 'island' ? b : a;
+        // the way across: from the counter through the island, and the island's side facing on (to a wall)
+        var len = Math.hypot(l.to.x - l.from.x, l.to.y - l.from.y) || 1, v = { x: (l.to.x - l.from.x) / len, y: (l.to.y - l.from.y) / len };
+        if (k === l.piece) v = { x: -v.x, y: -v.y };
+        var back = lines.filter(function (m) {
+          if (m.piece !== k || m.hit.type === 'piece') return false;
+          var ml = Math.hypot(m.to.x - m.from.x, m.to.y - m.from.y) || 1;
+          return ((m.to.x - m.from.x) * v.x + (m.to.y - m.from.y) * v.y) / ml > 0.7;
+        })[0];
+        if (!back) return;
+        var along = Math.abs(v.x * Math.cos(pc.rot * Math.PI / 180) + v.y * Math.sin(pc.rot * Math.PI / 180));   // 1: across its width
+        var dim = along > 0.7 ? pc.w : pc.d;
+        var across = counter.d + l.inch + dim + back.inch, need = counter.d + 42 + dim + 30, fits = across - counter.d - 42 - 30;
+        if (across >= need) return;   // there is room: moving the island fixes it, so the usual rows say so
+        out[k] = { aisle: l, back: back, status: 'close',
+          label: 'The kitchen is ' + fmtFtIn(across / 12) + ' across here. The counter, a ' + Math.round(dim) + '" island, a 42" work aisle and 30" to walk past behind it need about ' + fmtFtIn(need / 12) + '.',
+          value: fits >= 18 ? 'An island up to ' + Math.floor(fits) + '" deep would fit' : 'No room for an island here' };
+      });
+      return out;
+    }
     // Every side of one piece, plus the room checks other pieces make against it
     var SIDE_NAME = { front: 'Front', back: 'Back', left: 'Left side', right: 'Right side' };
     function pieceChecks(k) {
-      var rows = [], fine = [], ORDER = { front: 0, back: 1, left: 2, right: 3 };
-      spacing().filter(function (l) { return (l.piece === k && (l.show !== false || l.against)) || (l.hit.type === 'piece' && l.hit.i === k && l.rule !== 'walk'); })
+      var rows = [], fine = [], ORDER = { front: 0, back: 1, left: 2, right: 3 }, all = spacing(), sqs = islandSqueeze(all), sq = sqs[k];
+      // the counter facing a squeezed island shows the same sentence
+      if (!sq) Object.keys(sqs).forEach(function (i) { var a = sqs[i].aisle; if (a.piece === k || a.hit.i === k) sq = sqs[i]; });
+      if (sq) rows.push('<div class="space-row"><span class="space-label">' + esc(sq.label) + '</span><span class="space-val">' + esc(sq.value) +
+        ' <span class="badge ' + BADGE[sq.status] + '">Too narrow</span></span></div>');
+      all.filter(function (l) { return !(sq && (l === sq.aisle || l === sq.back || (l.rule === 'aisle' && (l.piece === k || l.hit.i === k)))); }).filter(function (l) { return (l.piece === k && (l.show !== false || l.against)) || (l.hit.type === 'piece' && l.hit.i === k && l.rule !== 'walk'); })
         .sort(function (p, q) { return (p.piece === k ? 0 : 1) - (q.piece === k ? 0 : 1) || ORDER[p.side] - ORDER[q.side]; })
         .forEach(function (l) {
           var other = l.hit.type === 'piece' ? (l.piece === k ? l.hit.i : l.piece) : -1, on = other > -1 ? 'the ' + nameOf(other).toLowerCase() : 'the wall';
@@ -1816,9 +1855,12 @@
             : l.rule === 'tv' ? 'TV to ' + on
             : l.piece === k ? SIDE_NAME[l.side] + ' to ' + on
             : 'From the ' + nameOf(l.piece).toLowerCase();
-          var val = l.rule === 'talk' || l.rule === 'tv' ? fmtFtIn(l.gap) : l.against ? 'against the wall' : inchText(l.inch);
-          (l.status === 'ok' || l.against ? fine : rows).push('<div class="space-row"><span class="space-label">' + esc(label) + '</span><span class="space-val">' + val +
-            ' <span class="badge ' + BADGE[l.status] + '">' + (l.against ? 'On purpose' : spaceWord(l.rule, l.status, l.inch, l.near)) + '</span></span></div>');
+          var wallSet = l.against && l.rule === 'walk';   // a piece set against a plain wall (a bed's side keeps its own words)
+          var val = l.rule === 'talk' || l.rule === 'tv' ? fmtFtIn(l.gap) : l.against && !wallSet ? 'against the wall' : inchText(l.inch);
+          // A gap to a plain wall that isn't a walkway is only measured (see SPACE.check and spacing())
+          var free = l.free;
+          (l.status === 'ok' || l.against || free ? fine : rows).push('<div class="space-row"><span class="space-label">' + esc(label) + '</span><span class="space-val">' + val +
+            (free ? '' : ' <span class="badge ' + BADGE[l.status] + '">' + (wallSet ? 'Against the wall' : l.against ? 'On purpose' : spaceWord(l.rule, l.status, l.inch, l.near)) + '</span>') + '</span></div>');
         });
       return { bad: rows.join(''), fine: fine.join('') };
     }
@@ -3448,7 +3490,8 @@
     function spaceRows(room) {
       if (!state.scale) return [];
       var inRoom = function (i) { return !room || pieceRoom(state.pieces[i]) === room; };
-      var rows = SPACE.report(spacing()).filter(function (r) { return inRoom(r.a); }).map(function (r) {
+      var all = spacing(), sq = islandSqueeze(all);
+      var rows = SPACE.report(all).filter(function (r) { return inRoom(r.a) && !(r.type === 'aisle' && (sq[r.a] || sq[r.b])) && !(sq[r.a] && r.type === 'walk' && r.b < 0); }).map(function (r) {
         var label, value, A = nameOf(r.a).toLowerCase(), B = r.b > -1 ? nameOf(r.b).toLowerCase() : null;
         if (r.type === 'coffee') { label = nameOf(r.a) + ' to ' + B; value = inchText(r.inch); }
         else if (r.type === 'bed') {
@@ -3472,6 +3515,7 @@
         return { label: label, value: value, status: r.status, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0]), r.near) };
       });
       var pcs = piecesFt(), probs = [];
+      Object.keys(sq).forEach(function (i) { if (inRoom(+i)) rows.unshift({ label: sq[i].label, value: sq[i].value, status: sq[i].status, word: 'Too narrow' }); });
       conflicts().forEach(function (c) {
         if (!inRoom(c.a) && !(c.type === 'overlap' && inRoom(c.b))) return;
         probs.push(c.type === 'wall'
