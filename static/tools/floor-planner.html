@@ -476,7 +476,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=30"></script>
+  <script src="/static/tools/plan-engine.js?v=31"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -545,7 +545,6 @@
       lightSel: -1,     // index of the picked light, or -1
       lightAdd: false,  // the Add a light menu is open
       lampSel: null,    // Light: the id of the piece whose lamp is picked
-      lightTypeOpen: false,   // the room type picker is showing
       lightEditCeil: false,   // the plan's ceiling height is being changed
       lightOpen: { details: false, settings: false },   // which folds on the room card are open
       lightCfg: { ceil: 8, rooms: {} }
@@ -1758,9 +1757,9 @@
       }
       else {
         var r = state.rooms[state.selected], gs = furnGroups(r), t = r ? roomLType(r) : 'living';
-        html += '<div class="cat-type">' + (state.furnTypeOpen && r
-          ? 'Pieces for <select data-ftype aria-label="Room type">' + LIGHT.TYPES.map(function (o) { return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label.toLowerCase() + '</option>'; }).join('') + '</select>'
-          : 'Pieces for ' + (gs.length > 1 ? gs.map(function (x) { return x.toLowerCase(); }).join(' and ') : 'a' + (/^[aeiou]/i.test(LIGHT.type(t).label) ? 'n ' : ' ') + LIGHT.type(t).label.toLowerCase()) + (r ? ' <button class="link-btn" data-cact="ftype">Change</button>' : '')) + '</div>';
+        // The room's name says what it is; only a name that doesn't (Flex, Bonus) gets asked
+        if (r && !LIGHT.typeKnown(r.name)) html += '<div class="cat-type">What\u2019s this room used for? <select data-ftype aria-label="What this room is used for">' +
+          LIGHT.TYPES.map(function (o) { return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label.toLowerCase() + '</option>'; }).join('') + '</select></div>';
         gs.forEach(function (x) { if (gs.length > 1) html += head(x); html += cards(groupItems(x)); });
         html += own;
         var rest = FURNITURE.CATALOG.map(function (x) { return x.group; }).filter(function (x) { return x !== 'Decor' && gs.indexOf(x) < 0; });
@@ -1919,7 +1918,7 @@
           var c = lightCfg(rt); c.type = e.target.value; c.mood = null; c.size = null;
           if (c.done) suggestRoom(rt, true);
         }
-        state.furnTypeOpen = false; state.morePieces = false; renderCatalog(); draw();
+        state.morePieces = false; renderCatalog(); draw();
         return;
       }
       var pc = state.pieces[state.pieceSel], id = e.target.id;
@@ -2733,9 +2732,12 @@
           if (ev.hasTask) {
             ev.work = ev.fc + LIGHT.taskFc(surfaces, fixtures, strips);
             ev.workStatus = LIGHT.status(ev.work, ev.goal);
+            if (ev.workStatus === 'bright') ev.workStatus = 'ok';   // extra light on a counter is normal: that's what dimmers are for
           }
         }
       }
+      // The suggestion never calls itself too bright: only lights the person added, moved or changed can
+      if (ev.status === 'bright' && !ls.some(function (l) { return l.edited; })) ev.status = 'ok';
       return ev;
     }
     /* The lighting checks for a room, in plain sentences: hanging lights the right size and height,
@@ -3181,26 +3183,16 @@
       html += glossary();
       el.innerHTML = html;
     }
-    // Plain definitions, opened from the (i) buttons or at the bottom of the panel
+    // Plain definitions of the technical terms only, opened from the (i) buttons or at the bottom of the panel
     var GLOSS = [
       ['fc', 'Foot-candles', 'How much light lands on the floor, table or counter where you need it. One foot-candle is one lumen spread over one square foot. A cozy living room is about 10 to 15, and a kitchen counter for cooking about 50. Think of lumens as the water coming out of a hose, and foot-candles as how wet the ground gets.'],
       ['lumens', 'Lumens', 'How much light a bulb or fixture gives off. A typical lamp bulb gives about 800, and a 4" recessed light about 650.'],
-      ['mood', 'Mood', 'How bright the room feels overall: Cozy for relaxing, Balanced for everyday, Bright for working. Each sets the room’s target in foot-candles.'],
-      ['general', 'General light', 'The even, all-over light from the ceiling. In kitchens, bathrooms, offices and laundry rooms, the ceiling lights give general light and task lights do the bright work.'],
-      ['task', 'Task light', 'Light aimed at a job: pendants over an island, under-cabinet lights, sconces beside a vanity mirror, or a desk lamp.'],
-      ['work', 'Work surfaces', 'The counters, island or desk where the work happens. Their foot-candles count the ceiling’s general light plus the task lights right above or beside them.'],
-      ['recessed', 'Recessed light', 'A light set into the ceiling so it sits flush. 4" and 6" are the width of the opening; 6" lights usually give more light.'],
-      ['chandelier', 'Chandelier', 'A decorative hanging light, usually over a dining table. It should be about half to two thirds as wide as the table, with its bottom 30" above the table (3" more for each foot of ceiling over 8\').'],
-      ['pendant', 'Pendant', 'A single hanging light, usually in a row over an island. Two for most islands, three for islands 7\' and longer, hung 30" above the counter.'],
-      ['flush', 'Flush mount', 'A ceiling light that sits close to the ceiling instead of hanging. The right pick for ceilings 8\' and lower, where a hanging light would be in the way.'],
-      ['undercab', 'Under-cabinet light', 'A strip of light under the upper cabinets that lights the counter right where you work, without your own shadow in the way.'],
-      ['sconce', 'Wall sconce', 'A light mounted on the wall. Beside a bathroom mirror, one on each side lights your face without shadows, with their centers 60" to 65" off the floor. Together they should give 1,600 lumens or more at a single vanity and 3,000 at a double. On the plan, the short line is the wall plate and the circle with an X is the light.'],
-      ['kelvin', 'Light color (K)', 'How warm or cool a bulb’s light looks, in kelvins (K). 2700K is warm and cozy like a classic bulb, 3000K is a soft warm white, and 4000K and up looks cool and bright. Warm white (2700K to 3000K) suits most rooms in a home.'],
-      ['beam', 'Beam', 'How wide a light spreads. Wide lights a whole area. Narrow puts it on one spot, like art or a counter.'],
-      ['method', 'Lumen method', 'The standard way to estimate how many lights a room needs from its size and target. It gives planning numbers, not an electrical plan.']
+      ['kelvin', 'Color temperature (K)', 'How warm or cool a bulb’s light looks, in kelvins (K). 2700K is warm and cozy like a classic bulb, 3000K is a soft warm white, and 4000K and up looks cool and bright. Warm white (2700K to 3000K) suits most rooms in a home.'],
+      ['beam', 'Beam spread', 'How wide the cone of light from a fixture is. A wide beam (about 90 degrees) lights a whole area; a narrow one (about 40 degrees) puts light on one spot, like art or a counter.']
     ];
     function info(term) {
       var g = GLOSS.filter(function (x) { return x[0] === term; })[0];
+      if (!g) return '';   // only the technical terms get an (i)
       return '<button type="button" class="l-i" data-term="' + term + '" aria-label="What ' + (g ? g[1].toLowerCase() : term) + ' means">i</button>';
     }
     function glossary() {
@@ -3226,11 +3218,11 @@
     function roomLightCard(r) {
       var c = lightCfg(r), t = roomLType(r), html = '';
       if (!r.ftShape) return html + '<p class="pane-sub">This room has no outline on the plan yet. Fix it in Measure.</p>';
-      var typeSel = '<select data-lf="type" aria-label="Room type">' + LIGHT.TYPES.map(function (o) {
-        return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label + '</option>';
+      var typeSel = '<select data-lf="type" aria-label="What this room is used for">' + LIGHT.TYPES.map(function (o) {
+        return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label.toLowerCase() + '</option>';
       }).join('') + '</select>';
-      html += '<p class="l-quiet">' + (state.lightTypeOpen ? 'Room type ' + typeSel : 'Room type: ' + LIGHT.type(t).label.toLowerCase() + ' <button class="link-btn" data-lact="type">Change</button>') + '</p>';
-      if (roomTarget(r) == null) return html + '<p class="pane-sub">Outdoor spaces aren’t planned here yet. Change the room type to light it.</p>';
+      if (!LIGHT.typeKnown(r.name)) html += '<p class="l-quiet">What\u2019s this room used for? ' + typeSel + '</p>';
+      if (roomTarget(r) == null) return html + '<p class="pane-sub">Outdoor spaces aren\u2019t planned here yet.</p>';
       var fcs = LIGHT.type(t).fc, mood = roomMood(r), size = roomSize(r);
       html += '<span class="l-label">Mood' + info('mood') + '</span>' + seg('mood', LIGHT.MOODS.map(function (m) { return { v: m.id, t: m.label }; }), mood);
       var ev = roomLight(r), tgt = ev.target;
@@ -3342,7 +3334,7 @@
       if (!b) return;
       if (b.hasAttribute('data-term')) { e.preventDefault(); showTerm(b.getAttribute('data-term')); return; }
       var ri = b.getAttribute('data-room');
-      if (ri != null) { state.lightSel = -1; state.lightAdd = false; state.lightTypeOpen = false; select(+ri, false); return; }
+      if (ri != null) { state.lightSel = -1; state.lightAdd = false; select(+ri, false); return; }
       var add = b.getAttribute('data-ladd');
       if (add) { addLight(add); return; }
       var act = b.getAttribute('data-lact'), sg = b.closest('[data-lseg]'), r = state.rooms[state.selected], l = state.lights[state.lightSel];
@@ -3353,9 +3345,8 @@
         state.lampSel = null; renderLight(); draw(); return;
       }
       if (act === 'addlamp') { addLampFor(+b.getAttribute('data-pid')); return; }
-      if (act === 'allrooms') { state.lightAdd = false; state.lightTypeOpen = false; select(-1, false); return; }
+      if (act === 'allrooms') { state.lightAdd = false; select(-1, false); return; }
       if (act === 'ceil') { state.lightEditCeil = true; renderLight(); var ci = $('lCeilPlan'); if (ci) { ci.focus(); ci.select(); } return; }
-      if (act === 'type') { state.lightTypeOpen = true; renderLight(); return; }
       if (act === 'lightup') {
         var hv = parseFtIn($('lCeilAsk').value);
         if (!hv || hv < 7 || hv > 30) { $('lCeilAsk').classList.add('bad'); return; }
@@ -3390,7 +3381,7 @@
         if (!(n >= lo && n <= hi)) { t.classList.add('bad'); return null; }
         return n;
       }
-      if (f === 'type' && r) { state.lightTypeOpen = false; lightSetting(r, 'type', t.value); }
+      if (f === 'type' && r) lightSetting(r, 'type', t.value);
       else if (f === 'ceil' && r) {
         var v = t.value.trim() ? parseFtIn(t.value) : null;
         if (t.value.trim() && (!v || v < 7 || v > 30)) { t.classList.add('bad'); return; }
@@ -3447,7 +3438,6 @@
       if (cat) { state.cat = cat; state.ownOpen = false; state.lampNote = null; renderCatalog(); return; }
       var fact = btn.getAttribute('data-cact');
       if (fact === 'more') { state.morePieces = !state.morePieces; renderCatalog(); return; }
-      if (fact === 'ftype') { state.furnTypeOpen = true; renderCatalog(); return; }
       if (btn.getAttribute('data-tablelamp')) { addTableLamp(); return; }
       if (btn.getAttribute('data-own')) { state.ownOpen = !state.ownOpen; renderCatalog(); if (state.ownOpen) $('customName').focus(); return; }
       if (act === 'done') { deselect(); return; }
@@ -4975,7 +4965,7 @@
       if (i !== state.selected) state.lampNote = null;
       if (i !== state.selected) {
         state.ptSel = -1;
-        state.morePieces = false; state.furnTypeOpen = false;
+        state.morePieces = false;
       }
       var changed = state.selected !== i;
       state.selected = i;
@@ -5086,6 +5076,8 @@
       var f = el.getAttribute('data-f');
       if (f === 'name') {
         r.name = el.value.slice(0, 40) || 'Room';
+        var lc = state.lightCfg.rooms[r.id];
+        if (lc && lc.type && LIGHT.typeKnown(r.name)) lc.type = null;   // the new name says what the room is
         draw();
       } else if (f === 'width' || f === 'length') {
         var v = parseFtIn(el.value);
@@ -5333,7 +5325,7 @@
         });
         y += 10;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(107, 101, 96);
-        var sn = doc.splitTextToSize('Guides used: walkways 36" (30" is tight); sofa to coffee table 14" to 18"; beside a bed 24" (18" is tight) and 30" at the foot (24" is tight); around a dining table 36" (24" on a side with no chairs, 44" if people walk behind seated guests); behind a desk and in front of a dresser 36" (30" is tight); seats facing each other within 8 feet; a TV about 1 to 1.7 times its screen size away; 30" in front of a vanity (21" is tight). Spacing is measured on this plan and its scale, so check it with a tape measure before buying.', contentW);
+        var sn = doc.splitTextToSize('Measured on this plan\u2019s scale. Check with a tape measure before buying.', contentW);
         doc.text(sn, margin, y + 4);
         y += sn.length * 12 + 18;
       }
@@ -5602,6 +5594,8 @@
       $('pane-erase').addEventListener('click', onEraseClick);
       $('brushSize').addEventListener('input', function () { state.brush = +this.value; draw(); });
       $('eraseOpen').addEventListener('click', startEraseTool);
+      // From Measure or the More menu: clearing works on the plan in Furnish, so go there first
+      $('eraseOpenM').addEventListener('click', function () { if (!state.img) return; if (state.mode !== 'furnish') setMode('furnish'); startEraseTool(); });
       $('rugBody').addEventListener('click', onFurnishClick);
       renderCatalog();
       var fp = $('furnishPanel');
@@ -5834,6 +5828,7 @@
           <button role="menuitem" class="mm-core" data-more="saveBtn" id="moreSave">Save</button>
           <button role="menuitem" class="mm-core" data-more="pdfBtn">Download PDF</button>
           <button role="menuitem" class="mm-core" data-more="pngBtn">Download PNG</button>
+          <button role="menuitem" data-more="eraseOpenM">Clear furniture off the plan</button>
           <button role="menuitem" data-more="resetBtn">New plan</button>
           <button role="menuitem" data-more="keysBtn">Keys and gestures</button>
         </div>
@@ -5882,6 +5877,7 @@
           <p class="m-sum"><b id="statRooms">0</b> rooms, <b id="statArea">0</b> sq ft<span id="statEst"></span></p>
           <div class="room-grid" id="roomGrid"></div>
           <p class="m-add"><button class="link-btn" id="addBtn">+ Add a room</button></p>
+          <p class="m-add"><button class="link-btn" id="eraseOpenM">Furniture drawn on the plan? Clear it off</button></p>
           <details class="l-more m-doors" id="doorsSection">
             <summary>Doors and windows <span class="m-count" id="doorCount"></span></summary>
             <div class="l-more-body">

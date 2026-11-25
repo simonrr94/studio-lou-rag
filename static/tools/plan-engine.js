@@ -276,8 +276,13 @@ var SNAP = (function () {
     var yLo = q.t != null ? q.t : g.y - g.h / 2, yHi = q.b != null ? q.b : g.y + g.h / 2;
     var x = fixAxis(q.l, q.r, S.seed.x, fw, ppf, g.x - g.w / 2, g.x + g.w / 2, a.w,
       function (pos) { return wallNear(a, pos, yLo, yHi, true); });
+    // A space with no printed size that scanned far past the model's own box ran out through
+    // doorways (a pantry stretching across the plan): that direction keeps the model's box
+    var ranOn = function (lo, hi, size) { return !printed && hi - lo > Math.max(size * 2.5, size + (ppf ? 4 * ppf : 0)); };
+    if (ranOn(x[0], x[1], g.w)) x = [Math.max(0, g.x - g.w / 2), Math.min(a.w, g.x + g.w / 2)];
     var y = fixAxis(q.t, q.b, S.seed.y, fh, ppf, g.y - g.h / 2, g.y + g.h / 2, a.h,
       function (pos) { return wallNear(a, pos, x[0], x[1], false); });
+    if (ranOn(y[0], y[1], g.h)) y = [Math.max(0, g.y - g.h / 2), Math.min(a.h, g.y + g.h / 2)];
     r.bbox = { x: x[0] / a.w * 100, y: y[0] / a.h * 100, w: (x[1] - x[0]) / a.w * 100, h: (y[1] - y[0]) / a.h * 100 };
     r.snapped = true; r.weak = false;
   }
@@ -3309,6 +3314,10 @@ var LIGHT = (function () {
     if (/hall|entry|foyer|stair|corridor|mud|landing|gallery|vestibule/.test(n)) return 'hall';
     return 'living';
   }
+  // Does the name say what the room is? ("Flex room" or "Bonus room" doesn't, so the person is asked)
+  function typeKnown(name) {
+    return typeOf(name) !== 'living' || /living|family|great|\bden\b|lounge|sitting|parlou?r|\btv\b|media|studio|\brec\b|recreation/i.test(String(name || ''));
+  }
   function target(typeId, mood) {
     var t = type(typeId);
     if (!t.fc) return null;
@@ -3722,6 +3731,6 @@ var LIGHT = (function () {
   return { CU: CU, LLF: LLF, WORK: WORK, WALL: WALL, LAMP_LM: LAMP_LM, FIXTURES: FIXTURES, BEAMS: BEAMS, TYPES: TYPES, MOODS: MOODS,
            KINDS: KINDS, chandelierDia: chandelierDia, chandelierRange: chandelierRange, hangOver: hangOver,
            pendantSpots: pendantSpots, vanitySpots: vanitySpots, vanityNeed: vanityNeed, vanityLm: vanityLm, SCONCE_H: SCONCE_H, taskFc: taskFc, edgeDist: edgeDist,
-           type: type, typeOf: typeOf, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
+           type: type, typeOf: typeOf, typeKnown: typeKnown, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
            isLamp: isLamp, hasLampSpot: hasLampSpot, lampSpot: lampSpot, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
 })();
