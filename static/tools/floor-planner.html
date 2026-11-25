@@ -334,7 +334,8 @@
     .l-res-top span { font-size: 13px; color: #6b6560; }
     .l-res p { font-size: 13px; color: #433E3C; line-height: 1.5; margin-top: 8px; }
     .l-st { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 99px; padding: 3px 9px; margin-left: auto; white-space: nowrap; }
-    .l-st.ok { background: #eef2dc; color: #4f5c1d; }
+    .l-note.l-follow { color: #7a5a12; }
+    .l-st.ok, .l-st.full { background: #eef2dc; color: #4f5c1d; }
     .l-st.dim { background: #f7ecd2; color: #7a5a12; }
     .l-st.bright { background: #f6e6e9; color: #582b36; }
     .l-note { font-size: 12.5px; color: #6b6560; line-height: 1.5; margin: 0 0 10px; }
@@ -2635,15 +2636,42 @@
       var A = roomAreaFt(r), tg = roomGeneral(r), keptLm = keptRec.reduce(function (sum, l) { return sum + l.lm; }, 0), n = res.lights.length;
       if (!c.size && size === 'r6' && n && LIGHT.fc(keptLm + n * LIGHT.FIXTURES.r6.lm, A) > tg * 1.45 && LIGHT.fc(keptLm + n * LIGHT.FIXTURES.r4.lm, A) >= tg * 0.9) {
         c.auto = size = 'r4';
+      } else if (!c.size && size === 'r4' && n && LIGHT.fc(keptLm + n * LIGHT.FIXTURES.r4.lm, A) < tg * 0.85 &&
+                 LIGHT.fc(keptLm + n * LIGHT.FIXTURES.r6.lm, A) <= tg * 1.45) {
+        c.auto = size = 'r6';   // the ceiling can't hold enough 4" lights: the same spots with 6" lights get closer
       }
       res.lights.forEach(function (p) { state.lights.push(makeLight(size, pctX(p.x), pctY(p.y), r.id, false)); });
       c.done = true; c.extra = res.extra || 0; c.short = res.short || 0;
+      c.furn = furnSig(r);
       c.aimed = groupFor(r).some(function (pc) { return pc.role !== 'decor' && pc.role !== 'chair'; });
     }
-    // Rooms never lit yet get their recommendation (on coming into Light, or once the scale is set)
+    /* The furniture a room's lights were placed for: what's in the room and where. When it changes,
+       a room whose lights are all the tool's own is lit again; a room with lights the person placed
+       or changed gets a line offering to update them (keeping theirs). */
+    function furnSig(r) {
+      var list = state.pieces.filter(function (pc) { return pc.role !== 'decor' && pieceRoom(pc) === r; }).map(function (pc) {
+        return pc.id + ':' + pc.type + ':' + Math.round(pc.x * 20) + ':' + Math.round(pc.y * 20) + ':' + Math.round(pc.rot || 0) + ':' + pc.w + ':' + pc.d + (pc.flip ? 'f' : '');
+      }).sort();
+      return list.join('|');
+    }
+    function furnChanged(r) { var c = lightCfg(r); return !!(c.done && c.furn != null && c.furn !== furnSig(r)); }
+    function hasOwnLights(r) { return lightsIn(r).some(function (l) { return l.edited; }); }
+    // "You added the dining table since..." for the room card
+    function furnChangeLine(r) {
+      var c = lightCfg(r), was = {};
+      (c.furn || '').split('|').forEach(function (k) { if (k) was[k.split(':')[0]] = 1; });
+      var added = state.pieces.filter(function (pc) { return pc.role !== 'decor' && pc.role !== 'chair' && pieceRoom(pc) === r && !was[pc.id]; });
+      var lead = added.length === 1 ? 'You added the ' + esc(nameOf(state.pieces.indexOf(added[0])).toLowerCase()) + ' after these lights were placed.'
+        : added.length ? 'You added furniture after these lights were placed.' : 'The furniture here changed after these lights were placed.';
+      return lead + ' <button class="link-btn" data-lact="follow">Update the lights</button> (yours stay put).';
+    }
+    // Rooms never lit yet get their recommendation (on coming into Light, or once the scale is set);
+    // rooms whose furniture changed since, with only the tool's own lights, are lit again
     function ensureLights() {
       if (!state.scale) return;
-      var todo = state.rooms.filter(function (r) { return lightable(r) && !lightCfg(r).done; });
+      var rooms = state.rooms.filter(lightable);
+      rooms.forEach(function (r) { var c = lightCfg(r); if (c.done && c.furn == null) c.furn = furnSig(r); });   // older saves: start from now
+      var todo = rooms.filter(function (r) { return !lightCfg(r).done || (furnChanged(r) && !hasOwnLights(r)); });
       if (!todo.length) return;
       pushUndo();
       todo.forEach(function (r) { suggestRoom(r, false); });
@@ -2738,6 +2766,8 @@
       }
       // The suggestion never calls itself too bright: only lights the person added, moved or changed can
       if (ev.status === 'bright' && !ls.some(function (l) { return l.edited; })) ev.status = 'ok';
+      // ...or too dim: when the ceiling can't hold enough lights, it's as much as fits (the card says what makes up the rest)
+      if (ev.status === 'dim' && !ls.some(function (l) { return l.edited; })) ev.status = 'full';
       return ev;
     }
     /* The lighting checks for a room, in plain sentences: hanging lights the right size and height,
@@ -3129,7 +3159,7 @@
        The plan's ceiling height, the picked room's settings, results and checks, and every room at a
        glance. With a light picked, that light's details instead. */
     var MOOD_WORD = { cozy: 'Cozy', balanced: 'Balanced', bright: 'Bright' };
-    var LSTATUS = { ok: 'On target', dim: 'A little dim', bright: 'Brighter than needed' };
+    var LSTATUS = { ok: 'On target', full: 'As much as fits', dim: 'A little dim', bright: 'Brighter than needed' };
     var ADD_KINDS = [['recessed', 'Recessed'], ['chandelier', 'Chandelier'], ['pendant', 'Pendant'], ['flush', 'Flush mount'], ['sconce', 'Wall sconce']];
     function fmtNum(n) { return Math.round(n).toLocaleString(); }
     function lightWord(n) { return n === 1 ? 'light' : 'lights'; }
@@ -3174,8 +3204,8 @@
         html += '<div class="l-list">' + state.rooms.map(function (rm, i) {
           if (!rm.ftShape) return '';
           if (roomTarget(rm) == null) return roomRow(i, '', 'Outdoor');
-          var ev = roomLight(rm), n = lightChecks(rm).length, all = ev.count + ev.extraLights;
-          return roomRow(i, n || ev.status !== 'ok' || (ev.vanity && ev.vanity.status !== 'ok') ? 'dim' : 'ok', n ? n + ' to check' : all + ' ' + lightWord(all) + ', ' + LSTATUS[ev.status].toLowerCase());
+          var ev = roomLight(rm), n = lightChecks(rm).length + (furnChanged(rm) ? 1 : 0), all = ev.count + ev.extraLights;
+          return roomRow(i, n || (ev.status !== 'ok' && ev.status !== 'full') || (ev.vanity && ev.vanity.status !== 'ok') ? 'dim' : 'ok', n ? n + ' to check' : all + ' ' + lightWord(all) + ', ' + LSTATUS[ev.status].toLowerCase());
         }).join('') + '</div>' +
         '<p class="l-note" style="margin-top:12px">Pick a room to see its lights and change its mood.</p>' +
         '<p class="l-note">For bulbs, warm white (2700K to 3000K' + info('kelvin') + ') suits most rooms, and dimmers on the ceiling lights let each room go from bright to cozy.</p>';
@@ -3236,6 +3266,7 @@
       }
       html += '</div>';
       var warns = lightChecks(r);
+      if (furnChanged(r)) html += '<p class="l-note l-follow">' + furnChangeLine(r) + '</p>';
       html += warns.map(function (n) { return '<p class="l-note l-warn">' + n + '</p>'; }).join('');
       html += lamplessChairs(r).map(function (o) {
         return '<p class="l-note l-sug">The ' + esc(nameOf(state.pieces.indexOf(o.pc)).toLowerCase()) + ' has no lamp near it for reading. <button class="link-btn" data-lact="addlamp" data-pid="' + o.pc.id + '">Add a floor lamp</button></p>';
@@ -3250,7 +3281,7 @@
         return n + ' ' + (n === 1 ? name : name.replace(/light$/, 'lights').replace(/(lier|ant|mount|sconce|lamp)$/, '$1s'));
       });
       var notes = [], mine = lightsIn(r).some(function (q) { return q.edited; });
-      if (ev.status === 'dim' && c.short && !mine) notes.push('Recessed lights alone can’t reach ' + tgt + ' here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Lamps or task lights make up the rest.');
+      if (ev.status === 'full') notes.push('Recessed lights alone can’t reach ' + tgt + ' here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Lamps or task lights make up the rest.');
       else if (ev.status === 'dim') notes.push('Add a light' + (size === 'r4' ? ', or switch to 6" lights in More settings,' : '') + ' to reach the target.');
       if (ev.status === 'bright') notes.push('Brighter than the target. A dimmer brings it down, or remove a light.');
       if (ev.vanity && ev.vanity.status === 'dim') notes.push('The vanity needs ' + fmtNum(ev.vanity.need) + ' lumens or more from the lights beside its mirror' + (ev.vanity.need > 2000 ? ' (a double vanity)' : '') + '. Brighter sconces, or one more, close the gap.');
@@ -3356,6 +3387,7 @@
       }
       if (act === 'remove') { removeLight(); return; }
       if (act === 'addmenu') { state.lightAdd = !state.lightAdd; renderLight(); return; }
+      if (act === 'follow' && r) { pushUndo(); suggestRoom(r, true); renderLight(); draw(); return; }
       if (act === 'redo' && r) { pushUndo(); suggestRoom(r, false); renderLight(); draw(); return; }
       if (!sg) return;
       var key = sg.getAttribute('data-lseg'), v = b.getAttribute('data-v');
