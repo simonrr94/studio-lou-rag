@@ -134,7 +134,6 @@
     .seg-row button { border: none; background: transparent; border-radius: 50px; padding: 7px 16px; font: 600 13px 'DM Sans', sans-serif; color: #433E3C; cursor: pointer; }
     .seg-row button.on { background: #582b36; color: #FAF9F6; }
     .brush-field input { width: 100%; accent-color: #582b36; }
-    .erase-open { margin: 0 0 12px; }
     .member-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .group-hint { margin-top: 12px; }
     .member-rug { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 50px; background: #f5f0e8; color: #6b6560; font-size: 13px; font-weight: 600; }
@@ -198,9 +197,6 @@
     .found-note .btn-sm { margin-top: 8px; }
     .found-note .note-x { position: absolute; top: 6px; right: 8px; border: none; background: none; font-size: 18px; line-height: 1; color: #6b6560; cursor: pointer; padding: 2px 4px; }
     .found-note .note-x:hover { color: #433E3C; }
-    .legend { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; white-space: nowrap; }
-    .swatch { width: 18px; height: 0; border-top: 2px solid #582b36; display: inline-block; }
-    .swatch.dash { border-top-style: dashed; }
 
     /* Measure: stats and room cards */
     .stats { display: flex; gap: 22px; margin-bottom: 18px; }
@@ -217,9 +213,6 @@
     .room-card.compact { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
     .room-card.compact:hover { background: #f5f0e8; }
     .room-card.selected { background: #fbfaf6; box-shadow: inset 3px 0 0 #A6BE47; }
-    .rc-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; color: #433E3C; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rc-size { font-size: 13px; color: #6b6560; white-space: nowrap; }
-    .rc-flag { width: 18px; height: 18px; border-radius: 50%; background: #f6e6e9; color: #582b36; font: 700 11px 'DM Sans', sans-serif; display: inline-flex; align-items: center; justify-content: center; flex: none; }
     .m-add { margin: 8px 0 0; font-size: 13.5px; }
     #measureMain.one-room .m-sum, #measureMain.one-room .m-add, #measureMain.one-room .m-doors, #measureMain:not(.one-room) #measureBack { display: none; }
     #roomGrid { background: none; border: none; border-radius: 0; overflow: visible; }
@@ -302,8 +295,6 @@
     .section-label { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #6b6560; margin: 16px 0 8px; }
 
     /* Rugs */
-    .rug-advice { font-size: 13px; line-height: 1.55; color: #6b6560; background: #f5f0e8; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
-    .style-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
     .rug-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .rug-card { text-align: left; color: #433E3C; background: #ffffff; border: 1px solid #e3dccf; border-radius: 12px; padding: 9px 10px 10px; cursor: pointer; }
     .rug-card:hover { border-color: #582b36; }
@@ -353,7 +344,6 @@
     .l-dot.ok { background: #7f9433; } .l-dot.dim { background: #b07d14; } .l-dot.bright { background: #582b36; }
     .l-plan { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
     .l-plan .field { flex: 1; margin: 0; }
-    .l-section { border-top: 1.5px solid #d0c9bc; margin-top: 18px; padding-top: 14px; }
     .l-i { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1.3px solid #b5a999; background: #ffffff; color: #6b6560; font: italic 600 10px Georgia, serif; cursor: pointer; padding: 0; margin-left: 5px; vertical-align: 1px; text-transform: none; letter-spacing: 0; }
     .l-i:hover { border-color: #582b36; color: #582b36; }
     .l-gloss { margin-top: 16px; border: 1.5px solid #d0c9bc; border-radius: 12px; background: #ffffff; }
@@ -1255,7 +1245,6 @@
        Pieces belong to the plan, not to a room, so they can sit anywhere
        (open plans, doorways). Each is { id, type, name, kind, w, d, h, x, y, rot }:
        size in inches, center in percent of the image, rot in degrees clockwise. */
-    function pieceOK(pc) { return pc && state.scale; }
     // Center in canvas px, size in canvas px, and k: canvas px per inch
     function piecePx(pc) {
       var f = state.scale.ftPerPx, k = 1 / 12 / f;
@@ -1668,7 +1657,6 @@
        [/office|study/i, 'Office'], [/bed/i, 'Bedroom']].forEach(function (m) { if (m[0].test(n) && out.indexOf(m[1]) < 0) out.push(m[1]); });
       return out;
     }
-    function catFor(r) { return null; }
     // A small top-down drawing of a catalog piece (with its chairs), as SVG
     // The catalog card's drawing: the piece (and a dining table's chairs) as drawn on the plan
     function pieceIcon(it) { return '<img class="piece-art" src="' + FURNART.thumb(it, 132, 46) + '" alt="">'; }
@@ -2400,7 +2388,6 @@
     function pieceById(id) { return state.pieces.filter(function (pc) { return pc.id === id; })[0] || null; }
     function kindOf(l) { return l.kind || 'recessed'; }
     function lightsIn(r) { return state.lights.filter(function (l) { return l.room === r.id; }); }
-    function recessedIn(r) { return lightsIn(r).filter(function (l) { return kindOf(l) === 'recessed'; }); }
     function lightFt(l) { var f = state.scale.ftPerPx; return { x: l.x / 100 * state.W * f, y: l.y / 100 * state.H * f, lm: lumensOf(l), beam: l.beam || 'wide' }; }
     function pctX(ft) { return ft / state.scale.ftPerPx / state.W * 100; }
     function pctY(ft) { return ft / state.scale.ftPerPx / state.H * 100; }
@@ -3005,9 +2992,6 @@
         var sp = darkestSpot(r, 0.15, 0.6) || center;
         l = makeFixture('sconce', sp.x, sp.y, r.id, { mount: LIGHT.SCONCE_H }, true);
         snapSconce(l);
-      } else if (kind === 'floorlamp') {
-        var fp = darkestSpot(r, 1) || center;
-        l = makeFixture('floorlamp', fp.x, fp.y, r.id, {}, true);
       } else {
         l = makeFixture(kind, center.x, center.y, r.id, {}, true);
       }
@@ -3719,7 +3703,6 @@
       if (state.selected > -1) select(-1, false);   // doors and windows live on the All rooms view
       var sec = $('doorsSection'); if (sec) { sec.open = true; if (sec.scrollIntoView) sec.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     }
-    function showPaneTab(t) { setTab(t); showPane(); }
 
     // The doors and windows so far, in Measure
     function renderDoorList() {
@@ -5325,7 +5308,6 @@
         showScreen('error');
       }
     }
-    function hideStatus() {}
 
     function reset() {
       if (unsavedWork() && !confirm('Start a new plan? Changes to this one since you last saved will be lost.')) return;

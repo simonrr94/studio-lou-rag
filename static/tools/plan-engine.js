@@ -519,9 +519,6 @@ var PLAN = (function () {
     if (wx < 0 || wy < 0 || wx >= a.w || wy >= a.h) return false;
     return a.wall[wy * a.w + wx] === 1;
   }
-  // Points between the two systems
-  function toWallPx(p, walls, displayW) { var k = wallRatio(walls, displayW); return k ? { x: p.x * k, y: p.y * k } : null; }
-  function fromWallPx(p, walls, displayW) { var k = wallRatio(walls, displayW); return k ? { x: p.x / k, y: p.y / k } : null; }
 
   return {
     MISMATCH: MISMATCH,
@@ -530,7 +527,7 @@ var PLAN = (function () {
     fmtFtIn: fmtFtIn, parseFtIn: parseFtIn, area: area, dimsArea: dimsArea, areaConflict: areaConflict, fmtArea: fmtArea,
     scaleFromAnalysis: scaleFromAnalysis, scaleFromLine: scaleFromLine,
     boxFt: boxFt, mismatch: mismatch,
-    wallRatio: wallRatio, wallAt: wallAt, toWallPx: toWallPx, fromWallPx: fromWallPx
+    wallRatio: wallRatio, wallAt: wallAt
   };
 })();
 
@@ -3466,7 +3463,6 @@ var LIGHT = (function () {
     floorlamp:  { name: 'Floor lamp',          lm: 800,  dia: 16 },
     undercab:   { name: 'Under-cabinet light', lmFt: 400 }
   };
-  var TASK_KINDS = { pendant: 1, undercab: 1, sconce: 1 };
   // Vanity sconces: offsets along a vanity (inches from its center) for one on each side of the
   // mirror, and one between the mirrors on a double vanity; centers 63" off the floor
   var SCONCE_H = 63;
@@ -3532,7 +3528,7 @@ var LIGHT = (function () {
   }
 
   return { CU: CU, LLF: LLF, WORK: WORK, WALL: WALL, LAMP_LM: LAMP_LM, FIXTURES: FIXTURES, BEAMS: BEAMS, TYPES: TYPES, MOODS: MOODS,
-           KINDS: KINDS, TASK_KINDS: TASK_KINDS, chandelierDia: chandelierDia, chandelierRange: chandelierRange, hangOver: hangOver,
+           KINDS: KINDS, chandelierDia: chandelierDia, chandelierRange: chandelierRange, hangOver: hangOver,
            pendantSpots: pendantSpots, vanitySpots: vanitySpots, vanityNeed: vanityNeed, vanityLm: vanityLm, SCONCE_H: SCONCE_H, taskFc: taskFc, edgeDist: edgeDist,
            type: type, typeOf: typeOf, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
            isLamp: isLamp, hasLampSpot: hasLampSpot, lampSpot: lampSpot, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
