@@ -370,7 +370,174 @@ var SNAP = (function () {
     return [lo != null ? lo : Math.max(0, gLo), hi != null ? hi : Math.min(max, gHi)];
   }
 
-  return { analyze: analyze, ocr: ocr, place: place, refit: refit };
+  // Pixels per foot from the plan's overall dimensions (the 20' and 28' lines around the outside),
+  // measured on the outside faces of the walls. Both directions have to agree within 6%, so a
+  // dimension that measures something else (a porch, an inside wall) gives no scale at all.
+  function overall(a, wFt, hFt) {
+    if (!a || !(wFt > 0) || !(hFt > 0)) return null;
+    var cols = new Array(a.w).fill(0), rows = new Array(a.h).fill(0);
+    for (var y = 0; y < a.h; y++) for (var x = 0; x < a.w; x++) if (a.wall[y * a.w + x] === 1) { cols[x]++; rows[y]++; }
+    // ignore specks: a column or row counts once it holds a real run of wall
+    function span(list, other) {
+      var need = Math.max(3, other * 0.02), lo = -1, hi = -1;
+      list.forEach(function (n, i) { if (n >= need) { if (lo < 0) lo = i; hi = i; } });
+      return lo < 0 ? 0 : hi - lo + 1;
+    }
+    var sx = span(cols, a.h) / wFt, sy = span(rows, a.w) / hFt;
+    if (!(sx > 0) || !(sy > 0) || Math.abs(sx / sy - 1) > 0.06) return null;
+    return (sx + sy) / 2;
+  }
+
+  // A room's outline traced from the plan, for a room whose printed square footage says it isn't
+  // the rectangle its box shows (an L-shaped entrance, a living room with an angled wall).
+  //   floor: 1 for floor inside the outside walls with the doors closed (map px)
+  //   taken: 1 for floor that belongs to another room (their boxes or shapes)
+  //   seed: a point in the room (map px); ppf: map px per foot; areaFt: the printed area
+  // Fills the floor connected to the seed, without crossing walls, doors or other rooms. The
+  // outline is kept only if its area is within 10% of the printed area, so a fill that leaks
+  // (a room open to another with no box there) is never used. Returns corners in map px, or null.
+  // Distance (px, 3-4 chamfer / 3) from each pixel with m[i] === 1 to the nearest one without
+  function distIn(m, w, h) {
+    var d = new Float32Array(w * h), BIG = 1e9, x, y, i;
+    for (i = 0; i < w * h; i++) d[i] = m[i] ? BIG : 0;
+    for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+      i = y * w + x; if (!d[i]) continue;
+      if (x > 0) d[i] = Math.min(d[i], d[i - 1] + 3);
+      if (y > 0) { d[i] = Math.min(d[i], d[i - w] + 3); if (x > 0) d[i] = Math.min(d[i], d[i - w - 1] + 4); if (x < w - 1) d[i] = Math.min(d[i], d[i - w + 1] + 4); }
+    }
+    for (y = h - 1; y >= 0; y--) for (x = w - 1; x >= 0; x--) {
+      i = y * w + x; if (!d[i]) continue;
+      if (x < w - 1) d[i] = Math.min(d[i], d[i + 1] + 3);
+      if (y < h - 1) { d[i] = Math.min(d[i], d[i + w] + 3); if (x < w - 1) d[i] = Math.min(d[i], d[i + w + 1] + 4); if (x > 0) d[i] = Math.min(d[i], d[i + w - 1] + 4); }
+    }
+    for (i = 0; i < w * h; i++) d[i] /= 3;
+    return d;
+  }
+  function traceRoom(a, floor, taken, seed, ppf, areaFt) {
+    var w = a.w, h = a.h, sx = Math.round(seed.x), sy = Math.round(seed.y), want = areaFt * ppf * ppf, i, x, y;
+    if (!(want > 0) || sx < 0 || sy < 0 || sx >= w || sy >= h) return null;
+    // Free floor, narrowed by 9" so slivers between neighboring boxes (under about 18") don't join
+    // rooms up; the fill is grown back out by the same 9" afterwards
+    var free = new Uint8Array(w * h);
+    for (i = 0; i < w * h; i++) free[i] = floor[i] === 1 && !taken[i] ? 1 : 0;   // taken: 1 another room, 2 a closed door or window
+    var r = 0.75 * ppf, dFree = distIn(free, w, h);
+    if (!(dFree[sy * w + sx] > r)) return null;
+    var core = new Uint8Array(w * h), stack = [sy * w + sx], n = 0;
+    core[sy * w + sx] = 1;
+    while (stack.length) {
+      i = stack.pop(); x = i % w; y = (i - x) / w;
+      if (++n > want * 1.35) return null;   // ran well past the printed area: it leaked
+      if (x > 0 && !core[i - 1] && dFree[i - 1] > r) { core[i - 1] = 1; stack.push(i - 1); }
+      if (x < w - 1 && !core[i + 1] && dFree[i + 1] > r) { core[i + 1] = 1; stack.push(i + 1); }
+      if (y > 0 && !core[i - w] && dFree[i - w] > r) { core[i - w] = 1; stack.push(i - w); }
+      if (y < h - 1 && !core[i + w] && dFree[i + w] > r) { core[i + w] = 1; stack.push(i + w); }
+    }
+    var notCore = new Uint8Array(w * h);
+    for (i = 0; i < w * h; i++) notCore[i] = core[i] ? 0 : 1;
+    var dCore = distIn(notCore, w, h), got = new Uint8Array(w * h);
+    n = 0;
+    for (i = 0; i < w * h; i++) if (free[i] && dCore[i] <= r + 1) { got[i] = 1; n++; }
+    if (n > want * 1.35 || n < want * 0.9) return null;   // too big can be an open side, trimmed below
+    // The outline: walk round the edge of the filled floor (clockwise), then keep only its corners
+    var start = -1;
+    for (var k = 0; k < w * h; k++) if (got[k]) { start = k; break; }
+    var D = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+    var inC = function (x, y) { return x >= 0 && y >= 0 && x < w && y < h && got[y * w + x] === 1; };
+    var dirOf = function (dx, dy) { for (var q = 0; q < 8; q++) if (D[q][0] === dx && D[q][1] === dy) return q; return 4; };
+    var cx = start % w, cy = (start - cx) / w, x0 = cx, y0 = cy, back = 4, pts = [], cap = 8 * (w + h) * 4;
+    do {
+      pts.push({ x: cx, y: cy });
+      var moved = false;
+      for (var t = 1; t <= 8; t++) {
+        var dd = (back + t) % 8, nx = cx + D[dd][0], ny = cy + D[dd][1];
+        if (inC(nx, ny)) {
+          var pd = (back + t - 1) % 8, bx = cx + D[pd][0], by = cy + D[pd][1];
+          cx = nx; cy = ny; back = dirOf(bx - cx, by - cy); moved = true; break;
+        }
+      }
+      if (!moved) return null;
+    } while (!(cx === x0 && cy === y0) && pts.length < cap);
+    // Corners: drop points within about 5" of a straight run (Douglas-Peucker), both halves of the loop
+    var eps = Math.max(1.5, ppf * 0.4);
+    function simplify(list) {
+      if (list.length < 3) return list;
+      var A = list[0], B = list[list.length - 1], far = 0, at = 0, L = Math.hypot(B.x - A.x, B.y - A.y) || 1;
+      for (var j = 1; j < list.length - 1; j++) {
+        var d = Math.abs((B.x - A.x) * (A.y - list[j].y) - (A.x - list[j].x) * (B.y - A.y)) / L;
+        if (d > far) { far = d; at = j; }
+      }
+      if (far <= eps) return [A, B];
+      return simplify(list.slice(0, at + 1)).slice(0, -1).concat(simplify(list.slice(at)));
+    }
+    var mid = 0, md = 0;
+    pts.forEach(function (p, j) { var d = Math.hypot(p.x - x0, p.y - y0); if (d > md) { md = d; mid = j; } });
+    var poly = simplify(pts.slice(0, mid + 1)).slice(0, -1).concat(simplify(pts.slice(mid).concat([pts[0]])).slice(0, -1));
+    // Walls drawn square stay square: sides within about 8 degrees of level or plumb are straightened
+    function square() {
+      for (var e = 0; e < poly.length; e++) {
+        var p = poly[e], q = poly[(e + 1) % poly.length], ddx = q.x - p.x, ddy = q.y - p.y;
+        if (Math.abs(ddy) <= Math.abs(ddx) * 0.15) { var my = (p.y + q.y) / 2; p.y = my; q.y = my; }
+        else if (Math.abs(ddx) <= Math.abs(ddy) * 0.15) { var mx = (p.x + q.x) / 2; p.x = mx; q.x = mx; }
+      }
+    }
+    square();
+    // Sides under about a foot (a rounded corner, the dip at a window) fold into the sides next to
+    // them: the two neighbors are run on until they meet
+    for (var guard = 0; guard < 20 && poly.length > 3; guard++) {
+      var shortest = -1, sl = ppf * 1.1;
+      poly.forEach(function (p, j) { var q = poly[(j + 1) % poly.length], l = Math.hypot(q.x - p.x, q.y - p.y); if (l < sl) { sl = l; shortest = j; } });
+      if (shortest < 0) break;
+      var n0 = poly.length, A0 = poly[(shortest + n0 - 1) % n0], A1 = poly[shortest], B0 = poly[(shortest + 1) % n0], B1 = poly[(shortest + 2) % n0];
+      var d1 = { x: A1.x - A0.x, y: A1.y - A0.y }, d2 = { x: B1.x - B0.x, y: B1.y - B0.y }, den = d1.x * d2.y - d1.y * d2.x, meet;
+      if (Math.abs(den) > 1e-6) {
+        var tt = ((B0.x - A0.x) * d2.y - (B0.y - A0.y) * d2.x) / den;
+        meet = { x: A0.x + d1.x * tt, y: A0.y + d1.y * tt };
+        if (Math.hypot(meet.x - A1.x, meet.y - A1.y) > ppf * 2) meet = { x: (A1.x + B0.x) / 2, y: (A1.y + B0.y) / 2 };
+      } else meet = { x: (A1.x + B0.x) / 2, y: (A1.y + B0.y) / 2 };
+      var keep2 = [];
+      poly.forEach(function (p, j) { if (j === shortest) keep2.push(meet); else if (j !== (shortest + 1) % n0) keep2.push(p); });
+      poly = keep2;
+      square();
+    }
+    // Drop corners that ended up in a straight line or on top of each other
+    poly = poly.filter(function (p, j) {
+      var o = poly[(j + poly.length - 1) % poly.length], r = poly[(j + 1) % poly.length];
+      return Math.abs((p.x - o.x) * (r.y - o.y) - (p.y - o.y) * (r.x - o.x)) > eps * Math.hypot(r.x - o.x, r.y - o.y) * 0.5;
+    });
+    if (poly.length < 4 || poly.length > 12) return null;
+    var areaOf = function () { var s2 = 0; poly.forEach(function (p, j) { var q = poly[(j + 1) % poly.length]; s2 += p.x * q.y - q.x * p.y; }); return Math.abs(s2 / 2); };
+    // Too big, and open to another room on one side (no wall drawn there): the printed area sets
+    // where that side falls, so slide the longest open side in until the area matches.
+    var extra = areaOf() - want;
+    if (extra > want * 0.10) {
+      var best = null;
+      poly.forEach(function (p, j) {
+        var q = poly[(j + 1) % poly.length], len = Math.hypot(q.x - p.x, q.y - p.y);
+        if (!len || (p.x !== q.x && p.y !== q.y)) return;   // level or plumb sides only
+        var nx = (q.y - p.y) / len, ny = -(q.x - p.x) / len, mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+        if (PLAN.pointInPoly({ x: mid.x + nx * 3, y: mid.y + ny * 3 }, poly)) { nx = -nx; ny = -ny; }   // (nx, ny) points out
+        var hit = 0, tries = 0;
+        for (var f = 0.1; f <= 0.9; f += 0.1) {
+          var sx2 = Math.round(p.x + (q.x - p.x) * f + nx * 4), sy2 = Math.round(p.y + (q.y - p.y) * f + ny * 4);
+          tries++;
+          if (sx2 >= 0 && sy2 >= 0 && sx2 < w && sy2 < h && taken[sy2 * w + sx2] === 1 && a.wall[sy2 * w + sx2] !== 1) hit++;
+        }
+        if (hit / tries >= 0.6 && (!best || len > best.len)) best = { j: j, len: len, nx: nx, ny: ny };
+      });
+      if (best) {
+        var shift = extra / best.len, P = poly[best.j], Q = poly[(best.j + 1) % poly.length];
+        var prev = poly[(best.j + poly.length - 1) % poly.length], next = poly[(best.j + 2) % poly.length];
+        // the sides either side have to be long enough to give that much up
+        if (shift < Math.hypot(P.x - prev.x, P.y - prev.y) - ppf && shift < Math.hypot(Q.x - next.x, Q.y - next.y) - ppf) {
+          P.x -= best.nx * shift; P.y -= best.ny * shift; Q.x -= best.nx * shift; Q.y -= best.ny * shift;
+        }
+      }
+    }
+    if (Math.abs(areaOf() / want - 1) > 0.10) return null;
+    return poly;
+  }
+
+  return { analyze: analyze, ocr: ocr, place: place, refit: refit, overall: overall, traceRoom: traceRoom };
 })();
 
 /* =====================================================================
@@ -2410,9 +2577,17 @@ var OPENINGS = (function () {
       // A door slid shut in the gap: one panel is a pocket door, wider ones are sliding (bypass)
       var slider = wIn <= 40 ? 'pocket' : 'bypass';
       var htype = hint && hint.type ? DOOR_TYPES[String(hint.type).toLowerCase()] || null : null;
+      // A panel drawn across a doorway between rooms is a door, even when the model calls the gap
+      // an opening (or, inside, a window): the drawing shows it closed. Dark ink is a panel in any
+      // doorway; light gray only in a gap as wide as sliding doors (40" up) and lined end to end,
+      // so a faint threshold across a narrow opening stays an opening.
+      var panel = !outside && wIn >= 20 && wIn <= DOOR_MAX &&
+        (filled(a, b, a.ink) >= 0.7 || (wIn >= 40 && fill >= 0.9 && lines(a, b) >= 1));
       if (sw && sw.score >= 0.6 && kind !== 'window') {
         // A swing drawn on the plan: a door, whatever the model said
         item = { kind: 'door', type: htype === 'double' && wIn >= 44 ? 'double' : 'swing', n: sw.n, hinge: sw.hinge };
+      } else if (panel && kind !== 'door') {
+        item = { kind: 'door', type: slider, n: inside };       // a panel drawn in a doorway between rooms
       } else if (kind === 'window') {
         if (outside) item = { kind: 'window', type: 'window', n: inside };
       } else if (kind === 'door' && wIn <= DOOR_MAX) {
@@ -2423,8 +2598,6 @@ var OPENINGS = (function () {
         item = { kind: 'door', type: 'opening', n: inside };    // a way in with no door drawn
       } else if (!hint && ln >= 1 && outside) {
         item = { kind: 'window', type: 'window', n: inside };   // lines in an outside wall
-      } else if (!hint && !outside && filled(a, b, a.ink) >= 0.7 && wIn >= 20 && wIn <= DOOR_MAX && kind !== 'opening') {
-        item = { kind: 'door', type: slider, n: inside };       // a panel drawn in a doorway between rooms
       } else if (!hint && ln === 0 && outside && wIn >= 24 && wIn <= DOOR_MAX) {
         item = { kind: 'door', type: 'opening', n: inside };    // a plain gap in an outside wall: a way in
       }

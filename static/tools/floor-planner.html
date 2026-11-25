@@ -89,11 +89,14 @@
     .tool-btn.on { background: #582b36; color: #FAF9F6; border-color: #582b36; }
     .tool-btn:disabled { color: #a39d92; cursor: default; }
     .tool-btn svg { width: 16px; height: 16px; }
-    /* Save and Download PDF at the toolbar's right end, PNG and New plan in the More menu beside them.
+    /* Save and Download (PDF or PNG) at the toolbar's right end, New plan in the More menu beside them.
        Narrower windows shorten Keys and gestures to its icon, then move Save and PDF into the menu too. */
     .file-actions { display: flex; gap: 6px; align-items: center; padding-left: 10px; margin-left: 2px; border-left: 1.5px solid #d0c9bc; }
     .file-actions .btn-sm { height: 34px; padding-top: 0; padding-bottom: 0; }
     .more-wrap { position: relative; }
+    .dl-wrap { position: relative; }
+    #dlBtn { display: inline-flex; align-items: center; gap: 7px; }
+    .dl-wrap .more-menu { min-width: 150px; }
     #moreBtn { padding: 0 10px; }
     .more-menu {
       position: absolute; right: 0; top: 40px; z-index: 30; min-width: 190px; background: #ffffff; border: 1.5px solid #d0c9bc;
@@ -241,6 +244,7 @@
     .badge.edited { background: #efeae2; color: #433E3C; }
     .badge.tight { background: #f7ecd2; color: #7a5a12; }
     .box-note { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #fdf6f7; font-size: 12px; line-height: 1.45; color: #582b36; }
+    .box-note.fine { background: #f5f0e8; color: #6b6560; }
 
     /* Furnish: catalog */
     .cats { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; margin: 0 -18px 12px; padding: 2px 18px 4px; scrollbar-width: none; }
@@ -472,7 +476,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=29"></script>
+  <script src="/static/tools/plan-engine.js?v=30"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -502,7 +506,7 @@
       'You are reading a residential floor plan image. List every door, doorway opening, and window drawn on it.',
       '',
       'Return ONLY a JSON object. No prose, no markdown, no code fences. Use exactly this shape:',
-      '{"openings":[{"kind":"door","type":"swing","x":42.5,"y":61,"width_in":32,"rooms":["Bedroom","Hallway"]}]}',
+      '{"openings":[{"kind":"door","type":"swing","x":42.5,"y":61,"width_in":32,"rooms":["Bedroom","Hallway"]}],"overall":{"width_ft":20,"length_ft":28}}',
       '',
       'Rules:',
       '- kind is "door" for any door, "opening" for a doorway or gap in a wall with no door drawn, and "window" for a window.',
@@ -510,7 +514,8 @@
       '- x,y is the middle of the door, opening or window, where it sits in the wall, as percentages of the FULL image (0 to 100).',
       '- width_in is its width in inches if you can tell, otherwise null.',
       '- rooms names the space on each side as the plan labels them, or "outside" for an exterior wall.',
-      '- Include every one: closet doors, sliding glass doors, and doors to balconies, decks and porches too. Skip stairs, cabinets and appliances.'
+      '- Include every one: closet doors, sliding glass doors, and doors to balconies, decks and porches too. Skip stairs, cabinets and appliances.',
+      '- overall is the size of the whole building from the dimension lines printed around the outside of the plan, in decimal feet: width_ft across the image, length_ft up and down. Use null for any that is not printed.'
     ].join('\n');
 
     var RETRY_SUFFIX = '\n\nIMPORTANT: Your previous reply could not be parsed. Reply with the raw JSON object only, starting with { and ending with }.';
@@ -675,12 +680,15 @@
       var s = t.indexOf('{'), e = t.lastIndexOf('}');
       var obj = s > -1 && e > s ? JSON.parse(t.slice(s, e + 1)) : JSON.parse(t.slice(t.indexOf('['), t.lastIndexOf(']') + 1));
       var list = Array.isArray(obj) ? obj : obj.openings || obj.doors || [];
-      return list.map(function (o) {
+      var ov = !Array.isArray(obj) && obj.overall ? { w: num(obj.overall.width_ft), h: num(obj.overall.length_ft) } : null;
+      var out = list.map(function (o) {
         var x = num(o && o.x), y = num(o && o.y);
         if (x == null || y == null) return null;
         if (x <= 1 && y <= 1) { x *= 100; y *= 100; }
         return { kind: String(o.kind || 'door').toLowerCase(), type: o.type ? String(o.type).toLowerCase() : null, x: clamp(x, 0, 100), y: clamp(y, 0, 100) };
       }).filter(Boolean);
+      out.overall = ov;   // the building's printed overall size, for a scale when no room gives one
+      return out;
     }
 
     function extract() {
@@ -717,6 +725,7 @@
           showScreen('result');
           renderAll();
           findOpenings();
+          scaleFromOverall();
           trackUsage('floor-plan-parser');
         })
         .catch(function (err) {
@@ -794,7 +803,7 @@
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
       state.view = { z: 1, px: 0, py: 0 };
       state.erase = []; state.eraseVer++; state.floorCol = floorColorOf(img); ERASE.mask = ERASE.layer = null;
-      state.openHints = null; state.openingsDone = false; state.found = null;
+      state.openHints = null; state.openingsDone = false; state.shapesDone = false; state.found = null;
       state.lights = []; state.lightSel = -1; state.lightCfg = { ceil: 8, rooms: {} };
       UNDO = []; $('undoBtn').disabled = true;
       setMode('measure');
@@ -3681,7 +3690,76 @@
         var made = addFound(list, k);
         if (!made.length && UNDO.length) { UNDO.pop(); $('undoBtn').disabled = !UNDO.length; }
         state.found = { doors: made.filter(function (d) { return !isWin(d); }).length, windows: made.filter(isWin).length };
+        traceShapes();
         renderAll();
+      });
+    }
+    // Rooms that aren't rectangles: when a room's printed square footage and its box disagree by
+    // more than 10%, its outline is traced from the walls (SNAP.traceRoom), with the doors closed
+    // and every other room's box left out, and kept only if it comes to the printed area. Runs
+    // once, after the doors are found; rooms passed over the first time are tried again once
+    // their neighbors have their shapes. One Undo takes the shapes off again.
+    function traceShapes() {
+      var a = state.walls && state.walls.map;
+      if (state.shapesDone || !a || !state.scale) return;
+      state.shapesDone = true;
+      syncGeometry();
+      enclosedFt();
+      var floor = ENCL.mask;
+      if (!floor) return;
+      var ppf = a.w / state.W / state.scale.ftPerPx;
+      var todo = state.rooms.filter(function (r) {
+        return r.printedArea && !r.shape && !r.boxEdited && r.ftBox && !OUTDOOR.test(r.name + ' ' + (r.label || '')) &&
+          Math.abs(r.ftBox.w * r.ftBox.h / r.printedArea - 1) > 0.10;
+      });
+      var undone = false;
+      for (var pass = 0; pass < 2 && todo.length; pass++) {
+        todo = todo.filter(function (r) {
+          var taken = new Uint8Array(a.w * a.h);
+          state.rooms.forEach(function (o) {
+            if (o === r) return;
+            var poly = pts(o).map(function (q) { return { x: q.x / 100 * a.w, y: q.y / 100 * a.h }; }), bb = PLAN.bounds(poly);
+            for (var y = Math.max(0, Math.floor(bb.y)); y <= Math.min(a.h - 1, Math.ceil(bb.y + bb.h)); y++)
+              for (var x = Math.max(0, Math.floor(bb.x)); x <= Math.min(a.w - 1, Math.ceil(bb.x + bb.w)); x++)
+                if (PLAN.pointInPoly({ x: x + 0.5, y: y + 0.5 }, poly)) taken[y * a.w + x] = 1;
+          });
+          // doors and windows closed right at the wall line, so the fill can't step out through them
+          state.doors.forEach(function (d) {
+            var c = { x: d.x / 100 * a.w, y: d.y / 100 * a.h }, half = d.w / 24 * ppf, deep = 0.25 * ppf;
+            for (var t = -half; t <= half; t += 0.5) for (var s2 = -deep; s2 <= deep; s2 += 0.5) {
+              var px2 = Math.round(c.x + d.ux * t + d.nx * s2), py2 = Math.round(c.y + d.uy * t + d.ny * s2);
+              if (px2 >= 0 && py2 >= 0 && px2 < a.w && py2 < a.h) taken[py2 * a.w + px2] = 2;
+            }
+          });
+          var b = r.bbox, m = r.modelBox || b;
+          var seeds = [{ x: b.x + b.w / 2, y: b.y + b.h / 2 }, { x: m.x + m.w / 2, y: m.y + m.h / 2 }];
+          for (var k = 0; k < seeds.length; k++) {
+            var poly = SNAP.traceRoom(a, floor, taken, { x: seeds[k].x / 100 * a.w, y: seeds[k].y / 100 * a.h }, ppf, r.printedArea);
+            if (!poly) continue;
+            if (!undone) { pushUndo(); undone = true; }
+            setShape(r, poly.map(function (q) { return { x: q.x / a.w * 100, y: q.y / a.h * 100 }; }));
+            r.traced = true;
+            syncGeometry();
+            return false;   // done with this room
+          }
+          return true;
+        });
+      }
+    }
+    // No room gave a scale: try the building's overall dimensions (asked for with the doors).
+    // Measured on the outside faces of the walls; both directions must agree (SNAP.overall).
+    function scaleFromOverall() {
+      if (state.scale || !state.openHints) return;
+      var img = state.img;
+      state.openHints.then(function (hints) {
+        var ov = hints && hints.overall, a = state.walls && state.walls.map;
+        if (state.img !== img || state.scale || !ov || !a) return;
+        var ppf = SNAP.overall(a, ov.w, ov.h), f = ppf ? PLAN.scaleFromAnalysis(ppf, a.w, state.W) : null;
+        if (!f) return;
+        state.scale = { ftPerPx: f, source: 'auto', from: 'overall', overall: { w: ov.w, h: ov.h } };
+        refitRooms();
+        renderAll(); draw();
+        findOpenings();   // doors and windows wait for a scale
       });
     }
     // Put each find on the nearest room outline along its wall, the way a tap marks one:
@@ -3774,7 +3852,7 @@
       var el = $('doorList');
       if (!el) return;
       var nd = state.doors.filter(function (d) { return !isWin(d); }).length, nw = state.doors.length - nd;
-      if ($('doorCount')) $('doorCount').textContent = state.doors.length ? nd + (nd === 1 ? ' door' : ' doors') + ', ' + nw + (nw === 1 ? ' window' : ' windows') : 'none marked';
+      if ($('doorCount')) $('doorCount').textContent = state.doors.length ? nd + (nd === 1 ? ' door' : ' doors') + ', ' + nw + (nw === 1 ? ' window' : ' windows') : state.scale ? 'none marked' : 'set the scale to find them';
       if (!state.doors.length) { el.innerHTML = ''; return; }
       var pcs = piecesFt(), order = state.doors.map(function (d, k) { return k; }).sort(function (a, b) { return (isWin(state.doors[a]) ? 1 : 0) - (isWin(state.doors[b]) ? 1 : 0) || a - b; });
       el.innerHTML = '<div class="space-list" style="margin-top:10px">' + order.map(function (k) {
@@ -4660,7 +4738,7 @@
           state.lights = rec.lights || []; state.lightCfg = rec.lightCfg || { ceil: 8, rooms: {} };
           // A plan saved before it had a scale still looks for its doors once the scale is set
           // (from the drawing alone: the model's list isn't kept). Older saves never do.
-          state.openingsDone = rec.openingsDone !== false; state.openHints = null; state.found = null;
+          state.openingsDone = rec.openingsDone !== false; state.shapesDone = state.openingsDone; state.openHints = null; state.found = null;
           var ids = [0];
           state.rooms.concat(state.pieces, state.doors, state.lights).forEach(function (o) { if (typeof o.id === 'number') ids.push(o.id); });
           state.nextId = Math.max.apply(null, ids) + 1;
@@ -4838,7 +4916,7 @@
         btn.textContent = 'Set it again'; btn.className = 'link-btn';
       } else {
         msg.innerHTML = '<b>Scale found</b> on the plan.';
-        msg.title = 'From ' + (sc.from === 'area' ? 'the printed square footage of ' : '') + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + '. Compare the ruler on the plan with a printed dimension to check it.';
+        msg.title = sc.from === 'overall' ? 'From the plan\u2019s overall size, ' + fmtFtIn(sc.overall.w) + ' x ' + fmtFtIn(sc.overall.h) + ', measured on the outside walls. Compare the ruler on the plan with a printed dimension to check it.' : 'From ' + (sc.from === 'area' ? 'the printed square footage of ' : '') + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + '. Compare the ruler on the plan with a printed dimension to check it.';
         btn.textContent = 'Check it'; btn.className = 'link-btn';
       }
     }
@@ -4894,7 +4972,7 @@
       $('measureMain').classList.toggle('one-room', !!one);
       if (!one) {
         $('roomGrid').innerHTML = '<div class="l-list">' + state.rooms.map(function (r, i) {
-          var look = r.source === 'estimated' || r.weak || PLAN.areaConflict(r) || PLAN.shapeConflict(r);
+          var look = r.source === 'estimated' || r.weak || (PLAN.areaConflict(r) && !shapeMatches(r)) || PLAN.shapeConflict(r);
           return roomRow(i, look ? 'dim' : 'ok', (r.width && r.length ? esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) : 'No size yet') + (r.source === 'estimated' ? ', estimated' : look ? ', needs a look' : ''));
         }).join('') + '</div>';
         return;
@@ -4924,7 +5002,12 @@
 
     // Shown when the plan's printed area and its dimensions disagree, or when the
     // room's box on the plan and its dimensions disagree, by more than 10%
+    // A shape (traced or drawn) that comes to the printed area explains why the dimensions don't
+    function shapeMatches(r) { return !!(r.shape && r.printedArea && r.shapeArea && Math.abs(r.shapeArea / r.printedArea - 1) <= 0.10); }
     function noteFor(r) {
+      if (shapeMatches(r)) return '<div class="box-note fine">' + (r.traced
+        ? 'Not a rectangle, so its outline was traced from the walls to match the printed ' + fmtArea(r.printedArea) + '. Drag a corner if it\u2019s off.'
+        : 'Its shape matches the printed ' + fmtArea(r.printedArea) + '.') + '</div>';
       var ac = PLAN.areaConflict(r);
       if (ac) return '<div class="box-note">The plan prints ' + fmtArea(ac.printed) + ', so that is used. ' + esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) +
         ' gives ' + fmtArea(ac.dims) + '. The dimension lines may measure outside the walls or only part of the room.</div>';
@@ -5036,10 +5119,10 @@
     }
 
     function exportPDF() {
-      var btn = $('pdfBtn');
-      btn.disabled = true;
+      var btn = $('pdfBtn'), dl = $('dlBtn');
+      btn.disabled = dl.disabled = true;
       loadLogo().then(function (logo) {
-        try { buildPDF(logo); } finally { btn.disabled = false; }
+        try { buildPDF(logo); } finally { btn.disabled = dl.disabled = false; }
       });
     }
 
@@ -5381,7 +5464,7 @@
       state.img = null; state.savedId = null; state.dirty = false; state.planName = ''; state.rooms = []; state.selected = -1; state.sendB64 = '';
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
-      state.openHints = null; state.openingsDone = false; state.found = null;
+      state.openHints = null; state.openingsDone = false; state.shapesDone = false; state.found = null;
       state.lights = []; state.lightSel = -1; state.lightCfg = { ceil: 8, rooms: {} };
       state.view = { z: 1, px: 0, py: 0 };
       UNDO = []; $('undoBtn').disabled = true;
@@ -5442,8 +5525,21 @@
       $('resetBtn').addEventListener('click', reset);
       // More menu: opens under its button, runs the same button as the toolbar, closes on any outside tap or Esc
       function closeMore() { $('moreMenu').classList.add('hidden'); $('moreBtn').setAttribute('aria-expanded', 'false'); }
+      // Download: one button, then PDF or PNG
+      function closeDl() { $('dlMenu').classList.add('hidden'); $('dlBtn').setAttribute('aria-expanded', 'false'); }
+      $('dlBtn').addEventListener('click', function (e) {
+        e.stopPropagation(); closeMore();
+        var open = $('dlMenu').classList.contains('hidden');
+        $('dlMenu').classList.toggle('hidden', !open); $('dlBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      $('dlMenu').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-dl]'); if (!b) return;
+        closeDl(); $(b.getAttribute('data-dl')).click();
+      });
+      document.addEventListener('click', function (e) { if (!e.target.closest('.dl-wrap')) closeDl(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDl(); });
       $('moreBtn').addEventListener('click', function (e) {
-        e.stopPropagation();
+        e.stopPropagation(); closeDl();
         var open = $('moreMenu').classList.contains('hidden');
         $('moreMenu').classList.toggle('hidden', !open); $('moreBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
       });
@@ -5675,7 +5771,16 @@
         <button class="btn-secondary btn-sm" id="saveBtn">Save</button>
         <button class="btn-secondary btn-sm fa-extra" id="pngBtn">PNG</button>
         <button class="btn-secondary btn-sm fa-extra" id="resetBtn">New plan</button>
-        <button class="btn-primary btn-sm" id="pdfBtn">Download PDF</button>
+        <button class="btn-secondary btn-sm fa-extra" id="pdfBtn">PDF</button>
+        <div class="dl-wrap">
+          <button class="btn-primary btn-sm" id="dlBtn" aria-haspopup="menu" aria-expanded="false">Download
+            <svg viewBox="0 0 12 8" width="10" height="7" aria-hidden="true"><path d="M1 1.5 6 6.5 11 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="more-menu hidden" id="dlMenu" role="menu">
+            <button role="menuitem" data-dl="pdfBtn">PDF</button>
+            <button role="menuitem" data-dl="pngBtn">PNG</button>
+          </div>
+        </div>
       </div>
       <div class="more-wrap">
         <button class="tool-btn" id="moreBtn" title="Save, download or start a new plan" aria-label="More: save, download, new plan" aria-haspopup="menu" aria-expanded="false">
@@ -5684,7 +5789,7 @@
         <div class="more-menu hidden" id="moreMenu" role="menu">
           <button role="menuitem" class="mm-core" data-more="saveBtn" id="moreSave">Save</button>
           <button role="menuitem" class="mm-core" data-more="pdfBtn">Download PDF</button>
-          <button role="menuitem" data-more="pngBtn">Download PNG</button>
+          <button role="menuitem" class="mm-core" data-more="pngBtn">Download PNG</button>
           <button role="menuitem" data-more="resetBtn">New plan</button>
           <button role="menuitem" data-more="keysBtn">Keys and gestures</button>
         </div>
