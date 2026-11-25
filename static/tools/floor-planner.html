@@ -471,7 +471,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=27"></script>
+  <script src="/static/tools/plan-engine.js?v=28"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -853,7 +853,7 @@
       // The plan stays centered in the stage, shifted by the pan
       v.px = cx - u * nw + nw / 2 - scx; v.py = cy - w * nh + nh / 2 - scy;
       v.z = z;
-      draw();
+      drawSoon();
     }
     function zoomFit() { state.view.z = 1; state.view.px = 0; state.view.py = 0; draw(); }
     var PINCH = { ptrs: {}, on: null };
@@ -884,7 +884,7 @@
       state.view.z = P.z0; state.view.px = P.px0; state.view.py = P.py0; fitCanvas();
       zoomAt(z, P.m0.x, P.m0.y);
       state.view.px += m.x - P.m0.x; state.view.py += m.y - P.m0.y;
-      draw();
+      drawSoon();
       e.stopImmediatePropagation(); e.preventDefault();
     }
     function pinchUp(e) {
@@ -900,10 +900,28 @@
       } else if (state.view.z > 1) {
         e.preventDefault();
         state.view.px -= e.deltaX; state.view.py -= e.deltaY;
-        draw();
+        drawSoon();
       }
     }
+    /* ---------- Redrawing ----------
+       draw() paints the plan now. While a redraw runs, the furniture in feet, the walkways,
+       the spacing lines and the wall and overlap problems are worked out once and shared
+       (PASS); nothing on the plan changes during a redraw, so they can't go out of date.
+       drawSoon() is for dragging, pinching, panning and zooming: sizes, positions and room
+       measurements update straight away, and the painting waits for the next screen frame, so a burst of pointer
+       events paints once. A draw() in the meantime takes its place. */
+    var PASS = null, DRAW_RAF = 0;
     function draw(forExport) {
+      if (!forExport && DRAW_RAF) { cancelAnimationFrame(DRAW_RAF); DRAW_RAF = 0; }
+      var outer = !PASS;
+      if (outer) PASS = {};
+      try { drawPlan(forExport); } finally { if (outer) PASS = null; }
+    }
+    function drawSoon() {
+      fitCanvas(); syncGeometry();
+      if (!DRAW_RAF) DRAW_RAF = requestAnimationFrame(function () { DRAW_RAF = 0; if (state.img) draw(); });
+    }
+    function drawPlan(forExport) {
       if (!forExport) fitCanvas();
       var c = $('planCanvas'), ctx = c.getContext('2d'), s = scale();
       syncGeometry();
@@ -1280,8 +1298,10 @@
     function piecesFtRaw() { return state.scale ? state.pieces.map(pieceFt) : []; }
     // With the dining sides a walking route passes behind, so those sides are judged at 44"
     function piecesFt() {
+      if (PASS && PASS.pft) return PASS.pft;
       var list = piecesFtRaw(), wk = walkways();
       if (wk) list.forEach(function (pc, k) { if (wk.behind[k]) pc.walkBehind = wk.behind[k]; });
+      if (PASS) PASS.pft = list;
       return list;
     }
 
@@ -1292,6 +1312,12 @@
        when something changes, and not while a piece is being dragged. */
     var WALK_CACHE = { key: null, res: null };
     function walkways() {
+      if (PASS && 'walk' in PASS) return PASS.walk;
+      var res = walkwaysNow();
+      if (PASS) PASS.walk = res;
+      return res;
+    }
+    function walkwaysNow() {
       if (!state.scale || !realDoors().length || !wallTestFt() || !state.rooms.some(function (r) { return r.ftShape; })) return null;
       if (state.drag && state.drag.moved && WALK_CACHE.res) return WALK_CACHE.res;
       var key = JSON.stringify([state.pieces, state.doors, state.rooms.map(function (r) { return r.ftShape; }), state.scale.ftPerPx]);
@@ -1361,7 +1387,12 @@
       var f = state.scale.ftPerPx;
       return function (p) { return PLAN.wallAt(state.walls, p.x / f, p.y / f, state.W); };
     }
-    function conflicts() { return state.scale && state.pieces.length ? SPACE.conflicts(piecesFt(), wallTestFt()) : []; }
+    function conflicts() {
+      if (PASS && PASS.conf) return PASS.conf;
+      var out = state.scale && state.pieces.length ? SPACE.conflicts(piecesFt(), wallTestFt()) : [];
+      if (PASS) PASS.conf = out;
+      return out;
+    }
     function conflictText(c, who) {
       var other = who === c.a ? c.b : c.a;
       if (c.type === 'wall') return 'runs ' + c.inch + '" into a wall';
@@ -2003,7 +2034,7 @@
         if (ERASE.mask && ERASE.ver === state.eraseVer) { paintOp(ERASE.mask.getContext('2d'), d.op, d.op.pts.length - 1); buildLayer(); }
         else state.eraseVer++;
       }
-      draw();
+      drawSoon();
     }
     function drawBrush(ctx) {
       if (state.tool !== 'erase' || !state.erasePos) return;
@@ -2205,7 +2236,7 @@
           var c = GEO.place([{ x: s.x / 100 * state.W - o.cx, y: s.y / 100 * state.H - o.cy }], o.cx, o.cy, turn, 1)[0];
           s.c.x = c.x / state.W * 100; s.c.y = c.y / state.H * 100; s.c.rot = ((s.rot + turn) % 360 + 360) % 360;
         });
-        draw();
+        drawSoon();
         return;
       }
       // Stretch: the pointer in the piece's own frame, in inches from the original center
@@ -2226,7 +2257,7 @@
       if (FURNITURE.seated(pc)) relayoutChairs(pc);
       else d.chairs.forEach(function (s) { s.c.x = s.x + (pc.x - o.x); s.c.y = s.y + (pc.y - o.y); });
       state.pieceSel = state.pieces.indexOf(pc);
-      draw();
+      drawSoon();
     }
 
     /* ---------- The toolbar that floats over the selected piece or door ---------- */
@@ -2926,13 +2957,13 @@
           var sr = pieceRoom(l) || roomById(l.room);
           if (sr) { l.room = sr.id; snapSconce(l); }
         }
-        draw();
+        drawSoon();
       } else if (d && d.mode === 'pan') {
         var cx = e.clientX - d.client.x, cy = e.clientY - d.client.y;
         if (!d.moved && Math.hypot(cx, cy) < 5) return;
         d.moved = true;
         state.view.px = d.pan0.x + cx; state.view.py = d.pan0.y + cy;
-        draw();
+        drawSoon();
       } else {
         var h = hitLight(p);
         c.style.cursor = h > -1 ? (kindOf(state.lights[h]) === 'undercab' ? 'pointer' : 'move') : hitLamp(p) > -1 || hitRoom(p) > -1 ? 'pointer' : 'default';
@@ -3747,7 +3778,7 @@
       if (w === d.w) return;
       d.w = w;
       d.x = (dg.fixed.x + dg.dir.x * half) / state.W * 100; d.y = (dg.fixed.y + dg.dir.y * half) / state.H * 100;
-      draw();
+      drawSoon();
     }
     // What a door or window's check says, in a word: { bad, word, value } (null when there's nothing to check)
     function doorStatus(d, pcs) {
@@ -4237,7 +4268,7 @@
             p = Math.abs(p.x - a.x) > Math.abs(p.y - a.y) ? { x: p.x, y: a.y } : { x: a.x, y: p.y };
           }
           state.scaleLine.p2 = p;
-          draw();
+          drawSoon();
         }
         return;
       }
@@ -4253,12 +4284,12 @@
           if (!dp.moved && Math.hypot(cx, cy) < 5) return;
           dp.moved = true;
           state.view.px = dp.pan0.x + cx; state.view.py = dp.pan0.y + cy;
-          draw();
+          drawSoon();
         } else if (state.drag && state.drag.mode === 'box') {
           var db = state.drag;
           if (!db.moved && Math.hypot(p.x - db.start.x, p.y - db.start.y) < 5 * displayRatio()) return;
           db.moved = true; db.cur = p;
-          draw();
+          drawSoon();
         } else if (state.drag && state.drag.mode === 'piece') {
           var pd = state.drag;
           if (!pd.moved && Math.hypot(p.x - pd.start.x, p.y - pd.start.y) < 3 * displayRatio()) return;
@@ -4267,18 +4298,18 @@
           pd.moved = true;
           var mx = (p.x - pd.start.x) / state.W * 100, my = (p.y - pd.start.y) / state.H * 100;
           pd.list.forEach(function (o) { o.c.x = clamp(o.x + mx, 0, 100); o.c.y = clamp(o.y + my, 0, 100); });
-          draw();
+          drawSoon();
         } else if (state.drag && state.drag.mode === 'door') {
           if (!state.drag.moved && Math.hypot(p.x - state.drag.start.x, p.y - state.drag.start.y) < 4 * displayRatio()) return;
           state.drag.moved = true;
           moveDoor(state.doors[state.doorSel], p);
-          draw();
+          drawSoon();
         } else if (state.drag && state.drag.mode === 'rug') {
           var rr = state.rooms[state.selected], dd = state.drag;
           dd.moved = true;
           rr.rug.x = clamp(dd.orig.x + (p.x - dd.start.x) / state.W * 100, 0, 100);
           rr.rug.y = clamp(dd.orig.y + (p.y - dd.start.y) / state.H * 100, 0, 100);
-          draw(); updatePlacedMsg();
+          drawSoon(); updatePlacedMsg();
         } else {
           var dhv = state.tool ? -1 : hitDoorHandle(p);
           if (dhv > -1) { var dd0 = state.doors[state.doorSel]; c.style.cursor = Math.abs(dd0.ux) > Math.abs(dd0.uy) ? 'ew-resize' : 'ns-resize'; return; }
@@ -4293,7 +4324,7 @@
         if (!state.drag.moved && Math.hypot(p.x - state.drag.start.x, p.y - state.drag.start.y) < 4 * displayRatio()) return;
         state.drag.moved = true;
         moveDoor(state.doors[state.doorSel], p);
-        draw();
+        drawSoon();
         return;
       }
       if (!state.drag) {
@@ -4337,7 +4368,7 @@
         if (d.corner.indexOf('s') > -1) y2 = clamp(y2 + dy, y1 + MIN, 100);
         r.bbox = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
       }
-      draw();
+      drawSoon();
     }
     function onUp(e) {
       if (state.tool === 'scale' && state.scaleLine && state.scaleLine.drawing) {
@@ -4392,13 +4423,14 @@
         state.drag = null;
         renderSpacing(); renderDoorBar(); renderPieceBar(); renderDoorList();
         if (state.mode === 'furnish' && state.rooms[state.selected] && state.rooms[state.selected].rug) renderFurnish();
+        draw();   // the handles come back and the walkways catch up once it's let go
         return;
       }
       if (state.drag && state.drag.mode === 'rug') {
         try { $('planCanvas').releasePointerCapture(e.pointerId); } catch (err) {}
         if (state.drag.moved) pushUndo(state.drag.snap);
         state.drag = null;
-        renderFurnish();
+        renderFurnish(); draw();
         return;
       }
       if (state.drag) {
