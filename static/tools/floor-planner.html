@@ -3050,7 +3050,7 @@
         return { x0: x0, y0: y0, x1: x1, y1: y1 }; })();
       var near = 3, left = d.x - b.x0 < near, right = b.x1 - d.x < near, top = d.y - b.y0 < near, bottom = b.y1 - d.y < near;
       var v = top ? 'top' : bottom ? 'bottom' : '', h = left ? 'left' : right ? 'right' : '';
-      if (v && h) return { corner: true, words: 'in the ' + v + ' ' + h + ' corner' };
+      if (v && h) return { corner: true, words: 'at the ' + v + ' ' + h };
       var f = state.scale.ftPerPx;
       var win = state.doors.filter(isWin).some(function (w) { var df = doorFt(w); return Math.hypot(df.cx - d.x, df.cy - d.y) < 4; });
       if (win) return { words: 'by the window' };
