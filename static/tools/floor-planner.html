@@ -335,6 +335,15 @@
     .l-res p { font-size: 13px; color: #433E3C; line-height: 1.5; margin-top: 8px; }
     .l-st { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 99px; padding: 3px 9px; margin-left: auto; white-space: nowrap; }
     .l-note.l-follow { color: #7a5a12; }
+    .l-mapsw { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font-size: 13px; color: #433E3C; }
+    .l-mapsw label { cursor: pointer; }
+    .sw { width: 34px; height: 20px; border-radius: 50px; border: none; background: #d0c9bc; position: relative; cursor: pointer; padding: 0; flex: none; transition: background .15s; }
+    .sw span { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #ffffff; transition: left .15s; }
+    .sw.on { background: #A6BE47; } .sw.on span { left: 17px; }
+    .l-mapkey { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #6b6560; margin: -4px 0 14px; }
+    .l-mapkey i { display: inline-block; width: 70px; height: 9px; border-radius: 50px; background: linear-gradient(90deg, #8a7d72, #c4b6a2, #efe2c3, #fbf5e6); border: 1px solid #e4ddd0; }
+    .l-mapkey b { margin-left: 10px; width: 15px; height: 15px; border-radius: 50%; border: 2px solid #b07d14; color: #b07d14; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+    .l-dark { border-top: 1px solid #ece6dc; padding-top: 10px; margin-top: 4px; }
     .l-st.ok, .l-st.full { background: #eef2dc; color: #4f5c1d; }
     .l-st.dim { background: #f7ecd2; color: #7a5a12; }
     .l-st.bright { background: #f6e6e9; color: #582b36; }
@@ -477,7 +486,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=31"></script>
+  <script src="/static/tools/plan-engine.js?v=32"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -547,7 +556,8 @@
       lightAdd: false,  // the Add a light menu is open
       lampSel: null,    // Light: the id of the piece whose lamp is picked
       lightEditCeil: false,   // the plan's ceiling height is being changed
-      lightOpen: { details: false, settings: false },   // which folds on the room card are open
+      lightOpen: { details: false, settings: false },
+      lightMap: false,        // the Light map switch (a view setting: not saved, not in Undo)   // which folds on the room card are open
       lightCfg: { ceil: 8, rooms: {} }
     };
 
@@ -949,7 +959,7 @@
         ctx.save();
         tracePath(ctx, ptsPx(r));
         ctx.fillStyle = sel ? 'rgba(166,190,71,0.20)' : 'rgba(88,43,54,0.07)';
-        ctx.fill();
+        if (!(state.lightMap && state.mode === 'light' && state.scale)) ctx.fill();   // the light map is the fill
         ctx.lineWidth = (sel ? 3.5 : 2.2) * s;
         ctx.lineJoin = 'round';
         ctx.strokeStyle = sel ? '#7f9433' : '#582b36';
@@ -964,7 +974,7 @@
         if (lit) { ctx.save(); ctx.globalAlpha = 0.5; }
         drawRugs(ctx, forExport); drawPieces(ctx, forExport);
         if (lit) ctx.restore();
-        drawDoors(ctx, forExport); drawWalkways(ctx, forExport, 'routes');
+        drawDoors(ctx, forExport); if (!LP_EXPORT) drawWalkways(ctx, forExport, 'routes');
         if (lit) drawLights(ctx, forExport);
       }
 
@@ -2621,6 +2631,7 @@
       var c = lightCfg(r);
       c.auto = null;
       var size = roomSize(r);
+      c.touched = false;
       var kept = keep ? lightsIn(r).filter(function (l) { return l.edited; }) : [];
       state.lights = state.lights.filter(function (l) { return l.room !== r.id || kept.indexOf(l) > -1; });
       var lit = fixturesFor(r, kept);
@@ -2655,7 +2666,8 @@
       return list.join('|');
     }
     function furnChanged(r) { var c = lightCfg(r); return !!(c.done && c.furn != null && c.furn !== furnSig(r)); }
-    function hasOwnLights(r) { return lightsIn(r).some(function (l) { return l.edited; }); }
+    // Lights the person placed, moved or changed, or took out: the room is no longer the tool's own suggestion
+    function hasOwnLights(r) { return !!lightCfg(r).touched || lightsIn(r).some(function (l) { return l.edited; }); }
     // "You added the dining table since..." for the room card
     function furnChangeLine(r) {
       var c = lightCfg(r), was = {};
@@ -2765,9 +2777,9 @@
         }
       }
       // The suggestion never calls itself too bright: only lights the person added, moved or changed can
-      if (ev.status === 'bright' && !ls.some(function (l) { return l.edited; })) ev.status = 'ok';
+      if (ev.status === 'bright' && !hasOwnLights(r)) ev.status = 'ok';
       // ...or too dim: when the ceiling can't hold enough lights, it's as much as fits (the card says what makes up the rest)
-      if (ev.status === 'dim' && !ls.some(function (l) { return l.edited; })) ev.status = 'full';
+      if (ev.status === 'dim' && !hasOwnLights(r)) ev.status = 'full';
       return ev;
     }
     /* The lighting checks for a room, in plain sentences: hanging lights the right size and height,
@@ -2865,9 +2877,9 @@
       state.pieces.push(makePiece(FURNITURE.get('lamp'), pctX(hit.spot.x), pctY(hit.spot.y), 0));
       renderLight(); draw();
     }
-    function drawLamps(ctx, forExport) {
+    function drawLamps(ctx, forExport, noGlow) {
       var f = state.scale.ftPerPx, ratio = displayRatio();
-      state.pieces.forEach(function (pc) {
+      if (!noGlow) state.pieces.forEach(function (pc) {
         var q = lampPx(pc);
         if (!q) return;
         var rm = pieceRoom(pc), reach = (q.floor ? 4 : 3) / f;
@@ -2931,12 +2943,150 @@
       });
       return best;
     }
+    /* ---------- Light map (LIGHT.map in plan-engine.js) ----------
+       Behind the Light map switch: every room's light by the point method, with everything switched on,
+       measured at the height of the table, desk, counter, island, dresser or bed a spot sits over and at
+       the floor elsewhere. Paler is brighter, deeper taupe dimmer. Patches under half the room's general
+       target are dark spots: marked on the plan and named on the room card. */
+    var MAPCACHE = {}, MAPCACHE_N = 0, LP_EXPORT = false;
+    function lightMapFor(r) {
+      if (!lightable(r) || !lightCfg(r).done) return null;
+      var f = state.scale.ftPerPx, ceil = roomCeil(r), ls = lightsIn(r);
+      var pcs = state.pieces.filter(function (pc) { return pc.role !== 'decor' || pc.type === 'lamp' ? pieceRoom(pc) === r : false; });
+      var key = JSON.stringify([r.ftShape, ceil, roomMood(r), roomLType(r), ls, pcs.map(function (pc) { return [pc.id, pc.type, pc.x, pc.y, pc.rot, pc.w, pc.d, pc.h, pc.flip, pc.noLamp, pc.lampLm]; })]);
+      if (MAPCACHE[key]) return MAPCACHE[key];
+      var fixtures = [], surfaces = [], skip = [], strips = {};
+      ls.forEach(function (l) {
+        var k = kindOf(l), p = lightFt(l), lm = lumensOf(l);
+        if (k === 'undercab') { strips[l.piece] = (strips[l.piece] || 0) + lm; return; }
+        var z = k === 'recessed' || k === 'flush' ? ceil : k === 'sconce' ? (l.mount || LIGHT.SCONCE_H) / 12 : k === 'floorlamp' ? 58 / 12 : (l.hang || 66) / 12;
+        fixtures.push({ x: p.x, y: p.y, z: z, lm: lm, beam: l.beam || 'wide', m: k === 'recessed' ? null : 1 });
+      });
+      pcs.forEach(function (pc) {
+        if (LIGHT.isLamp(pc)) {
+          var q = lampPx(pc);
+          if (q) fixtures.push({ x: q.x * f, y: q.y * f, z: (q.floor ? 58 : surfaceH(pc) + 18) / 12, lm: lampLmOf(pc), m: 1 });
+        }
+        if (pc.role === 'decor') return;
+        var pf = pieceFt(pc), h = pc.h || 30;
+        if (h >= 60) { skip.push(pf.poly); return; }
+        if (pc.kind === 'seat') return;
+        var even = strips[pc.id] ? strips[pc.id] * LIGHT.CU * LIGHT.LLF / Math.max(1, LIGHT.polyArea(pf.poly)) : 0;
+        surfaces.push({ poly: pf.poly, h: surfaceH(pc) / 12, even: even });
+      });
+      var mp = LIGHT.map({ poly: r.ftShape, step: 0.5, fixtures: fixtures, surfaces: surfaces, skip: skip, avg: roomLight(r).fcAll });
+      var tg = roomGeneral(r) || 10;
+      mp.target = tg;
+      mp.dark = LIGHT.darkSpots(mp, tg * 0.5, 1.5, 2);
+      if (++MAPCACHE_N > 60) { MAPCACHE = {}; MAPCACHE_N = 1; }
+      return (MAPCACHE[key] = mp);
+    }
+    // Deeper taupe where dim, warm in the middle, pale cream where bright (t: light over the room's target)
+    var MAP_RAMP = [[0.35, [84, 72, 64, 0.62]], [0.75, [168, 150, 128, 0.46]], [1.1, [238, 220, 180, 0.30]], [1.7, [255, 250, 234, 0.74]]];
+    function mapColor(t) {
+      var a = MAP_RAMP[0], b = MAP_RAMP[MAP_RAMP.length - 1];
+      if (t <= a[0]) return a[1]; if (t >= b[0]) return b[1];
+      for (var i = 1; i < MAP_RAMP.length; i++) if (t <= MAP_RAMP[i][0]) { a = MAP_RAMP[i - 1]; b = MAP_RAMP[i]; break; }
+      var u = (t - a[0]) / (b[0] - a[0]);
+      return a[1].map(function (v, k) { return v + (b[1][k] - v) * u; });
+    }
+    function drawLightMap(ctx) {
+      var f = state.scale.ftPerPx, ratio = displayRatio();
+      state.rooms.forEach(function (r) {
+        var mp = lightMapFor(r);
+        if (!mp) return;
+        // Spots just outside the outline take their neighbors' light, so smoothing doesn't fade the walls
+        var v = mp.v.slice();
+        for (var pass = 0; pass < 2; pass++) {
+          var nv = v.slice();
+          for (var k = 0; k < v.length; k++) {
+            if (v[k] != null) continue;
+            var i = k % mp.nx, j = (k - i) / mp.nx, sum = 0, n = 0;
+            [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
+              var ii = i + d[0], jj = j + d[1];
+              if (ii >= 0 && jj >= 0 && ii < mp.nx && jj < mp.ny && v[jj * mp.nx + ii] != null) { sum += v[jj * mp.nx + ii]; n++; }
+            });
+            if (n) nv[k] = sum / n;
+          }
+          v = nv;
+        }
+        var off = document.createElement('canvas'); off.width = mp.nx; off.height = mp.ny;
+        var ox = off.getContext('2d'), im = ox.createImageData(mp.nx, mp.ny);
+        for (var q = 0; q < v.length; q++) {
+          if (v[q] == null) continue;
+          var c = mapColor(v[q] / mp.target);
+          im.data[q * 4] = c[0]; im.data[q * 4 + 1] = c[1]; im.data[q * 4 + 2] = c[2]; im.data[q * 4 + 3] = Math.round(c[3] * 255);
+        }
+        ox.putImageData(im, 0, 0);
+        ctx.save();
+        tracePath(ctx, ptsPx(r)); ctx.clip();
+        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(off, mp.x0 / f, mp.y0 / f, mp.nx * mp.step / f, mp.ny * mp.step / f);
+        ctx.restore();
+      });
+    }
+    // Dark spots: an amber ring with an exclamation mark, drawn over the fixtures
+    function drawDarkSpots(ctx) {
+      var f = state.scale.ftPerPx, ratio = displayRatio(), R = 9 * ratio;
+      state.rooms.forEach(function (r) {
+        var mp = lightMapFor(r);
+        if (!mp) return;
+        mp.dark.forEach(function (d) {
+          var x = d.x / f, y = d.y / f;
+          ctx.save();
+          ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff'; ctx.fill();
+          ctx.lineWidth = 2.2 * ratio; ctx.strokeStyle = '#b07d14'; ctx.stroke();
+          ctx.fillStyle = '#b07d14'; ctx.font = '700 ' + (12 * ratio) + 'px "DM Sans", sans-serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', x, y + 0.5 * ratio);
+          ctx.restore();
+        });
+      });
+    }
+    // Where a dark spot is, in words: a corner, by a window, near a piece, along a wall, or mid-room
+    function darkWhere(r, d) {
+      var b = (function () { var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        r.ftShape.forEach(function (q) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); });
+        return { x0: x0, y0: y0, x1: x1, y1: y1 }; })();
+      var near = 3, left = d.x - b.x0 < near, right = b.x1 - d.x < near, top = d.y - b.y0 < near, bottom = b.y1 - d.y < near;
+      var v = top ? 'top' : bottom ? 'bottom' : '', h = left ? 'left' : right ? 'right' : '';
+      if (v && h) return { corner: true, words: 'in the ' + v + ' ' + h + ' corner' };
+      var f = state.scale.ftPerPx;
+      var win = state.doors.filter(isWin).some(function (w) { var df = doorFt(w); return Math.hypot(df.cx - d.x, df.cy - d.y) < 4; });
+      if (win) return { words: 'by the window' };
+      var best = null, bd = 4;
+      state.pieces.forEach(function (pc, i) {
+        if (pc.role === 'chair' || pieceRoom(pc) !== r) return;
+        var pf = pieceFt(pc), dd = Math.hypot(pf.cx - d.x, pf.cy - d.y) - Math.max(pc.w, pc.d) / 24;
+        if (dd < bd) { bd = dd; best = i; }
+      });
+      if (best != null) return { words: 'near the ' + esc(nameOf(best).toLowerCase()) };
+      if (v || h) return { words: 'along the ' + (v || h) + ' wall' };
+      return { words: 'in the middle of the room' };
+    }
+    function darkLines(r) {
+      var mp = lightMapFor(r);
+      if (!mp) return [];
+      if (!mp.dark.length) return ['No dark spots: the light reaches the whole room.'];
+      return mp.dark.map(function (d) {
+        var w = darkWhere(r, d);
+        return (w.corner ? 'Dark corner ' : 'Dark spot ') + w.words + ', down to about ' + Math.max(1, Math.round(d.fc)) + ' foot-candles.';
+      }).concat(['A lamp or another light there evens it out.']);
+    }
+    function mapSwitch() {
+      var on = state.lightMap;
+      return '<div class="l-mapsw"><button class="sw' + (on ? ' on' : '') + '" id="lightMapBtn" role="switch" aria-checked="' + on + '" data-lact="map"><span></span></button>' +
+        '<label for="lightMapBtn">Light map</label></div>' +
+        (on ? '<div class="l-mapkey"><span>Dimmer</span><i></i><span>Brighter</span><b>!</b><span>dark spot</span></div>' : '');
+    }
     var GLOW = 'rgba(245, 214, 140, ';
     function drawLights(ctx, forExport) {
       if (!state.scale) return;
-      var f = state.scale.ftPerPx, ratio = displayRatio();
-      // Where each light lands, as a warm wash kept inside its room (multiplied so the plan's lines stay crisp)
-      state.lights.forEach(function (l) {
+      var f = state.scale.ftPerPx, ratio = displayRatio(), mapOn = state.lightMap && !LP_EXPORT;
+      if (mapOn) drawLightMap(ctx);
+      // Where each light lands, as a warm wash kept inside its room (multiplied so the plan's lines stay crisp).
+      // The light map replaces the washes; the lighting plan page shows the symbols alone.
+      if (!mapOn && !LP_EXPORT) state.lights.forEach(function (l) {
         var r = roomById(l.room), ceil = r ? roomCeil(r) : state.lightCfg.ceil || 8, k = kindOf(l), p = k === 'sconce' ? sconceGeom(l).c : lightPx(l), reach;
         ctx.save();
         ctx.globalCompositeOperation = 'multiply';
@@ -2967,12 +3117,13 @@
         ctx.beginPath(); ctx.arc(p.x, p.y, reach, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       });
-      drawLamps(ctx, forExport);
+      drawLamps(ctx, forExport, mapOn || LP_EXPORT);
       // The fixtures themselves, in the symbols plans use
       state.lights.forEach(function (l, k) {
         var sel = !forExport && state.mode === 'light' && k === state.lightSel;
         drawFixture(ctx, l, sel, ratio, f);
       });
+      if (mapOn) drawDarkSpots(ctx);
     }
     function drawFixture(ctx, l, sel, ratio, f) {
       var k = kindOf(l), p = lightPx(l), rad = lightRad(l), ink = '#582b36';
@@ -3150,6 +3301,8 @@
     function removeLight() {
       if (state.lightSel < 0) return;
       pushUndo();
+      var gone = state.lights[state.lightSel], rm = roomById(gone.room);
+      if (rm) lightCfg(rm).touched = true;   // a light the person took out counts as their change, like one they moved
       state.lights.splice(state.lightSel, 1);
       state.lightSel = -1;
       renderLight(); draw();
@@ -3196,6 +3349,7 @@
       if (stray) html += '<p class="l-note l-warn">' + (stray === 1 ? 'One light sits' : stray + ' lights sit') + ' outside every room. Drag ' + (stray === 1 ? 'it' : 'them') + ' into a room or remove ' + (stray === 1 ? 'it' : 'them') + '.</p>';
       if (r) html += '<button class="link-btn detail-back" data-lact="allrooms">&larr; All rooms</button>';
       html += tipHTML('light');
+      html += mapSwitch();
       if (r) html += roomLightCard(r);
       else {
         html += state.lightEditCeil
@@ -3267,6 +3421,7 @@
       html += '</div>';
       var warns = lightChecks(r);
       if (furnChanged(r)) html += '<p class="l-note l-follow">' + furnChangeLine(r) + '</p>';
+      if (state.lightMap) html += '<div class="l-dark">' + darkLines(r).map(function (n) { return '<p class="l-note">' + n + '</p>'; }).join('') + '</div>';
       html += warns.map(function (n) { return '<p class="l-note l-warn">' + n + '</p>'; }).join('');
       html += lamplessChairs(r).map(function (o) {
         return '<p class="l-note l-sug">The ' + esc(nameOf(state.pieces.indexOf(o.pc)).toLowerCase()) + ' has no lamp near it for reading. <button class="link-btn" data-lact="addlamp" data-pid="' + o.pc.id + '">Add a floor lamp</button></p>';
@@ -3280,7 +3435,7 @@
         var n = others[k], name = LIGHT.KINDS[k].name.toLowerCase();
         return n + ' ' + (n === 1 ? name : name.replace(/light$/, 'lights').replace(/(lier|ant|mount|sconce|lamp)$/, '$1s'));
       });
-      var notes = [], mine = lightsIn(r).some(function (q) { return q.edited; });
+      var notes = [], mine = hasOwnLights(r);
       if (ev.status === 'full') notes.push('Recessed lights alone can’t reach ' + tgt + ' here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Lamps or task lights make up the rest.');
       else if (ev.status === 'dim') notes.push('Add a light' + (size === 'r4' ? ', or switch to 6" lights in More settings,' : '') + ' to reach the target.');
       if (ev.status === 'bright') notes.push('Brighter than the target. A dimmer brings it down, or remove a light.');
@@ -3387,6 +3542,7 @@
       }
       if (act === 'remove') { removeLight(); return; }
       if (act === 'addmenu') { state.lightAdd = !state.lightAdd; renderLight(); return; }
+      if (act === 'map') { state.lightMap = !state.lightMap; renderLight(); draw(); return; }
       if (act === 'follow' && r) { pushUndo(); suggestRoom(r, true); renderLight(); draw(); return; }
       if (act === 'redo' && r) { pushUndo(); suggestRoom(r, false); renderLight(); draw(); return; }
       if (!sg) return;
@@ -5374,6 +5530,138 @@
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
         doc.text(note, margin + 14, y + 31);
         y += nh + 18;
+      }
+
+      // Lighting plan: its own page once any room has lights
+      if (state.scale && state.lights.length) lightingPage();
+
+      /* The Lighting plan page: the plan with fixture symbols only (no washes, no light map), a key,
+         a table per room (fixtures, counts, lumens, heights, and how the room reads), the bulb color
+         and dimmer line, and the note that this is planning guidance, not an electrical plan. */
+      function lightingPage() {
+        doc.addPage(); y = margin;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(67, 62, 60);
+        doc.text('Lighting plan', margin, y + 6);
+        if (logo) doc.addImage(logo, 'PNG', pageW - margin - 54, margin - 18, 54, 54);
+        y += 28;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(107, 101, 96);
+        doc.text('Ceilings ' + ascii(fmtFtIn(state.lightCfg.ceil || 8)) + '  \u00b7  ' + date, margin, y);
+        y += 22;
+        var was = state.mode, lpImg;
+        state.mode = 'light'; LP_EXPORT = true;
+        try { draw(true); lpImg = $('planCanvas').toDataURL('image/jpeg', 0.92); }
+        finally { LP_EXPORT = false; state.mode = was; draw(); }
+        var mh = 330, lw = contentW, lh = lw * state.H / state.W;
+        if (lh > mh) { lh = mh; lw = lh * state.W / state.H; }
+        var lx = margin + (contentW - lw) / 2;
+        doc.addImage(lpImg, 'JPEG', lx, y, lw, lh);
+        doc.setDrawColor(208, 201, 188); doc.setLineWidth(1); doc.rect(lx, y, lw, lh);
+        y += lh + 18;
+
+        // The key: one symbol for each kind of light on the plan
+        var kinds = {};
+        state.lights.forEach(function (l) { kinds[kindOf(l)] = 1; });
+        if (state.pieces.some(function (pc) { return LIGHT.isLamp(pc) && pieceRoom(pc); })) kinds.lamp = 1;
+        var KEY = [['recessed', 'Recessed light'], ['chandelier', 'Chandelier'], ['pendant', 'Pendant'], ['flush', 'Flush mount'],
+                   ['sconce', 'Wall sconce'], ['undercab', 'Under-cabinet light'], ['floorlamp', 'Floor lamp'], ['lamp', 'Lamp']];
+        var kx = margin, ky = y + 6;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+        KEY.filter(function (k) { return kinds[k[0]]; }).forEach(function (k) {
+          var w = doc.getTextWidth(k[1]) + 34;
+          if (kx + w > pageW - margin) { kx = margin; ky += 20; }
+          keySymbol(k[0], kx + 9, ky);
+          doc.setTextColor(67, 62, 60); doc.text(k[1], kx + 22, ky + 3);
+          kx += w + 10;
+        });
+        y = ky + 24;
+
+        // A table per room
+        var lc = [margin + 8, margin + 250, margin + 300, pageW - margin - 8];
+        state.rooms.forEach(function (r) {
+          if (!lightable(r) || !lightCfg(r).done) return;
+          var rows = lightRows(r);
+          if (!rows.length) return;
+          var ev = roomLight(r), tgt = ev.target;
+          checkPage(70 + rows.length * 20);
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(67, 62, 60);
+          doc.text(ascii(r.name), margin, y);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(107, 101, 96);
+          var res = Math.round(ev.fc) + ' of ' + tgt + ' foot-candles from the ceiling lights (' + MOOD_WORD[roomMood(r)].toLowerCase() + '), ' + LSTATUS[ev.status].toLowerCase();
+          if (ev.work != null) res += '. Work surfaces about ' + Math.round(ev.work) + ' of ' + ev.goal;
+          if (ev.vanity) res += '. Vanity light ' + fmtNum(ev.vanity.lm) + ' of ' + fmtNum(ev.vanity.need) + ' lumens';
+          doc.text(ascii(res + '.'), margin, y + 14);
+          y += 22;
+          doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 20, 'F');
+          doc.setFontSize(8.5); doc.setTextColor(255, 255, 255);
+          doc.text('FIXTURE', lc[0], y + 13); doc.text('COUNT', lc[1], y + 13); doc.text('LUMENS EACH', lc[2], y + 13);
+          doc.text('MOUNTED', lc[3], y + 13, { align: 'right' });
+          y += 20;
+          rows.forEach(function (rw, i) {
+            doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
+            doc.rect(margin, y, contentW, 18, 'F');
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(67, 62, 60);
+            doc.text(ascii(rw.name), lc[0], y + 12);
+            doc.text(String(rw.n), lc[1], y + 12);
+            doc.text(ascii(rw.lm), lc[2], y + 12);
+            doc.setTextColor(107, 101, 96);
+            doc.text(ascii(rw.where), lc[3], y + 12, { align: 'right' });
+            y += 18;
+          });
+          y += 16;
+        });
+
+        // Bulb color and dimmers, then the note
+        checkPage(110);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+        var kl = doc.splitTextToSize('For bulbs, warm white (2700K to 3000K) suits most rooms, and dimmers on the ceiling lights let each room go from bright to cozy.', contentW);
+        doc.text(kl, margin, y + 4);
+        y += kl.length * 13 + 14;
+        var gn = doc.splitTextToSize('This lighting plan is planning guidance, not an electrical plan. Have a licensed electrician confirm fixture locations, wiring and code requirements.', contentW - 28);
+        var gh = gn.length * 14 + 34;
+        doc.setFillColor(245, 240, 232); doc.roundedRect(margin, y, contentW, gh, 6, 6, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(88, 43, 54);
+        doc.text('PLANNING GUIDANCE', margin + 14, y + 16);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+        doc.text(gn, margin + 14, y + 31);
+        y += gh + 18;
+      }
+      // The key's symbols, drawn the way the plan draws them
+      function keySymbol(k, x, y0) {
+        doc.setDrawColor(88, 43, 54); doc.setFillColor(88, 43, 54); doc.setLineWidth(1);
+        var X = function (cx, cy, rr) { var d = rr * 0.7071; doc.line(cx - d, cy - d, cx + d, cy + d); doc.line(cx + d, cy - d, cx - d, cy + d); };
+        if (k === 'recessed') { doc.circle(x, y0, 5, 'S'); doc.circle(x, y0, 1.4, 'F'); }
+        else if (k === 'chandelier') { doc.circle(x, y0, 7, 'S'); for (var a = 0; a < 6; a++) { var t = a * Math.PI / 3; doc.line(x, y0, x + 7 * Math.cos(t), y0 + 7 * Math.sin(t)); } }
+        else if (k === 'pendant') { doc.circle(x, y0, 5, 'S'); doc.circle(x, y0, 2.6, 'F'); }
+        else if (k === 'flush') { doc.circle(x, y0, 6, 'S'); doc.circle(x, y0, 3.2, 'S'); }
+        else if (k === 'sconce') { doc.line(x - 8, y0 - 4, x - 8, y0 + 4); doc.line(x - 8, y0, x - 4.5, y0); doc.circle(x, y0, 4.5, 'S'); X(x, y0, 4.5); }
+        else if (k === 'undercab') { doc.setLineDashPattern([3, 2], 0); doc.line(x - 9, y0, x + 9, y0); doc.setLineDashPattern([], 0); }
+        else { doc.circle(x, y0, 5, 'S'); X(x, y0, 5); }
+      }
+      // A room's fixtures, alike ones counted together, then the lamps on its furniture
+      function lightRows(r) {
+        var out = [], byKey = {};
+        function add(name, lm, where) {
+          var key = name + '|' + lm + '|' + where;
+          if (byKey[key]) { byKey[key].n++; return; }
+          out.push(byKey[key] = { name: name, n: 1, lm: lm, where: where });
+        }
+        var ORDER = ['recessed', 'flush', 'chandelier', 'pendant', 'sconce', 'undercab', 'floorlamp'];
+        lightsIn(r).slice().sort(function (a, b) { return ORDER.indexOf(kindOf(a)) - ORDER.indexOf(kindOf(b)); }).forEach(function (l) {
+          var k = kindOf(l), K = LIGHT.KINDS[k];
+          if (k === 'recessed') add(LIGHT.FIXTURES[l.type || 'r4'].name.replace(/^./, function (c) { return c.toUpperCase(); }), fmtNum(l.lm), 'Ceiling');
+          else if (k === 'flush') add(K.name, fmtNum(lumensOf(l)), 'Ceiling');
+          else if (k === 'chandelier') add(K.name + ', ' + Math.round(l.dia || K.dia) + '" wide', fmtNum(lumensOf(l)), 'Bottom at ' + fmtFtIn((l.hang || 66) / 12));
+          else if (k === 'pendant') add(K.name, fmtNum(lumensOf(l)), 'Bottom at ' + fmtFtIn((l.hang || 66) / 12));
+          else if (k === 'sconce') add(K.name, fmtNum(lumensOf(l)), 'Center at ' + fmtFtIn((l.mount || LIGHT.SCONCE_H) / 12));
+          else if (k === 'undercab') add(K.name, fmtNum(l.lmFt || K.lmFt) + ' per foot', 'Under the upper cabinets');
+          else add(K.name, fmtNum(lumensOf(l)), 'Floor');
+        });
+        state.pieces.forEach(function (pc) {
+          if (!LIGHT.isLamp(pc) || pieceRoom(pc) !== r) return;
+          if (pc.type === 'lamp') add('Floor lamp', fmtNum(lampLmOf(pc)), 'Floor');
+          else add('Table lamp', fmtNum(lampLmOf(pc)), 'On the ' + pc.name.toLowerCase());
+        });
+        return out;
       }
 
       // Footer on every page

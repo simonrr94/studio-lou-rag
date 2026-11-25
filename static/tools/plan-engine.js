@@ -3712,6 +3712,69 @@ var LIGHT = (function () {
     return n ? tot / n : 0;
   }
 
+  /* ---------- Light map ----------
+     o: { poly (feet), step (feet, default 0.5),
+          fixtures: [{ x, y, z (feet: the light's height), lm, beam, m (optional spread; 1 spreads like a lamp shade) }],
+          surfaces: [{ poly, h (feet), even (foot-candles from under-cabinet strips) }],
+          skip: [polys] (tall pieces: no floor to light), avg (foot-candles the room averages by the lumen method) }
+     Each grid point gets the direct light from every fixture, measured at the height of the surface
+     it sits over (a table, desk, counter, island, dresser, bed) or the floor. Light bounced off the
+     walls and ceiling (a quarter of it) is added evenly, and the map averages what the lumen method gives.
+     Returns { x0, y0, step, nx, ny, v: [foot-candles or null outside the room], avg, min, max }. */
+  function map(o) {
+    var bb = boundsOf(o.poly), step = o.step || 0.5;
+    var nx = Math.max(1, Math.ceil(bb.w / step)), ny = Math.max(1, Math.ceil(bb.h / step));
+    var x0 = bb.x + (bb.w - nx * step) / 2, y0 = bb.y + (bb.h - ny * step) / 2;
+    var v = new Array(nx * ny), sum = 0, n = 0, surfs = o.surfaces || [], skip = o.skip || [];
+    var fx = (o.fixtures || []).map(function (f) { return { x: f.x, y: f.y, z: f.z, lm: f.lm, m: f.m != null ? f.m : spread(f.beam) }; });
+    for (var j = 0; j < ny; j++) for (var i = 0; i < nx; i++) {
+      var p = { x: x0 + (i + 0.5) * step, y: y0 + (j + 0.5) * step }, k = j * nx + i;
+      if (!inPoly(p, o.poly) || skip.some(function (q) { return inPoly(p, q); })) { v[k] = null; continue; }
+      var h0 = 0, e = 0;
+      surfs.forEach(function (sf) { if (sf.h > h0 && inPoly(p, sf.poly)) { h0 = sf.h; e = sf.even || 0; } });
+      fx.forEach(function (f) {
+        var h = Math.max(0.25, f.z - h0), d2 = (f.x - p.x) * (f.x - p.x) + (f.y - p.y) * (f.y - p.y), r2 = d2 + h * h;
+        e += f.lm * (f.m + 1) / (2 * Math.PI) * Math.pow(h / Math.sqrt(r2), f.m + 1) / r2;
+      });
+      v[k] = e; sum += e; n++;
+    }
+    // About a quarter of a room's light arrives bounced (even everywhere); the direct pattern carries the rest
+    // (the average skips the bright patch right under a lamp, so one lamp can't wash out the room)
+    var avg0 = o.avg || (n ? sum / n : 0), cs = 0;
+    for (var c0 = 0; c0 < v.length; c0++) if (v[c0] != null) cs += Math.min(v[c0], avg0 * 3);
+    var direct = n ? cs / n : 0, avg = avg0, BOUNCE = 0.25, k2 = direct ? avg * (1 - BOUNCE) / direct : 0, lo = Infinity, hi = 0;
+    for (var q = 0; q < v.length; q++) if (v[q] != null) { v[q] = v[q] * k2 + avg * BOUNCE; lo = Math.min(lo, v[q]); hi = Math.max(hi, v[q]); }
+    return { x0: x0, y0: y0, step: step, nx: nx, ny: ny, v: v, avg: avg, min: n ? lo : 0, max: hi };
+  }
+  /* Dark spots on a light map: patches below limit (foot-candles) at least minArea square feet,
+     each placed at its middle and valued at its darkest point. Darkest first, at most `most`. */
+  function darkSpots(mp, limit, minArea, most) {
+    var seen = {}, out = [], need = Math.max(1, Math.round((minArea || 1.5) / (mp.step * mp.step)));
+    for (var k = 0; k < mp.v.length; k++) {
+      if (seen[k] || mp.v[k] == null || mp.v[k] >= limit) continue;
+      var stack = [k], cells = 0, best = k, sx = 0, sy = 0, list = [];
+      seen[k] = 1;
+      while (stack.length) {
+        var c = stack.pop(), ci = c % mp.nx, cj = (c - ci) / mp.nx;
+        cells++; list.push(c); sx += ci; sy += cj;
+        if (mp.v[c] < mp.v[best]) best = c;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (dd) {
+          var ii = ci + dd[0], jj = cj + dd[1], nk = jj * mp.nx + ii;
+          if (ii < 0 || jj < 0 || ii >= mp.nx || jj >= mp.ny || seen[nk] || mp.v[nk] == null || mp.v[nk] >= limit) return;
+          seen[nk] = 1; stack.push(nk);
+        });
+      }
+      if (cells >= need) {
+        // marked at the patch's middle (the patch spot nearest it, for a curved patch), valued at its darkest
+        var mx = sx / cells, my = sy / cells, at = list[0], ad = Infinity;
+        list.forEach(function (c) { var ci = c % mp.nx, cj = (c - ci) / mp.nx, dd = (ci - mx) * (ci - mx) + (cj - my) * (cj - my); if (dd < ad) { ad = dd; at = c; } });
+        var bi = at % mp.nx, bj = (at - bi) / mp.nx;
+        out.push({ x: mp.x0 + (bi + 0.5) * mp.step, y: mp.y0 + (bj + 0.5) * mp.step, fc: mp.v[best], area: cells * mp.step * mp.step });
+      }
+    }
+    return out.sort(function (p, q) { return p.fc - q.fc; }).slice(0, most || 3);
+  }
+
   /* ---------- Results for a room ----------
      o: { area, target, lights: [{ x, y, lm }], lampLm, ceil }
      fc is the lumen method on the room's ceiling lights; fcAll adds the lamps.
@@ -3732,5 +3795,5 @@ var LIGHT = (function () {
            KINDS: KINDS, chandelierDia: chandelierDia, chandelierRange: chandelierRange, hangOver: hangOver,
            pendantSpots: pendantSpots, vanitySpots: vanitySpots, vanityNeed: vanityNeed, vanityLm: vanityLm, SCONCE_H: SCONCE_H, taskFc: taskFc, edgeDist: edgeDist,
            type: type, typeOf: typeOf, typeKnown: typeKnown, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
-           isLamp: isLamp, hasLampSpot: hasLampSpot, lampSpot: lampSpot, at: at, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
+           isLamp: isLamp, hasLampSpot: hasLampSpot, lampSpot: lampSpot, at: at, map: map, darkSpots: darkSpots, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
 })();
