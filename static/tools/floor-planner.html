@@ -256,6 +256,7 @@
     .cat-grid .cat-type { grid-column: 1 / -1; font-size: 13px; color: #6b6560; margin-bottom: 4px; }
     .cat-grid .cat-type select { font: inherit; font-size: 13px; color: #433E3C; border: 1px solid #d0c9bc; border-radius: 6px; padding: 2px 4px; background: #ffffff; }
     .cat-grid .cat-more { grid-column: 1 / -1; margin: 8px 0 0; font-size: 13px; }
+    .cat-grid .lamp-note { grid-column: 1 / -1; margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: #6b6560; }
     .cat-grid .piece-card b { font-size: 12px; font-weight: 600; }
     .cat-grid .piece-card .piece-art { height: 38px; margin-bottom: 4px; }
     .own-card { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #582b36; }
@@ -471,7 +472,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=28"></script>
+  <script src="/static/tools/plan-engine.js?v=29"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -533,6 +534,7 @@
       ownOpen: false,   // the Your own form is open under the catalog
       showFine: false,  // Checks: also list the spacing that's fine
       cat: 'Furniture', // the Add tab shown: Furniture, Rugs or Decor
+      lampNote: null,   // Decor: what the last tap on Table lamp did
       ptSel: -1,        // Measure: the corner tapped on the selected room's shape, which shows a remove (x) button
       lights: [],       // Light: the ceiling lights (see Light mode below)
       lightSel: -1,     // index of the picked light, or -1
@@ -1494,13 +1496,38 @@
       return { x: mid.x / state.W * 100, y: mid.y / state.H * 100 };
     }
     function makePiece(spec, x, y, rot, group) {
-      return { id: state.nextId++, type: spec.id || 'custom', name: spec.name, kind: spec.kind || 'other', role: spec.role || 'other',
+      var pc = { id: state.nextId++, type: spec.id || 'custom', name: spec.name, kind: spec.kind || 'other', role: spec.role || 'other',
                shape: spec.shape || 'rect', arm: spec.arm || null, flip: false, group: group || null,
                w: spec.w, d: spec.d, h: spec.h || null, x: x, y: y, rot: rot || 0 };
+      // Table lamps start off: they're added from Decor (pieces in older saves keep theirs)
+      if (LIGHT.hasLampSpot(pc.type)) pc.noLamp = true;
+      return pc;
+    }
+    // Decor's Table lamp: put a lamp on the next piece in the room that can hold one and has none
+    var LAMP_ORDER = ['nightstand', 'side', 'sideR', 'console', 'dresser', 'desk'];
+    function addTableLamp() {
+      var r = state.rooms[state.selected];
+      if (!r) return;
+      var free = state.pieces.filter(function (pc) { return LIGHT.hasLampSpot(pc.type) && pc.noLamp && pieceRoom(pc) === r; })
+        .sort(function (a, b) { return LAMP_ORDER.indexOf(a.type) - LAMP_ORDER.indexOf(b.type) || a.x - b.x || a.y - b.y; });
+      if (!free.length) {
+        var any = state.pieces.some(function (pc) { return LIGHT.hasLampSpot(pc.type) && pieceRoom(pc) === r; });
+        state.lampNote = any ? 'Every table in ' + esc(r.name) + ' has a lamp.' :
+          'A table lamp goes on a nightstand, side table, dresser, console table or desk. Add one of those first.';
+      } else {
+        pushUndo();
+        var pc = free[0];
+        delete pc.noLamp;
+        var left = free.length - 1;
+        state.lampNote = 'Lamp added to the ' + esc(nameOf(state.pieces.indexOf(pc)).toLowerCase()) + '. ' +
+          (left ? 'Tap again for the next table.' : 'Every table here has a lamp now.') + ' Pick a table to take its lamp off.';
+      }
+      renderCatalog(); draw();
     }
     // A dining table brings its chairs: they land around it, pushed in, and move and turn with it
     function addPiece(spec) {
       if (!state.scale) return;
+      state.lampNote = null;
       pushUndo();
       var seats = FURNITURE.chairLayout(spec), chair = FURNITURE.seatFor(spec);
       var room = { w: spec.w, d: spec.d };
@@ -1709,7 +1736,12 @@
       }
       function head(t) { return '<p class="cat-head">' + t + '</p>'; }
       var own = '<button class="piece-card own-card" data-own="1" title="A piece with its own size"><span>+</span><b>Your own</b></button>', html = '';
-      if (cat === 'Decor') html = cards(groupItems('Decor')) + own;
+      if (cat === 'Decor') {
+        html = cards(groupItems('Decor')) +
+          '<button class="piece-card" data-tablelamp="1" title="Puts a lamp on the next nightstand, side table, dresser, console table or desk in this room">' +
+          '<img class="piece-art" src="' + FURNART.lampThumb(132, 46) + '" alt=""><b>Table lamp</b></button>' + own;
+        if (state.lampNote) html += '<p class="lamp-note">' + state.lampNote + '</p>';
+      }
       else {
         var r = state.rooms[state.selected], gs = furnGroups(r), t = r ? roomLType(r) : 'living';
         html += '<div class="cat-type">' + (state.furnTypeOpen && r
@@ -3341,6 +3373,7 @@
       if ($('undoBtn')) $('undoBtn').disabled = false;
     }
     function undo() {
+      state.lampNote = null;
       var s = UNDO.pop();
       if ($('undoBtn')) $('undoBtn').disabled = !UNDO.length;
       if (!s) return;
@@ -3360,10 +3393,11 @@
       var id = btn.getAttribute('data-piece'), act = btn.getAttribute('data-pact'), cat = btn.getAttribute('data-cat'), tab = btn.getAttribute('data-ptab');
       if (tab) { setTab(tab); return; }
       if (btn.getAttribute('data-fine')) { state.showFine = !state.showFine; renderSpacing(); renderPieceBar(); return; }
-      if (cat) { state.cat = cat; state.ownOpen = false; renderCatalog(); return; }
+      if (cat) { state.cat = cat; state.ownOpen = false; state.lampNote = null; renderCatalog(); return; }
       var fact = btn.getAttribute('data-cact');
       if (fact === 'more') { state.morePieces = !state.morePieces; renderCatalog(); return; }
       if (fact === 'ftype') { state.furnTypeOpen = true; renderCatalog(); return; }
+      if (btn.getAttribute('data-tablelamp')) { addTableLamp(); return; }
       if (btn.getAttribute('data-own')) { state.ownOpen = !state.ownOpen; renderCatalog(); if (state.ownOpen) $('customName').focus(); return; }
       if (act === 'done') { deselect(); return; }
       if (act === 'lampyes' || act === 'lampno') {
@@ -4816,6 +4850,7 @@
       }).join('');
     }
     function select(i, scrollCard) {
+      if (i !== state.selected) state.lampNote = null;
       if (i !== state.selected) {
         state.ptSel = -1;
         state.morePieces = false; state.furnTypeOpen = false;

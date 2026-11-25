@@ -1614,7 +1614,9 @@ var FURNART = (function () {
     if (thumbs[key]) return thumbs[key];
     var dpr = 2, cv = document.createElement('canvas'), ctx = cv.getContext('2d');
     cv.width = cssW * dpr; cv.height = cssH * dpr;
-    var parts = [{ pc: Object.assign({ type: spec.id }, spec), x: 0, y: 0, rot: 0 }], all = [], chair = FURNITURE.seatFor(spec);
+    // a nightstand, side table, dresser, console table or desk arrives with no lamp, so its card shows none
+    var bare = typeof LIGHT !== 'undefined' && LIGHT.hasLampSpot(spec.id);
+    var parts = [{ pc: Object.assign({ type: spec.id }, spec, bare ? { noLamp: true } : {}), x: 0, y: 0, rot: 0 }], all = [], chair = FURNITURE.seatFor(spec);
     FURNITURE.chairLayout(spec).forEach(function (c) { parts.unshift({ pc: Object.assign({ type: chair.id }, chair), x: c.x, y: c.y, rot: c.rot }); });
     parts.forEach(function (p) { all = all.concat(GEO.place(FURNITURE.outline(p.pc), p.x, p.y, p.rot, 1)); });
     var b = PLAN.bounds(all), pad = 3, k = Math.min((cv.width - 2 * pad * dpr) / b.w, (cv.height - 2 * pad * dpr) / b.h);
@@ -1626,7 +1628,19 @@ var FURNART = (function () {
     });
     return (thumbs[key] = cv.toDataURL('image/png'));
   }
-  return { draw: draw, thumb: thumb, COLORS: C };
+  // The Table lamp card in Decor: a lamp shade seen from above, as on the furniture
+  function lampThumb(cssW, cssH) {
+    var key = 'tablelamp|' + cssW + 'x' + cssH;
+    if (thumbs[key]) return thumbs[key];
+    var dpr = 2, cv = document.createElement('canvas'), ctx = cv.getContext('2d'), r = 7, ratio = dpr * 0.75;
+    cv.width = cssW * dpr; cv.height = cssH * dpr;
+    K = (cv.height - 6 * dpr) / (2 * r); FINE = true; NOLAMP = false;
+    LW = Math.max(0.9, Math.min(1.6, (K / ratio) * 0.55)) * ratio;
+    ctx.translate(cv.width / 2, cv.height / 2);
+    shade(ctx, 0, 0, r);
+    return (thumbs[key] = cv.toDataURL('image/png'));
+  }
+  return { draw: draw, thumb: thumb, lampThumb: lampThumb, COLORS: C };
 })();
 
 /* =====================================================================
