@@ -3875,12 +3875,15 @@ var LAYOUT = (function () {
     });
   }
 
-  function stretches(poly, openings, wallTest) {
+  // angled: also the walls that aren't level or plumb (marked st.angled), for a media console,
+  // which stands flat against any wall; seating and beds still go on level and plumb walls only
+  function stretches(poly, openings, wallTest, angled) {
     var out = [];
     poly.forEach(function (a, k) {
       var b = poly[(k + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
       if (L < 1.5) return;
-      if (Math.abs(dx) > 0.05 && Math.abs(dy) > 0.05) return;   // pieces go against level and plumb walls only
+      var slant = Math.abs(dx) > 0.05 && Math.abs(dy) > 0.05;
+      if (slant && !angled) return;   // pieces go against level and plumb walls only
       var u = { x: dx / L, y: dy / L }, n = inward(poly, a, u, L), spans = [], wins = [];
       openings.forEach(function (o) {
         var off = function (p) { return Math.abs((p.x - a.x) * n.x + (p.y - a.y) * n.y); };
@@ -3914,7 +3917,7 @@ var LAYOUT = (function () {
         if (i <= steps && ok[i]) { if (start < 0) start = i; continue; }
         if (start > -1) {
           var t0 = L * start / steps, t1 = L * (i - 1) / steps;
-          if (t1 - t0 >= 1.5) out.push({ edge: k, a: a, u: u, n: n, L: L, t0: t0, t1: t1, len: t1 - t0,
+          if (t1 - t0 >= 1.5) out.push({ edge: k, a: a, u: u, n: n, L: L, t0: t0, t1: t1, len: t1 - t0, angled: slant,
             windows: wins.filter(function (w) { return w[1] > t0 && w[0] < t1; }) });
           start = -1;
         }
@@ -4104,13 +4107,14 @@ var LAYOUT = (function () {
     }) : [];
     return { coffee: coffee, sides: sides, chairs: arm };
   }
-  function living(sts, poly) {
+  // wide: an open room, where the group may also slide up to 3 ft along its wall
+  function living(sts, poly, wide) {
     var out = [], media = FURNITURE.get('media'), seats = [FURNITURE.get('sofa'), FURNITURE.get('loveseat')], ch = FURNITURE.get('armchair');
     // Centered on the wall (or the stretch); then up to a foot either way, for when a doorway's landing
     // takes one end (these rank below centered ones: each foot off costs as much as a tight spot)
     function centers(st, wIn) {
       var m = [st.L / 2, (st.t0 + st.t1) / 2], ts = m.slice();
-      m.forEach(function (t) { [-1, -0.5, 0.5, 1].forEach(function (k) { ts.push(t + k); }); });
+      m.forEach(function (t) { (wide ? [-3, -2.5, -2, -1.5, -1, -0.5, 0.5, 1, 1.5, 2, 2.5, 3] : [-1, -0.5, 0.5, 1]).forEach(function (k) { ts.push(t + k); }); });
       return uniq(ts).filter(function (t) { return fits(st, t, wIn); });
     }
     function variants(kind, st, t, seat, seatPl, c0, face, right, extra) {
@@ -4153,12 +4157,13 @@ var LAYOUT = (function () {
             var c0 = add(mc, st.n, V), face = neg(st.n);
             var seatPl = put(seat, c0, face), rt = { x: -right.x, y: -right.y };
             var mpl = against(media, st, t); mpl.tv = tv;
+            if (st.angled) mpl.angled = true;
             variants('tv', st, t, seat, seatPl, c0, face, rt, { media: mpl, dist: V, tv: tv, floating: V < wallV - 1e-6 });
           });
         });
       });
-      // talk: the seat on this wall
-      seats.forEach(function (seat) {
+      // talk: the seat on this wall (level and plumb walls only; an angled wall takes just the console)
+      if (!st.angled) seats.forEach(function (seat) {
         centers(st, seat.w).forEach(function (t) {
           var seatPl = against(seat, st, t), c0 = { x: seatPl.cx, y: seatPl.cy };
           variants('talk', st, t, seat, seatPl, c0, st.n, right);
@@ -4169,7 +4174,7 @@ var LAYOUT = (function () {
     var sec = FURNITURE.get('sectional'), arm = sec.arm / 12;
     sts.forEach(function (A) {
       sts.forEach(function (B) {
-        if (A === B || Math.abs(A.n.x * B.n.x + A.n.y * B.n.y) > 0.01) return;
+        if (A === B || A.angled || B.angled || Math.abs(A.n.x * B.n.x + A.n.y * B.n.y) > 0.01) return;
         // the corner where A's wall meets B's wall, at a room corner both stretches reach
         var cA = [at(A, A.t0, 0), at(A, A.t1, 0)], C = null;
         cA.forEach(function (p) { if (GEO.edgeDist(p, poly) < 0.05 && Math.abs((p.x - B.a.x) * B.n.x + (p.y - B.a.y) * B.n.y) < 0.05) C = p; });
@@ -4204,7 +4209,7 @@ var LAYOUT = (function () {
     });
     return out;
   }
-  // The rug under a seating group: centered on the coffee table, its long side along the seat,
+  // The rug under a seating group: centered on the coffee table (or slid to fit), its long side along the seat,
   // reaching 6"+ under the front of every seat (the front legs on it), 6"+ of floor at the walls,
   // and clear of the media console. The biggest of the usual sizes that does all that.
   function seatRug(poly, cand, avoid) {
@@ -4213,8 +4218,11 @@ var LAYOUT = (function () {
     var seatsAll = cand.places.filter(function (p) { return p.spec.role === 'seat'; });
     // centered on the coffee table, or moved back toward the seat (along the middle of the group)
     // when that's what keeps it clear of the console
-    for (var i = 0; i < ids.length; i++) for (var back = 0; back <= 2.01; back += 0.25) {
-      var s = RUG.get(ids[i]), c = add(c0, toSeat, back);
+    // and slid sideways along the seat (up to 2 ft) when the group isn't centered on the room
+    var side = GEO.turn({ x: 1, y: 0 }, cand.seat.rot), lats = [0];
+    for (var lt = 0.25; lt <= 2.01; lt += 0.25) lats.push(lt, -lt);
+    for (var i = 0; i < ids.length; i++) for (var li = 0; li < lats.length; li++) for (var back = 0; back <= 2.01; back += 0.25) {
+      var s = RUG.get(ids[i]), c = add(add(c0, toSeat, back), side, lats[li]);
       if (RUG.clearanceAt(poly, s, rot, c.x, c.y) < RUG.TIGHT - 1e-6) continue;
       var shape = RUG.outline(s, rot, c.x, c.y);
       if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) continue;
@@ -4234,8 +4242,136 @@ var LAYOUT = (function () {
     return null;
   }
 
+  /* ---------- Dining tables (session 3) ----------
+     A table with its chairs pushed in, the way the catalog brings them (FURNITURE.chairLayout at the
+     table's size). Chairs carry `of`: the table's placement, so the page can tie them to it. */
+  function withChairs(spec, c, rot) {
+    var tbl = { spec: spec, cx: c.x, cy: c.y, rot: rot }, chair = FURNITURE.seatFor(spec), out = [tbl];
+    var fit = FURNITURE.fitChairs({ w: spec.w, d: spec.d, chairs: spec.chairs });
+    FURNITURE.chairLayout({ w: spec.w, d: spec.d, shape: spec.shape, chairs: fit, seat: spec.seat, tuck: spec.tuck }).forEach(function (o) {
+      var p = GEO.turn({ x: o.x / 12, y: o.y / 12 }, rot);
+      out.push({ spec: chair, cx: c.x + p.x, cy: c.y + p.y, rot: (o.rot + rot) % 360, of: tbl });
+    });
+    tbl.seats = out.length - 1;
+    return out;
+  }
+  // The middle of a room: the middle of the biggest level-and-plumb rectangle inside it (an L
+  // shape's main part), or of its bounds when the walls aren't square
+  function middle(poly) {
+    var b = PLAN.bounds(poly), mid = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    if (!square(poly)) return { c: mid, box: b };
+    var xs = uniq(poly.map(function (p) { return p.x; })).sort(function (p, q) { return p - q; });
+    var ys = uniq(poly.map(function (p) { return p.y; })).sort(function (p, q) { return p - q; });
+    var best = null;
+    for (var i = 0; i < xs.length; i++) for (var j = i + 1; j < xs.length; j++) for (var k = 0; k < ys.length; k++) for (var l = k + 1; l < ys.length; l++) {
+      var x0 = xs[i], x1 = xs[j], y0 = ys[k], y1 = ys[l], ok = true;
+      for (var s = 1; s < 8 && ok; s++) for (var t = 1; t < 8 && ok; t++) if (!PLAN.pointInPoly({ x: x0 + (x1 - x0) * s / 8, y: y0 + (y1 - y0) * t / 8 }, poly)) ok = false;
+      var A = (x1 - x0) * (y1 - y0);
+      if (ok && (!best || A > best.A)) best = { A: A, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+    return best ? { c: { x: best.x + best.w / 2, y: best.y + best.h / 2 }, box: best } : { c: mid, box: b };
+  }
+  // Every standard table, centered in the room (and up to a foot off, for doorways), long side along
+  // the room's long side first. { fam, size (0 to 2: 4, 6, 8 seats), seats, places, offCenter, across }
+  function dining(poly) {
+    var m = middle(poly), out = [], longX = m.box.w >= m.box.h;
+    var shifts = [[0, 0], [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    ['rect', 'round', 'oval'].forEach(function (fam) {
+      FURNITURE.SIZES[fam].forEach(function (o, k) {
+        var spec = FURNITURE.sizeSpec(fam, k), rots = fam === 'round' ? [0] : [longX ? 0 : 90, longX ? 90 : 0];
+        rots.forEach(function (rot, ri) {
+          shifts.forEach(function (sh) {
+            var c = { x: m.c.x + sh[0], y: m.c.y + sh[1] };
+            if (!PLAN.pointInPoly(c, poly)) return;
+            var places = withChairs(spec, c, rot);
+            out.push({ fam: fam, size: k, seats: places.length - 1, places: places, table: places[0], offCenter: Math.hypot(sh[0], sh[1]), across: ri === 1 });
+          });
+        });
+      });
+    });
+    return out;
+  }
+  // The smallest usual rug (or the biggest, with big: true) that covers every point in must, leaves
+  // 6"+ of floor at the walls and runs under none of the avoid outlines. Tried at c, then shifted up
+  // to 2 ft along the two slide directions together, in 1" steps. rots: the turns to try (rectangles).
+  function rugAround(poly, c, rots, ids, must, avoid, slides, big) {
+    var list = ids.slice();
+    if (big) list.reverse();
+    // every shift up to 2 ft along the first slide direction and the second together, in 1" steps,
+    // nearest first
+    slides = slides && slides.length ? slides : [{ x: 1, y: 0 }];
+    var s2 = slides[1] || { x: 0, y: 0 }, moves = [];
+    for (var a1 = -24; a1 <= 24; a1++) for (var a2 = slides[1] ? -24 : 0; a2 <= (slides[1] ? 24 : 0); a2++) moves.push([a1 / 12, a2 / 12]);
+    moves.sort(function (p, q) { return Math.hypot(p[0], p[1]) - Math.hypot(q[0], q[1]); });
+    for (var i = 0; i < list.length; i++) {
+      var s = RUG.get(list[i]);
+      if (!s) continue;
+      var rr = s.d ? [0] : rots;
+      for (var oi = 0; oi < moves.length; oi++) {
+        var p = add(add(c, slides[0], moves[oi][0]), s2, moves[oi][1]);
+        for (var ri = 0; ri < rr.length; ri++) {
+          if (RUG.clearanceAt(poly, s, rr[ri], p.x, p.y) < RUG.TIGHT - 1e-6) continue;
+          var shape = RUG.outline(s, rr[ri], p.x, p.y);
+          if (!must.every(function (q) { return PLAN.pointInPoly(q, shape); })) continue;
+          if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) continue;
+          return { size: s.id, rot: rr[ri], cx: p.x, cy: p.y };
+        }
+      }
+    }
+    return null;
+  }
+  // The rug under a dining table: every chair still on it when pulled out (24" past the table's edge
+  // all round), or 18" if nothing bigger fits. A round rug under a round table when one does it.
+  function tableRug(poly, tbl, avoid) {
+    var sp = tbl.spec, round = sp.shape === 'round' && sp.w === sp.d;
+    var ids = (round ? ['6r', '8r'] : []).concat(['5x8', '6x9', '8x10', '9x12', '10x14']);
+    for (var m = 24; m >= 18; m -= 6) {
+      var pts = [], n = 24;
+      for (var k = 0; k < n; k++) {
+        var a = k / n * Math.PI * 2, lx, ly;
+        if (sp.shape === 'round') { lx = Math.cos(a) * (sp.w / 2 + m - 0.5); ly = Math.sin(a) * (sp.d / 2 + m - 0.5); }
+        else { lx = Math.max(-1, Math.min(1, Math.cos(a) * 1.5)) * (sp.w / 2 + m - 0.5); ly = Math.max(-1, Math.min(1, Math.sin(a) * 1.5)) * (sp.d / 2 + m - 0.5); }
+        var q = GEO.turn({ x: lx / 12, y: ly / 12 }, tbl.rot);
+        pts.push({ x: tbl.cx + q.x, y: tbl.cy + q.y });
+      }
+      var got = rugAround(poly, { x: tbl.cx, y: tbl.cy }, [tbl.rot % 180, (tbl.rot + 90) % 180], ids, pts, avoid, [GEO.turn({ x: 1, y: 0 }, tbl.rot), GEO.turn({ x: 0, y: 1 }, tbl.rot)]);
+      if (got) return got;
+    }
+    return null;
+  }
+  // The biggest patch of floor (sq ft) farther than reach (feet) from every piece: the dead space a
+  // layout leaves. A group squeezed into one end of a big room leaves a big one. polys in feet.
+  function deadSpace(poly, polys, reach) {
+    var b = PLAN.bounds(poly), S = 0.5, nx = Math.ceil(b.w / S), ny = Math.ceil(b.h / S), far = new Uint8Array(nx * ny);
+    var boxes = polys.map(function (pl) { var q = PLAN.bounds(pl); return { pl: pl, x0: q.x - reach, y0: q.y - reach, x1: q.x + q.w + reach, y1: q.y + q.h + reach }; });
+    for (var j = 0; j < ny; j++) for (var i = 0; i < nx; i++) {
+      var p = { x: b.x + (i + 0.5) * S, y: b.y + (j + 0.5) * S };
+      if (!PLAN.pointInPoly(p, poly)) continue;
+      var near = boxes.some(function (o) {
+        if (p.x < o.x0 || p.x > o.x1 || p.y < o.y0 || p.y > o.y1) return false;
+        return PLAN.pointInPoly(p, o.pl) || GEO.edgeDist(p, o.pl) <= reach;
+      });
+      if (!near) far[j * nx + i] = 1;
+    }
+    var seen = new Uint8Array(nx * ny), best = 0;
+    for (var s0 = 0; s0 < far.length; s0++) {
+      if (!far[s0] || seen[s0]) continue;
+      var st = [s0], n = 0; seen[s0] = 1;
+      while (st.length) {
+        var q = st.pop(), qi = q % nx, qj = (q - qi) / nx; n++;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
+          var a = qi + d[0], bq = qj + d[1], id = bq * nx + a;
+          if (a >= 0 && a < nx && bq >= 0 && bq < ny && far[id] && !seen[id]) { seen[id] = 1; st.push(id); }
+        });
+      }
+      best = Math.max(best, n);
+    }
+    return best * S * S;
+  }
+
   return { stretches: stretches, openSides: openSides, living: living, seatRug: seatRug, square: square, rotFacing: rotFacing, fits: fits, underWindow: underWindow,
-           against: against, wallSpots: wallSpots, beds: beds, desk: desk, bedRug: bedRug, BED_RUGS: BED_RUGS };
+           against: against, wallSpots: wallSpots, beds: beds, desk: desk, bedRug: bedRug, BED_RUGS: BED_RUGS,
+           withChairs: withChairs, middle: middle, dining: dining, rugAround: rugAround, tableRug: tableRug, deadSpace: deadSpace };
 })();
 
 /* =====================================================================
