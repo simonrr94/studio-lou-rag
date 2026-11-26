@@ -396,7 +396,7 @@ def scale_of(named, model_open, g, wall, brks, kmax, W, H):
     return ppf, srcs, votes, pinned
 
 # ---------- run ----------
-def run(name):
+def analyze(name):
     key = json.load(open(os.path.join(D, 'keys', name + '.json')))
     out = json.load(open(os.path.join(D, 'keys', name + '.out.json')))
     for r in out['rooms']:
@@ -428,6 +428,13 @@ def run(name):
         if r['space'] is None: named.append((None, r))
     named = join_leftovers(named, rooms, kmax)
     ppf, srcs, votes, pinned = scale_of([(p, r) for p, r in named if r], mopen, g, wall, br, kmax, W, H)
+    return dict(key=key, out=out, img=img, g=g, H=H, W=W, mrooms=mrooms, mopen=mopen, wall=wall, kmax=kmax, br=br, sp=sp,
+                rooms=rooms, named=named, shared=shared, ppf=ppf, srcs=srcs, votes=votes, pinned=pinned)
+
+def run(name):
+    A = analyze(name)
+    key, out, img, g, H, W, wall, kmax, br, named, shared, ppf, srcs, votes, pinned = [A[k] for k in
+        ('key', 'out', 'img', 'g', 'H', 'W', 'wall', 'kmax', 'br', 'named', 'shared', 'ppf', 'srcs', 'votes', 'pinned')]
     # score: the same numbers score.py gives the page
     res = {'plan': name, 'scale': None if not ppf else round(abs(ppf - key['ppf']) / key['ppf'] * 100, 1), 'from': srcs, 'shared': shared}
     ious = []

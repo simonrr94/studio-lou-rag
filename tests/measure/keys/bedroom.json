@@ -1,4 +1,4 @@
 {"ppf": 38.8,
- "doors": [{"type": "swing", "a": [477, 505], "b": [602, 505], "into": "Bedroom", "hinge": "a"}],
+ "doors": [{"type": "swing", "a": [477, 505], "b": [602, 505], "into": "Bedroom", "hinge": "b", "hinge_note": "Was a. The leaf is drawn from the right jamb (602) and its arc ends at the left one, so the hinge is b (Nov 25)."}],
  "windows": [{"a": [155, 108], "b": [155, 365]}, {"a": [645, 108], "b": [645, 340]}],
  "rooms": [{"name": "Bedroom", "seed": [380, 400], "printed": "135 sq ft (13'10\" x 12'0\" outside)"}]}
