@@ -3878,6 +3878,7 @@ var LAYOUT = (function () {
     poly.forEach(function (a, k) {
       var b = poly[(k + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
       if (L < 1.5) return;
+      if (Math.abs(dx) > 0.05 && Math.abs(dy) > 0.05) return;   // pieces go against level and plumb walls only
       var u = { x: dx / L, y: dy / L }, n = inward(poly, a, u, L), spans = [], wins = [];
       openings.forEach(function (o) {
         var off = function (p) { return Math.abs((p.x - a.x) * n.x + (p.y - a.y) * n.y); };
@@ -4044,6 +4045,161 @@ var LAYOUT = (function () {
     return null;
   }
 
-  return { stretches: stretches, openSides: openSides, square: square, rotFacing: rotFacing, fits: fits, underWindow: underWindow,
+  /* ---------- Living rooms (session 2) ----------
+     Three patterns, each centered on its wall and symmetrical:
+       tv    a media console centered on a wall; the sofa (or loveseat) centered across from it,
+             against the far wall or floating, 6' to 9' from the screen; the coffee table 16" in
+             front of the seat; a matching side table at each end; a pair of armchairs facing in
+             beside the coffee table where they fit
+       talk  the sofa centered on a wall, the coffee table 16" in front, two armchairs facing it
+             across the table (no TV), side tables at the ends
+       L     a sectional set into a corner, the coffee table in front of its corner, and a media
+             console across from its long side where one fits
+     Each candidate: { kind, st (the anchor stretch), places: [...], seat (the main seat), coffee,
+     dist (feet, screen to the seat's front, tv and L), tv (inches) }. Feet, like the rest. */
+  var COFFEE_GAP = 16 / 12;   // seat front to coffee table: the middle of the designer range
+  function at(st, t, out) { return { x: st.a.x + st.u.x * t + st.n.x * out, y: st.a.y + st.u.y * t + st.n.y * out }; }
+  function put(spec, p, front, extra) {
+    var o = { spec: spec, cx: p.x, cy: p.y, rot: rotFacing(front) };
+    if (extra) for (var k in extra) o[k] = extra[k];
+    return o;
+  }
+  function neg(v) { return { x: -v.x, y: -v.y }; }
+  function add(p, v, k) { return { x: p.x + v.x * k, y: p.y + v.y * k }; }
+  // The seat's coffee table, side tables and (when asked) the armchairs beside the table, facing in
+  function seatGroup(seat, c0, face, right, chairs) {
+    var cof = FURNITURE.get('coffee'), side = FURNITURE.get('side'), ch = FURNITURE.get('armchair'), out = [];
+    var cc = add(c0, face, seat.d / 24 + COFFEE_GAP + cof.d / 24);
+    var coffee = put(cof, cc, face);
+    out.push(coffee);
+    var sides = [-1, 1].map(function (sg) { return put(side, add(add(c0, right, sg * (seat.w / 24 + 2 / 12 + side.w / 24)), face, (side.d - seat.d) / 24), face); });
+    var arm = chairs ? [-1, 1].map(function (sg) {
+      return put(ch, add(cc, right, sg * (cof.w / 24 + COFFEE_GAP + ch.d / 24)), { x: -right.x * sg, y: -right.y * sg });
+    }) : [];
+    return { coffee: coffee, sides: sides, chairs: arm };
+  }
+  function living(sts, poly) {
+    var out = [], media = FURNITURE.get('media'), seats = [FURNITURE.get('sofa'), FURNITURE.get('loveseat')], ch = FURNITURE.get('armchair');
+    function centers(st, wIn) { return uniq([st.L / 2, (st.t0 + st.t1) / 2]).filter(function (t) { return fits(st, t, wIn); }); }
+    function variants(kind, st, t, seat, seatPl, c0, face, right, extra) {
+      [true, false].forEach(function (chairs) {
+        if (kind === 'talk' && !chairs) return;
+        var g = seatGroup(seat, c0, face, right, kind === 'tv' && chairs);
+        [true, false].forEach(function (withSides) {
+          var places = [seatPl, g.coffee].concat(withSides ? g.sides : []).concat(g.chairs);
+          if (kind === 'talk') {
+            // two armchairs across the coffee table, facing the sofa, 4" apart from the middle
+            var far = add({ x: g.coffee.cx, y: g.coffee.cy }, face, FURNITURE.get('coffee').d / 24 + COFFEE_GAP + ch.d / 24);
+            places = places.concat([-1, 1].map(function (sg) { return put(ch, add(far, right, sg * (ch.w / 24 + 2 / 12)), neg(face)); }));
+          }
+          if (extra && extra.media) places = places.concat([extra.media]);
+          var o = { kind: kind, st: st, t: t, seat: seatPl, coffee: g.coffee, places: places, chairs: kind === 'talk' || chairs, sideTables: withSides, offCenter: Math.abs(t - st.L / 2) };
+          if (extra) for (var k in extra) o[k] = extra[k];
+          out.push(o);
+        });
+      });
+    }
+    sts.forEach(function (st) {
+      var right = { x: st.n.y, y: -st.n.x };   // along the wall, the seat's right as it faces the room
+      // tv: the console on this wall, the seat across from it. Viewing distance as the TV check
+      // measures it (console to the middle of the seat): 6'6" to 8'6", or wherever the seat meets
+      // the far wall in between. The TV size follows: 1.0 to 1.7 times the screen is comfortable.
+      centers(st, media.w).forEach(function (t) {
+        var mc = at(st, t, GAP + media.d / 24), far = GEO.rayPoly(at(st, t, media.d / 12), st.n.x, st.n.y, poly);
+        if (far == null) return;
+        seats.forEach(function (seat) {
+          var wallV = media.d / 24 + far - seat.d / 24 - GAP, vs = [6.5, 7.5, 8.5];
+          if (wallV >= 5.5 && wallV <= 9.5) vs.push(wallV);
+          uniq(vs).forEach(function (V) {
+            if (V > wallV + 1e-6) return;
+            if (V < wallV - 1e-6 && wallV - V < 2.5) return;   // floating: leave a walkway behind it
+            var tv = [75, 65, 55].filter(function (sz) { return V * 12 / sz >= 1.0 && V * 12 / sz <= 1.7; })
+              .sort(function (p, q) { return Math.abs(V * 12 / p - 1.35) - Math.abs(V * 12 / q - 1.35); })[0];
+            if (!tv) return;
+            var c0 = add(mc, st.n, V), face = neg(st.n);
+            var seatPl = put(seat, c0, face), rt = { x: -right.x, y: -right.y };
+            var mpl = against(media, st, t); mpl.tv = tv;
+            variants('tv', st, t, seat, seatPl, c0, face, rt, { media: mpl, dist: V, tv: tv, floating: V < wallV - 1e-6 });
+          });
+        });
+      });
+      // talk: the seat on this wall
+      seats.forEach(function (seat) {
+        centers(st, seat.w).forEach(function (t) {
+          var seatPl = against(seat, st, t), c0 = { x: seatPl.cx, y: seatPl.cy };
+          variants('talk', st, t, seat, seatPl, c0, st.n, right);
+        });
+      });
+    });
+    // L: a sectional in each square corner where two stretches meet
+    var sec = FURNITURE.get('sectional'), arm = sec.arm / 12;
+    sts.forEach(function (A) {
+      sts.forEach(function (B) {
+        if (A === B || Math.abs(A.n.x * B.n.x + A.n.y * B.n.y) > 0.01) return;
+        // the corner where A's wall meets B's wall, at a room corner both stretches reach
+        var cA = [at(A, A.t0, 0), at(A, A.t1, 0)], C = null;
+        cA.forEach(function (p) { if (GEO.edgeDist(p, poly) < 0.05 && Math.abs((p.x - B.a.x) * B.n.x + (p.y - B.a.y) * B.n.y) < 0.05) C = p; });
+        if (!C) return;
+        var tB = (C.x - B.a.x) * B.u.x + (C.y - B.a.y) * B.u.y;
+        if (tB < B.t0 - 0.05 || tB > B.t1 + 0.05) return;
+        if (A.len < sec.w / 12 || B.len < sec.d / 12) return;
+        var front = A.n, right = { x: A.n.y, y: -A.n.x };   // GEO.turn((1, 0), rot) for a piece facing n
+        var flip = !(right.x * B.n.x + right.y * B.n.y > 0);   // the return (local -x) goes against B unless flipped
+        var c0 = add(add(C, A.n, sec.d / 24 + GAP), B.n, sec.w / 24 + GAP);
+        var tA = (c0.x - A.a.x) * A.u.x + (c0.y - A.a.y) * A.u.y;
+        if (!fits(A, tA, sec.w)) return;
+        var secPl = put(sec, c0, front, { flip: flip });
+        var cof = FURNITURE.get('coffee');
+        // centered on the open part of the long run (between the return and the far arm)
+        var cc = add(add(C, A.n, arm + COFFEE_GAP + cof.d / 24), B.n, Math.max((arm + sec.w / 12) / 2, arm + COFFEE_GAP + cof.w / 24));
+        var coffee = put(cof, cc, front);
+        var base = { kind: 'L', st: A, t: tA, seat: secPl, coffee: coffee, places: [secPl, coffee], chairs: false, sideTables: false, offCenter: 0, corner: B };
+        out.push(base);
+        // a console across from the long side, centered on the coffee table
+        sts.forEach(function (M) {
+          if (M.n.x * A.n.x + M.n.y * A.n.y > -0.99) return;
+          var tM = (cc.x - M.a.x) * M.u.x + (cc.y - M.a.y) * M.u.y;
+          if (!fits(M, tM, media.w)) return;
+          var mpl = against(media, M, tM), mcM = at(M, tM, GAP + media.d / 24);
+          var D = Math.abs((mcM.x - C.x) * A.n.x + (mcM.y - C.y) * A.n.y) - arm / 2;   // to the middle of the long run's seat
+          mpl.tv = [75, 65, 55].filter(function (sz) { return D * 12 / sz >= 1.0 && D * 12 / sz <= 1.7; })[0];
+          if (!mpl.tv) return;
+          out.push({ kind: 'L', st: A, t: tA, seat: secPl, coffee: coffee, places: [secPl, coffee, mpl], media: mpl, dist: D, tv: mpl.tv, chairs: false, sideTables: false, offCenter: 0, corner: B });
+        });
+      });
+    });
+    return out;
+  }
+  // The rug under a seating group: centered on the coffee table, its long side along the seat,
+  // reaching 6"+ under the front of every seat (the front legs on it), 6"+ of floor at the walls,
+  // and clear of the media console. The biggest of the usual sizes that does all that.
+  function seatRug(poly, cand, avoid) {
+    var ids = ['9x12', '8x10', '6x9', '5x8'], c0 = { x: cand.coffee.cx, y: cand.coffee.cy };
+    var rot = Math.round(cand.seat.rot + 90) % 180, toSeat = GEO.turn({ x: 0, y: -1 }, cand.seat.rot);
+    var seatsAll = cand.places.filter(function (p) { return p.spec.role === 'seat'; });
+    // centered on the coffee table, or moved back toward the seat (along the middle of the group)
+    // when that's what keeps it clear of the console
+    for (var i = 0; i < ids.length; i++) for (var back = 0; back <= 2.01; back += 0.25) {
+      var s = RUG.get(ids[i]), c = add(c0, toSeat, back);
+      if (RUG.clearanceAt(poly, s, rot, c.x, c.y) < RUG.TIGHT - 1e-6) continue;
+      var shape = RUG.outline(s, rot, c.x, c.y);
+      if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) continue;
+      // every seat's front edge 6" onto the rug (two points along its front, 6" back from it)
+      var on = seatsAll.every(function (p) {
+        var f = GEO.turn({ x: 0, y: 1 }, p.rot), r = GEO.turn({ x: 1, y: 0 }, p.rot), c0 = { x: p.cx, y: p.cy }, pts;
+        if (p.spec.shape === 'L') {
+          // the front of the long run, and the front of the return
+          var a = p.spec.arm / 12, w2 = p.spec.w / 24, d2 = p.spec.d / 24, fl = p.flip ? -1 : 1;
+          pts = [add(add(c0, f, -d2 + a - 0.5), r, fl * w2 * 0.5), add(add(c0, f, d2 * 0.4), r, -fl * (w2 - a + 0.5))];
+        } else pts = [-1, 1].map(function (sg) { return add(add(c0, f, p.spec.d / 24 - 0.5), r, sg * p.spec.w / 24 * 0.6); });
+        return pts.every(function (q) { return PLAN.pointInPoly(q, shape); });
+      });
+      if (!on) continue;
+      return { size: s.id, rot: rot, cx: c.x, cy: c.y };
+    }
+    return null;
+  }
+
+  return { stretches: stretches, openSides: openSides, living: living, seatRug: seatRug, square: square, rotFacing: rotFacing, fits: fits, underWindow: underWindow,
            against: against, wallSpots: wallSpots, beds: beds, desk: desk, bedRug: bedRug, BED_RUGS: BED_RUGS };
 })();

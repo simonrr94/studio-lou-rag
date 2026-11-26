@@ -4462,15 +4462,20 @@
        walls and overlaps, door swings, windows, then the walking routes from the doors), and only
        the ones with nothing in burgundy are offered. The AI has no part in this. */
     var LAY = { tmp: 900000 };
-    function layoutKind(r) { return r && state.scale && r.ftShape && roomLType(r) === 'bedroom' ? 'bedroom' : null; }
+    function layoutKind(r) {
+      if (!r || !state.scale || !r.ftShape) return null;
+      var t = roomLType(r);
+      return t === 'bedroom' || t === 'living' ? t : null;
+    }
     function layoutOpen() { var r = state.rooms[state.selected]; return !!(state.layout && r && state.layout.room === r.id && state.mode === 'furnish'); }
     // A piece placed by LAYOUT (feet) as a plan piece, with an id kept apart from real ones until it's used
     function layPiece(p, real) {
       var f = state.scale.ftPerPx, spec = p.spec, x = p.cx / f / state.W * 100, y = p.cy / f / state.H * 100;
-      if (real) return makePiece(spec, x, y, p.rot);
-      var pc = { id: LAY.tmp++, type: spec.id, name: spec.name, kind: spec.kind, role: spec.role, shape: spec.shape || 'rect', arm: null, flip: false, group: null,
+      var pc = real ? makePiece(spec, x, y, p.rot) : { id: LAY.tmp++, type: spec.id, name: spec.name, kind: spec.kind, role: spec.role, shape: spec.shape || 'rect', arm: spec.arm || null, flip: false, group: null,
                  w: spec.w, d: spec.d, h: spec.h || null, x: x, y: y, rot: p.rot, _pv: true };
-      if (LIGHT.hasLampSpot(pc.type)) pc.noLamp = true;
+      if (!real && LIGHT.hasLampSpot(pc.type)) pc.noLamp = true;
+      if (p.flip) pc.flip = true;
+      if (p.tv) pc.tv = p.tv;
       return pc;
     }
     // The room's pieces swapped for these while fn runs (nothing is drawn or kept)
@@ -4573,11 +4578,44 @@
     var WALL_WORD = function (n) { return Math.abs(n.x) > Math.abs(n.y) ? (n.x > 0 ? 'left' : 'right') : (n.y > 0 ? 'top' : 'bottom'); };
     var BED_WORD = { twin: 'Twin', full: 'Full', queen: 'Queen', king: 'King' };
     var BED_ORDER = ['king', 'queen', 'full', 'twin'];
+    // The checks every candidate goes through, in order of cost: the walking routes in the room alone,
+    // then the whole plan's checks for the ones that pass (see layoutWalk and layoutFull)
+    function layoutRunner(r) {
+      var R = { tried: 0 }, base = null, ent = layoutEntries(r);
+      R.full = function (c) {
+        if (!c.full) {
+          var lw = layoutWalk(r, c.pcs, ent);
+          if (lw.close) { c.full = lw; c.local = true; return false; }
+          var rows = layoutFull(r, c.pcs);
+          R.tried++;
+          c.full = tally(rows);
+          // narrow spots on the way in: the ones that are there whatever goes in the room don't count
+          if (c.full.close && rows.every(function (rw) { return rw.status !== 'close' || rw.pinchKey; })) {
+            if (!base) { base = {}; layoutFull(r, []).forEach(function (rw) { if (rw.pinchKey) base[rw.pinchKey] = 1; }); }
+            c.full = tally(rows, base);
+          }
+        }
+        return c.full.close === 0;
+      };
+      // The first of the best n that passes (and meets ok, when given), a few at a time so the page keeps drawing
+      R.first = function (list, n, cb, ok) {
+        var k = 0, looked = 0;
+        (function step() {
+          if (looked >= n || k >= Math.min(30, list.length)) return cb(null);
+          var c = list[k++];
+          if (R.full(c) && (!ok || ok(c))) return cb(c);
+          if (!c.local) looked++;   // n whole-plan checks at most
+          setTimeout(step, 0);
+        })();
+      };
+      return R;
+    }
     function layoutsFor(r, done) {
       var poly = r.ftShape;
-      if (!LAYOUT.square(poly)) return done({ why: 'This room’s walls aren’t straight enough for a suggested layout. Add pieces from Furniture and the checks will show what fits.' });
       var opens = state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); return { a: g.jambs[0], b: g.jambs[1], window: isWin(d) }; });
       var sts = LAYOUT.stretches(poly, opens, wallTestFt());
+      if (!sts.length) return done({ why: 'This room has no straight stretch of wall to set furniture against. Add pieces from Furniture and the checks will show what fits.' });
+      if (layoutKind(r) === 'living') return livingLayouts(r, sts, opens, done);
       var doorsFt = realDoors().map(doorFt), dres = FURNITURE.get('dresser');
       // The dresser in three widths: the catalog's 60", then 48" and 36" for walls that can't take it
       var DRESSERS = [dres, { id: 'dresser', name: 'Dresser', w: 48, d: 20, h: 34, kind: 'table', role: 'dresser', small: 1 },
@@ -4631,34 +4669,7 @@
       cands.sort(function (a, b) { return a.score - b.score; });
       function bySize(id) { return cands.filter(function (c) { return c.g.size === id; }); }
       // Then the walking routes, a few candidates at a time so the page keeps drawing
-      var out = {}, tried = 0, base = null, ent = layoutEntries(r);
-      // The walking routes in the room alone first (quick); the whole plan's checks only for the ones that pass
-      function full(c) {
-        if (!c.full) {
-          var lw = layoutWalk(r, c.pcs, ent);
-          if (lw.close) { c.full = lw; c.local = true; return false; }
-          var rows = layoutFull(r, c.pcs);
-          tried++;
-          c.full = tally(rows);
-          // narrow spots on the way in: the ones that are there whatever goes in the room don't count
-          if (c.full.close && rows.every(function (rw) { return rw.status !== 'close' || rw.pinchKey; })) {
-            if (!base) { base = {}; layoutFull(r, []).forEach(function (rw) { if (rw.pinchKey) base[rw.pinchKey] = 1; }); }
-            c.full = tally(rows, base);
-          }
-        }
-        return c.full.close === 0;
-      }
-      // The first of the best n that passes (and meets ok, when given)
-      function first(list, n, cb, ok) {
-        var k = 0, looked = 0;
-        (function step() {
-          if (looked >= n || k >= Math.min(30, list.length)) return cb(null);
-          var c = list[k++];
-          if (full(c) && (!ok || ok(c))) return cb(c);
-          if (!c.local) looked++;   // n whole-plan checks at most
-          setTimeout(step, 0);
-        })();
-      }
+      var out = {}, run = layoutRunner(r), first = run.first;
       function withDesk(c) {
         var dk = null;
         kSpots.forEach(function (sp) {
@@ -4706,8 +4717,70 @@
         if (!out.a) return done({ why: layoutWhy(r, sts) });
         var list = [];
         ['a', 'b', 'c'].forEach(function (k) { if (out[k]) list.push(out[k].option || (out[k].option = layoutOption(r, out[k], k))); });
-        done({ list: list, tried: tried, more: !!more });
+        done({ list: list, tried: run.tried, more: !!more });
       }
+    }
+    /* Living rooms: facing a TV, a conversation layout with no TV, and a sectional in a corner (when the
+       room is long enough for one). Each is the best of its kind that passes; a fuller room wins over
+       one with pieces left out to dodge a tight spot. */
+    function livingLayouts(r, sts, opens, done) {
+      var wins = opens.filter(function (o) { return o.window; }), cands = [];
+      // a TV in front of a window: glare, and the eye goes to the window
+      function byWindow(p) {
+        var f = GEO.turn({ x: 0, y: 1 }, p.rot), back = { x: p.cx - f.x * p.spec.d / 24, y: p.cy - f.y * p.spec.d / 24 };
+        return wins.some(function (w) { return GEO.segDist(back, w.a, w.b) < p.spec.w / 24; });
+      }
+      LAYOUT.living(sts, r.ftShape).forEach(function (c) {
+        c.pcs = c.places.map(function (p) { return layPiece(p); });
+        var q = layoutQuick(r, c.pcs);
+        if (q.close) return;
+        // A full room reads better than a bare one: a tight walkway past a side table costs less than leaving the tables out
+        c.score = q.tight * 3 + c.offCenter * 10 + (c.kind === 'tv' && !c.chairs ? 4 : 0) + (c.kind !== 'L' && !c.sideTables ? 3 : 0) +
+          (c.media && byWindow(c.media) ? 4 : 0) + (c.floating ? 1 : 0) + (c.seat.spec.id === 'loveseat' ? 1.5 : 0) +
+          (c.kind === 'L' && !c.media ? 1 : 0) + (c.dist ? Math.abs(c.dist - 7.5) * 0.3 : 0);
+        cands.push(c);
+      });
+      cands.sort(function (a, b) { return a.score - b.score; });
+      var run = layoutRunner(r), out = [];
+      var kinds = ['tv', 'talk', 'L'], ki = 0;
+      (function next() {
+        if (ki >= kinds.length) return finish(false);
+        var list = cands.filter(function (c) { return c.kind === kinds[ki]; });
+        ki++;
+        run.first(list, 4, function (c) { if (c) { out.push(c); finish(true); } next(); });
+      })();
+      function finish(more) {
+        if (!out.length) { if (!more) done({ why: livingWhy(r) }); return; }
+        done({ list: out.map(function (c) { return c.option || (c.option = livingOption(r, c)); }), tried: run.tried, more: !!more });
+      }
+    }
+    function livingWhy(r) {
+      var b = PLAN.bounds(r.ftShape), ls = FURNITURE.get('loveseat');
+      // a loveseat, 16" to the coffee table, the table, and 30" to walk past it; 30" at the ends
+      var deep = (ls.d + 16 + 24 + 30) / 12, wide = (ls.w + 60) / 12;
+      var short = Math.min(Math.max(wide - b.w, deep - b.h), Math.max(wide - b.h, deep - b.w));
+      if (short > 1 / 12) return 'This room is ' + fmtFtIn(short) + ' too small for a loveseat, a coffee table and the space to walk around them.';
+      return 'No seating fits here with clear walkways from the doors. Add pieces from Furniture and the checks will show what\u2019s in the way.';
+    }
+    function livingOption(r, c) {
+      var avoid = c.media ? [GEO.place(FURNITURE.outline(c.media.spec), c.media.cx, c.media.cy, c.media.rot, 1 / 12)] : [];
+      var rug = LAYOUT.seatRug(r.ftShape, c, avoid), seat = c.seat.spec.id === 'loveseat' ? 'Loveseat' : 'Sofa';
+      var label = c.kind === 'tv' ? seat + ' facing the TV, ' + fmtFtIn(Math.round(c.dist * 2) / 2) + ' away'
+        : c.kind === 'talk' ? 'Conversation layout, no TV'
+        : 'Sectional in the corner' + (c.media ? ', facing the TV' : '');
+      var parts = [];
+      if (c.kind === 'talk') parts.push((seat === 'Sofa' ? 'a sofa' : 'a loveseat') + ' and two armchairs around a coffee table');
+      else {
+        parts.push('a coffee table');
+        if (c.kind === 'tv' && c.chairs) parts.push('two armchairs');
+      }
+      if (c.sideTables) parts.push('side tables');
+      if (rug) parts.push((/^(8|11|18)'/.test(RUG.get(rug.size).label) ? 'an ' : 'a ') + RUG.get(rug.size).label + ' rug');
+      var notes = ['With ' + (parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0]) + '.'];
+      if (c.media) notes.push('Sized for a ' + c.media.tv + '" TV.');
+      if (c.floating) notes.push('The ' + seat.toLowerCase() + ' floats with a walkway behind it.');
+      if (c.full && c.full.tight) notes.push(c.full.tight === 1 ? 'One spot is tight.' : c.full.tight + ' spots are tight.');
+      return { label: label, note: notes.join(' '), places: c.places, rug: rug };
     }
     // Why nothing fits: how much too narrow the room is for a twin bed and the space around it
     // (18" at each side and 24" at the foot, the tight end of the checks), or what's in the way
@@ -4801,7 +4874,7 @@
       }
       o.places.forEach(function (p) {
         ctx.save(); ctx.translate(p.cx * k, p.cy * k); ctx.rotate(p.rot * Math.PI / 180);
-        FURNART.draw(ctx, { type: p.spec.id, role: p.spec.role, kind: p.spec.kind, shape: p.spec.shape || 'rect', w: p.spec.w, d: p.spec.d, noLamp: true }, k / 12, { ratio: dpr * 0.6, detail: false, shadow: false });
+        FURNART.draw(ctx, { type: p.spec.id, role: p.spec.role, kind: p.spec.kind, shape: p.spec.shape || 'rect', arm: p.spec.arm, flip: !!p.flip, w: p.spec.w, d: p.spec.d, noLamp: true }, k / 12, { ratio: dpr * 0.6, detail: false, shadow: false });
         ctx.restore();
       });
       return cv.toDataURL('image/png');
@@ -4811,7 +4884,7 @@
       if (!el || !r) return;
       var html = '<button class="link-btn detail-back" data-lyback="1">' + backToRoom(r) + '</button>' +
         '<p class="lay-title">Layouts for ' + esc(r.name) + '</p>';
-      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the bed on each wall and checking the walkways from the doors...</p>';
+      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the ' + (layoutKind(r) === 'living' ? 'seating' : 'bed') + ' on each wall and checking the walkways from the doors...</p>';
       else if (!L.list.length) html += '<p class="pane-sub">' + esc(L.why || 'No layout fits this room yet.') + '</p>';
       else {
         html += '<p class="pane-sub">Each one passes the spacing and walkway checks. Tap one to see it on the plan.</p><div class="lay-list">' +
