@@ -4546,6 +4546,30 @@
       rows = rows.filter(function (rw) { return !(rw.pinchKey && base && base[rw.pinchKey]); });
       return { close: rows.filter(function (rw) { return rw.status === 'close'; }).length, tight: rows.filter(function (rw) { return rw.status === 'tight'; }).length };
     }
+    // Getting to each open side of the bed: people step in past the foot, so the floor just past each
+    // foot corner needs 24" clear out from the side of the bed (or the full width of the side, if
+    // that's less), to the first wall or piece. A dresser standing there blocks the way in, even when
+    // the gap beside the bed itself is fine. bed: a LAYOUT placement; polys: the other pieces (feet).
+    function bedApproach(r, bed, polys) {
+      var sp = bed.spec, f = GEO.turn({ x: 0, y: 1 }, bed.rot), rt = GEO.turn({ x: 1, y: 0 }, bed.rot);
+      var foot = { x: bed.cx + f.x * sp.d / 24, y: bed.cy + f.y * sp.d / 24 };
+      function gap(p, dir) {
+        var g = GEO.rayPoly(p, dir.x, dir.y, r.ftShape);
+        polys.forEach(function (pl) { var t = GEO.rayPoly(p, dir.x, dir.y, pl); if (t != null && (g == null || t < g)) g = t; if (PLAN.pointInPoly(p, pl)) g = 0; });
+        return g == null ? 99 : g;
+      }
+      return [-1, 1].every(function (sg) {
+        var dir = { x: rt.x * sg, y: rt.y * sg }, corner = { x: foot.x + dir.x * (sp.w / 24 + 1 / 12), y: foot.y + dir.y * (sp.w / 24 + 1 / 12) };
+        // the side itself, beside the middle of the bed: against the wall means nobody walks there
+        var mid = { x: corner.x - f.x * sp.d / 24, y: corner.y - f.y * sp.d / 24 }, side = gap(mid, dir);
+        if (side <= 0.5) return true;
+        var need = Math.min(2, side);
+        return [3, 9, 15, 21, 27].every(function (inch) {
+          var p = { x: corner.x + f.x * inch / 12, y: corner.y + f.y * inch / 12 };
+          return gap(p, dir) >= need - 1 / 12;
+        });
+      });
+    }
     var WALL_WORD = function (n) { return Math.abs(n.x) > Math.abs(n.y) ? (n.x > 0 ? 'left' : 'right') : (n.y > 0 ? 'top' : 'bottom'); };
     var BED_WORD = { twin: 'Twin', full: 'Full', queen: 'Queen', king: 'King' };
     var BED_ORDER = ['king', 'queen', 'full', 'twin'];
@@ -4555,12 +4579,19 @@
       var opens = state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); return { a: g.jambs[0], b: g.jambs[1], window: isWin(d) }; });
       var sts = LAYOUT.stretches(poly, opens, wallTestFt());
       var doorsFt = realDoors().map(doorFt), dres = FURNITURE.get('dresser');
+      // The dresser in three widths: the catalog's 60", then 48" and 36" for walls that can't take it
+      var DRESSERS = [dres, { id: 'dresser', name: 'Dresser', w: 48, d: 20, h: 34, kind: 'table', role: 'dresser', small: 1 },
+                      { id: 'dresser', name: 'Dresser', w: 36, d: 18, h: 34, kind: 'table', role: 'dresser', small: 2 }];
       var groups = LAYOUT.beds(sts, BED_ORDER.map(function (id) { return FURNITURE.get(id); }));
-      var dSpots = LAYOUT.wallSpots(sts, dres.w).filter(function (sp) {
-        sp.place = LAYOUT.against(dres, sts[sp.st], sp.t); sp.pc = layPiece(sp.place);
-        sp.poly = GEO.place(FURNITURE.outline(dres), sp.place.cx, sp.place.cy, sp.place.rot, 1 / 12);
-        return !layoutQuick(r, [sp.pc]).close;
-      }), kSpots = LAYOUT.wallSpots(sts, FURNITURE.get('desk').w);
+      var dSpots = [];
+      DRESSERS.forEach(function (ds) {
+        LAYOUT.wallSpots(sts, ds.w).forEach(function (sp) {
+          sp.spec = ds; sp.place = LAYOUT.against(ds, sts[sp.st], sp.t); sp.pc = layPiece(sp.place);
+          sp.poly = GEO.place(FURNITURE.outline(ds), sp.place.cx, sp.place.cy, sp.place.rot, 1 / 12);
+          if (!layoutQuick(r, [sp.pc]).close) dSpots.push(sp);
+        });
+      });
+      var kSpots = LAYOUT.wallSpots(sts, FURNITURE.get('desk').w);
       var cands = [];
       groups.forEach(function (g) {
         var bedPc = g.pieces.map(function (p) { return layPiece(p); }), base = layoutQuick(r, bedPc);
@@ -4586,10 +4617,12 @@
         dSpots.forEach(function (sp) {
           // not touching the bed or a nightstand (the checks judge the gap)
           if (near.some(function (pl) { return GEO.polyDist(pl, sp.poly) < 0.2; })) return;
+          // and not in the way of getting to either side of the bed
+          if (!bedApproach(r, bed, [sp.poly])) return;
           var dp = sp.pc, q = layoutQuick(r, bedPc.concat([dp]));
           if (q.close) return;
           var dl = q.lines.filter(function (l) { return l.piece === bedPc.length && l.rule === 'drawers'; })[0];
-          var sc = q.tight * 10 + (sp.window ? 1 : 0) - Math.min(dl ? dl.inch : 96, 72) / 72;
+          var sc = q.tight * 10 + (sp.window ? 1 : 0) + (sp.spec.small || 0) * 1.5 - Math.min(dl ? dl.inch : 96, 72) / 72;
           if (!best || sc < best.sc) best = { sc: sc, pc: dp, place: sp.place, q: q };
         });
         var pcs = best ? bedPc.concat([best.pc]) : bedPc, places = best ? g.pieces.concat([best.place]) : g.pieces.slice();
@@ -4631,6 +4664,7 @@
         kSpots.forEach(function (sp) {
           if (dk) return;
           var pl = LAYOUT.desk(sts[sp.st], sp.t), dp = pl.map(function (p) { return layPiece(p); });
+          if (!bedApproach(r, c.places[0], pl.map(function (p) { return GEO.place(FURNITURE.outline(p.spec), p.cx, p.cy, p.rot, 1 / 12); }).concat(c.places.slice(1).map(function (p) { return GEO.place(FURNITURE.outline(p.spec), p.cx, p.cy, p.rot, 1 / 12); })))) return;
           var q = layoutQuick(r, c.pcs.concat(dp));
           if (!q.close && !q.tight) dk = { g: c.g, st: c.st, pcs: c.pcs.concat(dp), places: c.places.concat(pl), dresser: c.dresser, sides: c.sides, score: c.score, desk: true };
         });
