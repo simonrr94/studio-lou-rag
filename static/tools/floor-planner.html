@@ -307,6 +307,17 @@
     .rug-card .rug-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
     .rug-card b { font-size: 14px; font-weight: 600; color: #582b36; }
     .rug-card .rug-detail { display: block; font-size: 12px; line-height: 1.4; color: #6b6560; }
+    .lay-link { margin: 0 0 12px; font-size: 13px; }
+    .lay-title { font-size: 16px; font-weight: 600; color: #433E3C; margin: 0 0 4px; }
+    .lay-list { display: flex; flex-direction: column; gap: 8px; }
+    .lay-card { display: flex; gap: 10px; align-items: center; text-align: left; color: #433E3C; background: #ffffff; border: 1px solid #e3dccf; border-radius: 12px; padding: 8px 10px; cursor: pointer; font: inherit; }
+    .lay-card:hover { border-color: #582b36; }
+    .lay-card.on { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
+    .lay-card img { width: 84px; height: 64px; flex: none; border-radius: 6px; background: #FAF9F6; }
+    .lay-card b { display: block; font-size: 14px; font-weight: 600; color: #582b36; margin-bottom: 2px; }
+    .lay-card small { display: block; font-size: 12px; line-height: 1.4; color: #6b6560; }
+    .lay-use { margin-top: 12px; }
+    .lay-use .l-note { margin: 8px 0 0; }
     .rug-card .best { display: inline-block; margin-top: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4f5c1d; }
     .rug-placed { margin-top: 12px; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 10px 12px; }
     .rug-placed p { font-size: 13px; line-height: 1.5; margin-bottom: 8px; }
@@ -486,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=32"></script>
+  <script src="/static/tools/plan-engine.js?v=33"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -557,6 +568,7 @@
       lampSel: null,    // Light: the id of the piece whose lamp is picked
       lightEditCeil: false,   // the plan's ceiling height is being changed
       lightOpen: { details: false, settings: false },
+      layout: null,           // Furnish: the layouts suggested for one room { room, busy, list, why, pick } (not saved, not in Undo)
       lightMap: false,        // the Light map switch (a view setting: not saved, not in Undo)   // which folds on the room card are open
       lightCfg: { ceil: 8, rooms: {} }
     };
@@ -816,6 +828,7 @@
       state.erase = []; state.eraseVer++; state.floorCol = floorColorOf(img); ERASE.mask = ERASE.layer = null;
       state.openHints = null; state.openingsDone = false; state.shapesDone = false; state.found = null;
       state.lights = []; state.lightSel = -1; state.lightCfg = { ceil: 8, rooms: {} };
+      state.layout = null;
       UNDO = []; $('undoBtn').disabled = true;
       setMode('measure');
     }
@@ -937,7 +950,10 @@
       if (!forExport && DRAW_RAF) { cancelAnimationFrame(DRAW_RAF); DRAW_RAF = 0; }
       var outer = !PASS;
       if (outer) PASS = {};
-      try { drawPlan(forExport); } finally { if (outer) PASS = null; }
+      // A suggested layout being looked at: drawn in place of the room's own pieces and rug, faded
+      var pv = outer && !forExport && state.scale && state.mode === 'furnish' ? layoutPreview() : null, keep, keepRug;
+      if (pv) { keep = state.pieces; keepRug = pv.room.rug; state.pieces = pv.pieces; pv.room.rug = pv.rug; }
+      try { drawPlan(forExport); } finally { if (pv) { state.pieces = keep; pv.room.rug = keepRug; } if (outer) PASS = null; }
     }
     function drawSoon() {
       fitCanvas(); syncGeometry();
@@ -1207,6 +1223,7 @@
           else ctx.rect(q.x + inset, q.y + inset, Math.max(1, q.w - inset * 2), Math.max(1, q.h - inset * 2));
         }
         ctx.save();
+        if (r.rug._pv) ctx.globalAlpha *= 0.6;
         shape(0);
         ctx.fillStyle = bad ? 'rgba(88,43,54,0.22)' : 'rgba(232,201,122,0.45)';
         ctx.fill();
@@ -1453,6 +1470,7 @@
         var pc = state.pieces[k], q = piecePx(pc), sel = !forExport && state.mode === 'furnish' && isSel(k);
         var loc = FURNITURE.outline(pc).map(function (p) { return { x: p.x * q.k, y: p.y * q.k }; });
         ctx.save();
+        if (pc._pv) ctx.globalAlpha *= 0.6;
         ctx.translate(q.cx, q.cy);
         ctx.rotate(pc.rot * Math.PI / 180);
         // The drawing (FURNART); the finest lines only once a piece is big enough on screen to show them
@@ -1745,6 +1763,7 @@
     function pieceIcon(it) { return '<img class="piece-art" src="' + FURNART.thumb(it, 132, 46) + '" alt="">'; }
     function renderCatalog() {
       var cat = CATS.indexOf(state.cat) > -1 ? state.cat : (state.cat = 'Furniture');
+      $('layoutLink').classList.toggle('hidden', !layoutKind(state.rooms[state.selected]));
       $('catTabs').innerHTML = CATS.map(function (c) { return '<button class="cat' + (c === cat ? ' on' : '') + '" data-cat="' + c + '">' + c + '</button>'; }).join('');
       var g = cat !== 'Rugs', rugs = cat === 'Rugs';
       $('pieceChips').classList.toggle('hidden', !g);
@@ -1800,8 +1819,11 @@
     function showPane() {
       var erasing = state.tool === 'erase', detail = !erasing && state.pieceSel > -1;
       var noRoom = state.selected < 0 && !detail && !erasing;
-      ['add', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', noRoom || erasing || detail || state.ptab !== t); });
+      var lay = !noRoom && !erasing && !detail && layoutOpen();
+      ['add', 'checks'].forEach(function (t) { $('pane-' + t).classList.toggle('hidden', noRoom || erasing || detail || lay || state.ptab !== t); });
+      $('pane-layout').classList.toggle('hidden', !lay);
       renderFurnishRooms();
+      if (lay) { $('furnishBack').classList.add('hidden'); document.querySelector('#furnishPanel .ptabs').classList.add('hidden'); }
       $('pane-detail').classList.toggle('hidden', !detail);
       $('pane-erase').classList.toggle('hidden', !erasing);
       var tabs = document.querySelectorAll('.ptab');
@@ -1904,6 +1926,7 @@
       bar.innerHTML = '<input class="detail-name" id="pcName" value="' + esc(pc.name) + '" maxlength="30" aria-label="Piece name">' +
         '<p class="detail-meta">' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (rm ? ', in ' + esc(rm.name) : '') + '.' +
           (probs.length ? ' <span class="warn-text">It ' + esc(probs.join(' and ')) + '.</span>' : '') + '</p>' +
+        sizeSwitch(pc) +
         '<div class="field-row">' +
           '<label class="field"><span>' + (round ? 'Diameter' : 'Width') + ', inches</span><input id="pcW" value="' + Math.round(pc.w) + '" inputmode="decimal" autocomplete="off"></label>' +
           (round ? '<label class="field"><span>Depth, inches</span><input id="pcD" value="' + Math.round(pc.d) + '" inputmode="decimal" autocomplete="off" title="A different depth makes it an oval"></label>'
@@ -3635,6 +3658,7 @@
         if (lpc2 && !!lpc2.noLamp !== (act === 'lampno')) { pushUndo(); lpc2.noLamp = act === 'lampno'; renderPieceBar(); draw(); }
         return;
       }
+      if (act === 'size') { switchSize(state.pieces[state.pieceSel], +btn.getAttribute('data-size')); return; }
       if (act === 'group') { groupSel(); return; }
       if (act === 'ungroup') { ungroupSel(); return; }
       if (act === 'groupnear') { groupWithPartners(); return; }
@@ -3763,7 +3787,7 @@
         var between = rw.pinch.between.map(routeWhat), same = between[0] === between[1];
         var where = top === 2 && on > -1 ? 'at ' + nodeName(on) : 'on the way ' + way;
         return { label: 'Walkway ' + (same ? 'past ' + between[0] : 'between ' + between[0] + ' and ' + between[1]) + ', ' + where,
-                 value: inchText(rw.width), status: rw.blocked ? 'close' : rw.status, word: rw.blocked ? 'No way through' : spaceWord('walk', rw.status, rw.width) };
+                 pinchKey: Math.round(pt.x * 4) + ',' + Math.round(pt.y * 4) + '|' + Math.round(rw.width), value: inchText(rw.width), status: rw.blocked ? 'close' : rw.status, word: rw.blocked ? 'No way through' : spaceWord('walk', rw.status, rw.width) };
       });
     }
     function listNames(idx) {
@@ -4395,6 +4419,364 @@
       el.innerHTML = placedMsg(r);
     }
 
+    /* ---------- The size switch ----------
+       A bed (Twin, Full, Queen, King) or a dining table (4, 6 or 8 seats) swaps to another standard
+       size where it stands. A bed keeps its head where it is and its nightstands step out or in with
+       its sides; a table stays centered and sets its chairs out again. A name of the person's own stays. */
+    function sizeSwitch(pc) {
+      var fam = FURNITURE.sizeFamily(pc);
+      if (!fam) return '';
+      var now = FURNITURE.sizeNow(pc);
+      return '<span class="l-label">' + (fam === 'bed' ? 'Size' : 'Seats') + '</span><div class="seg-row" style="margin:4px 0 12px">' +
+        FURNITURE.SIZES[fam].map(function (o, k) { return '<button data-pact="size" data-size="' + k + '"' + (k === now ? ' class="on"' : '') + '>' + o.label + '</button>'; }).join('') + '</div>';
+    }
+    function switchSize(pc, k) {
+      var fam = FURNITURE.sizeFamily(pc);
+      if (!fam || !state.scale || FURNITURE.sizeNow(pc) === k) return;
+      var sp = FURNITURE.sizeSpec(fam, k), stock = FURNITURE.SIZES[fam].map(function (o, i) { return FURNITURE.sizeSpec(fam, i).name; });
+      var cat = FURNITURE.get(pc.type);
+      pushUndo();
+      if (pc.role === 'bed') {
+        var kk = 1 / 12 / state.scale.ftPerPx, cx = pc.x / 100 * state.W, cy = pc.y / 100 * state.H, dw = sp.w - pc.w, dd = sp.d - pc.d;
+        // its nightstands: beside the head, just off either side
+        state.pieces.forEach(function (o) {
+          if (o.role !== 'nightstand') return;
+          var q = FURNITURE.toLocal({ x: o.x / 100 * state.W, y: o.y / 100 * state.H }, cx, cy, pc.rot), lx = q.x / kk, ly = q.y / kk;
+          if (Math.abs(lx) < pc.w / 2 - 2 || Math.abs(lx) > pc.w / 2 + o.w + 12 || ly > -pc.d / 2 + 36) return;
+          var m = GEO.turn({ x: (lx < 0 ? -1 : 1) * dw / 2 * kk, y: 0 }, pc.rot);
+          o.x += m.x / state.W * 100; o.y += m.y / state.H * 100;
+        });
+        var g = GEO.turn({ x: 0, y: dd / 2 * kk }, pc.rot);   // the head stays put: it grows toward its foot
+        pc.x += g.x / state.W * 100; pc.y += g.y / state.H * 100;
+      }
+      if (stock.indexOf(pc.name) > -1 || (cat && pc.name === cat.name)) pc.name = sp.name;
+      pc.type = sp.id; pc.w = sp.w; pc.d = sp.d; pc.h = sp.h || pc.h;
+      if (FURNITURE.seated(pc)) relayoutChairs(pc);
+      renderPieceBar(); renderSpacing(); draw();
+    }
+
+    /* ---------- Layout suggestions (LAYOUT in plan-engine.js) ----------
+       Each room offers 2 or 3 layouts made from its size, shape, doors and windows alone; the
+       person taps one to see it on the plan and "Use this layout" places the real pieces (one Undo).
+       Session 1: bedrooms. Every candidate is judged by the same checks the person sees (spacing,
+       walls and overlaps, door swings, windows, then the walking routes from the doors), and only
+       the ones with nothing in burgundy are offered. The AI has no part in this. */
+    var LAY = { tmp: 900000 };
+    function layoutKind(r) { return r && state.scale && r.ftShape && roomLType(r) === 'bedroom' ? 'bedroom' : null; }
+    function layoutOpen() { var r = state.rooms[state.selected]; return !!(state.layout && r && state.layout.room === r.id && state.mode === 'furnish'); }
+    // A piece placed by LAYOUT (feet) as a plan piece, with an id kept apart from real ones until it's used
+    function layPiece(p, real) {
+      var f = state.scale.ftPerPx, spec = p.spec, x = p.cx / f / state.W * 100, y = p.cy / f / state.H * 100;
+      if (real) return makePiece(spec, x, y, p.rot);
+      var pc = { id: LAY.tmp++, type: spec.id, name: spec.name, kind: spec.kind, role: spec.role, shape: spec.shape || 'rect', arm: null, flip: false, group: null,
+                 w: spec.w, d: spec.d, h: spec.h || null, x: x, y: y, rot: p.rot, _pv: true };
+      if (LIGHT.hasLampSpot(pc.type)) pc.noLamp = true;
+      return pc;
+    }
+    // The room's pieces swapped for these while fn runs (nothing is drawn or kept)
+    function withLayout(r, pcs, fn) {
+      var keep = state.pieces, pass = PASS;
+      state.pieces = keep.filter(function (pc) { return pieceRoom(pc) !== r; }).concat(pcs);
+      PASS = null;
+      try { return fn(); } finally { state.pieces = keep; PASS = pass; }
+    }
+    // The quick check: spacing, walls and overlaps, door swings and windows, for these pieces alone.
+    // Gaps to plain walls are only measured (the walking routes judge those in the full check).
+    function layoutQuick(r, pcs) {
+      var pft = withLayout(r, pcs, function () { return pcs.map(pieceFt); });
+      var res = { close: 0, tight: 0, lines: [] }, poly = r.ftShape;
+      var outside = pft.some(function (q) { return q.poly.some(function (pt) { return !PLAN.pointInPoly(pt, poly) && GEO.edgeDist(pt, poly) > 1 / 12; }); });
+      if (outside) { res.close++; return res; }
+      res.close += SPACE.conflicts(pft, wallTestFt()).length;
+      if (res.close) return res;
+      state.doors.forEach(function (d) { if (DOOR.check(doorFt(d), pft).hits.length) res.close++; });
+      if (res.close) return res;
+      var lines = SPACE.check(pft, wallsFt(), wallTestFt());
+      lines.forEach(function (l) { if (l.rule === 'walk' && l.hit.type !== 'piece' && !l.against) { l.free = true; l.status = 'ok'; } });
+      SPACE.report(lines).forEach(function (rw) { if (rw.status === 'close') res.close++; else if (rw.status === 'tight') res.tight++; });
+      res.lines = lines;
+      return res;
+    }
+    // The full check: the room's rows in Checks, walking routes included, as if these were placed
+    // A narrow spot the room's own furniture has no part in (a console in the hall on the way in)
+    // is already there whatever goes in the room, so it doesn't count against a layout.
+    function layoutFull(r, pcs) { return withLayout(r, pcs, function () { return spaceRows(r); }); }
+    // The walking routes inside the room alone: from its own doors and the open sides it shares with
+    // the next room, to the bed sides, the dresser, the desk and the room itself. Every route into the
+    // room comes through one of these, so this is the in-room part of the plan's routes, about ten
+    // times quicker than working out the whole plan for each candidate.
+    function layoutEntries(r) {
+      var opens = state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); return { a: g.jambs[0], b: g.jambs[1], window: isWin(d) }; });
+      return { doors: realDoors().map(doorFt).filter(function (d) { return GEO.edgeDist({ x: d.cx, y: d.cy }, r.ftShape) <= 1; }),
+               across: LAYOUT.openSides(r.ftShape, opens, wallTestFt()) };
+    }
+    function layoutWalk(r, pcs, ent) {
+      var res = { close: 0, tight: 0 };
+      if (!ent.doors.length && !ent.across.length) return res;
+      var pft = withLayout(r, pcs, function () { return pcs.map(pieceFt); }), wk;
+      try {
+        wk = WALK.routes({ pieces: pft, rooms: [r.ftShape].concat(ent.across.map(function (o) { return o.strip; })), wallTest: wallTestFt(),
+                           doors: ent.doors.concat(ent.across.map(function (o) { return o.door; })) });
+      } catch (e) { return res; }
+      if (!wk) return res;
+      var seen = {};
+      wk.routes.forEach(function (rt) {
+        if (rt.status === 'ok' && !rt.blocked) return;
+        var at = rt.pinch ? Math.round((rt.pinch.a.x + rt.pinch.b.x) * 2) + ',' + Math.round((rt.pinch.a.y + rt.pinch.b.y) * 2) : 'x' + Object.keys(seen).length;
+        if (seen[at]) return;
+        seen[at] = 1;
+        if (rt.blocked || rt.from < 0 || rt.status === 'close') res.close++; else res.tight++;
+      });
+      return res;
+    }
+    function tally(rows, base) {
+      rows = rows.filter(function (rw) { return !(rw.pinchKey && base && base[rw.pinchKey]); });
+      return { close: rows.filter(function (rw) { return rw.status === 'close'; }).length, tight: rows.filter(function (rw) { return rw.status === 'tight'; }).length };
+    }
+    var WALL_WORD = function (n) { return Math.abs(n.x) > Math.abs(n.y) ? (n.x > 0 ? 'left' : 'right') : (n.y > 0 ? 'top' : 'bottom'); };
+    var BED_WORD = { twin: 'Twin', full: 'Full', queen: 'Queen', king: 'King' };
+    var BED_ORDER = ['king', 'queen', 'full', 'twin'];
+    function layoutsFor(r, done) {
+      var poly = r.ftShape;
+      if (!LAYOUT.square(poly)) return done({ why: 'This room’s walls aren’t straight enough for a suggested layout. Add pieces from Furniture and the checks will show what fits.' });
+      var opens = state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); return { a: g.jambs[0], b: g.jambs[1], window: isWin(d) }; });
+      var sts = LAYOUT.stretches(poly, opens, wallTestFt());
+      var doorsFt = realDoors().map(doorFt), dres = FURNITURE.get('dresser');
+      var groups = LAYOUT.beds(sts, BED_ORDER.map(function (id) { return FURNITURE.get(id); }));
+      var dSpots = LAYOUT.wallSpots(sts, dres.w).filter(function (sp) {
+        sp.place = LAYOUT.against(dres, sts[sp.st], sp.t); sp.pc = layPiece(sp.place);
+        sp.poly = GEO.place(FURNITURE.outline(dres), sp.place.cx, sp.place.cy, sp.place.rot, 1 / 12);
+        return !layoutQuick(r, [sp.pc]).close;
+      }), kSpots = LAYOUT.wallSpots(sts, FURNITURE.get('desk').w);
+      var cands = [];
+      groups.forEach(function (g) {
+        var bedPc = g.pieces.map(function (p) { return layPiece(p); }), base = layoutQuick(r, bedPc);
+        if (base.close) return;
+        var bed = g.pieces[0], st = sts[g.st], half = bed.spec.w / 24;
+        // the bed's foot facing a door, the way designers try to avoid
+        var facing = doorsFt.some(function (d) {
+          var vx = d.cx - bed.cx, vy = d.cy - bed.cy, along = vx * st.n.x + vy * st.n.y, side = Math.abs(vx * st.n.y - vy * st.n.x);
+          return along > bed.spec.d / 24 && side < half + d.w / 24;
+        });
+        var doorWall = opens.some(function (o) { return !o.window && Math.abs((o.a.x - st.a.x) * st.n.x + (o.a.y - st.a.y) * st.n.y) < 0.75 &&
+          Math.abs((o.b.x - st.a.x) * st.n.x + (o.b.y - st.a.y) * st.n.y) < 0.75; });
+        var sides = base.lines.filter(function (l) { return l.piece === 0 && l.rule === 'bed'; }).map(function (l) { return l.against ? 0 : l.inch; });
+        var minSide = sides.length ? Math.min.apply(null, sides) : 0;
+        // Designer order: centered with a nightstand each side first, then a wall with no window or door,
+        // and not facing the door. A bed under a window is fine when no plain wall can take it.
+        var gScore = base.tight * 10 + (2 - g.nightstands) * 4 + g.offCenter + (g.window ? 3 : 0) + (facing ? 3 : 0) + (doorWall ? 2 : 0) - Math.min(minSide, 36) / 36;
+        // the dresser: on whichever wall leaves it the most floor in front, with nothing in burgundy
+        var best = null;
+        var near = g.pieces.map(function (p) { return GEO.place(FURNITURE.outline(p.spec), p.cx, p.cy, p.rot, 1 / 12); });
+        dSpots.forEach(function (sp) {
+          // not touching the bed or a nightstand (the checks judge the gap)
+          if (near.some(function (pl) { return GEO.polyDist(pl, sp.poly) < 0.2; })) return;
+          var dp = sp.pc, q = layoutQuick(r, bedPc.concat([dp]));
+          if (q.close) return;
+          var dl = q.lines.filter(function (l) { return l.piece === bedPc.length && l.rule === 'drawers'; })[0];
+          var sc = q.tight * 10 + (sp.window ? 1 : 0) - Math.min(dl ? dl.inch : 96, 72) / 72;
+          if (!best || sc < best.sc) best = { sc: sc, pc: dp, place: sp.place, q: q };
+        });
+        var pcs = best ? bedPc.concat([best.pc]) : bedPc, places = best ? g.pieces.concat([best.place]) : g.pieces.slice();
+        cands.push({ g: g, st: st, pcs: pcs, places: places, dresser: !!best, sides: sides, score: gScore + (best ? best.sc : 5), desk: false });
+      });
+      cands.sort(function (a, b) { return a.score - b.score; });
+      function bySize(id) { return cands.filter(function (c) { return c.g.size === id; }); }
+      // Then the walking routes, a few candidates at a time so the page keeps drawing
+      var out = {}, tried = 0, base = null, ent = layoutEntries(r);
+      // The walking routes in the room alone first (quick); the whole plan's checks only for the ones that pass
+      function full(c) {
+        if (!c.full) {
+          var lw = layoutWalk(r, c.pcs, ent);
+          if (lw.close) { c.full = lw; c.local = true; return false; }
+          var rows = layoutFull(r, c.pcs);
+          tried++;
+          c.full = tally(rows);
+          // narrow spots on the way in: the ones that are there whatever goes in the room don't count
+          if (c.full.close && rows.every(function (rw) { return rw.status !== 'close' || rw.pinchKey; })) {
+            if (!base) { base = {}; layoutFull(r, []).forEach(function (rw) { if (rw.pinchKey) base[rw.pinchKey] = 1; }); }
+            c.full = tally(rows, base);
+          }
+        }
+        return c.full.close === 0;
+      }
+      // The first of the best n that passes (and meets ok, when given)
+      function first(list, n, cb, ok) {
+        var k = 0, looked = 0;
+        (function step() {
+          if (looked >= n || k >= Math.min(30, list.length)) return cb(null);
+          var c = list[k++];
+          if (full(c) && (!ok || ok(c))) return cb(c);
+          if (!c.local) looked++;   // n whole-plan checks at most
+          setTimeout(step, 0);
+        })();
+      }
+      function withDesk(c) {
+        var dk = null;
+        kSpots.forEach(function (sp) {
+          if (dk) return;
+          var pl = LAYOUT.desk(sts[sp.st], sp.t), dp = pl.map(function (p) { return layPiece(p); });
+          var q = layoutQuick(r, c.pcs.concat(dp));
+          if (!q.close && !q.tight) dk = { g: c.g, st: c.st, pcs: c.pcs.concat(dp), places: c.places.concat(pl), dresser: c.dresser, sides: c.sides, score: c.score, desk: true };
+        });
+        return dk;
+      }
+      var sizes = BED_ORDER.filter(function (id) { return bySize(id).length; }), si = 0;
+      (function findA() {
+        if (si >= sizes.length) return finish();
+        first(bySize(sizes[si++]), 3, function (c) { if (c) { out.a = c; finish(true); findB(); } else findA(); });
+      })();
+      function findB() {
+        var i = BED_ORDER.indexOf(out.a.g.size) + 1;
+        if (i >= BED_ORDER.length) return findC();
+        var list = bySize(BED_ORDER[i]), desks = [];
+        list.slice(0, 3).forEach(function (c) { var d = withDesk(c); if (d) desks.push(d); });
+        // a smaller bed is only worth offering if it's no tighter than the bigger one
+        var roomier = function (c) { return c.full.tight <= out.a.full.tight; };
+        first(desks, 2, function (c) {
+          if (c) { out.b = c; finish(true); return findC(); }
+          first(list, 4, function (c2) { out.b = c2; if (c2) finish(true); findC(); }, roomier);
+        }, roomier);
+      }
+      function findC() {
+        var list = cands.filter(function (c) { return c.g.edge !== out.a.g.edge && (!out.b || c.g.edge !== out.b.g.edge || c.g.size !== out.b.g.size); });
+        list.sort(function (p, q) { return BED_ORDER.indexOf(p.g.size) - BED_ORDER.indexOf(q.g.size) || p.score - q.score; });
+        first(list, 4, function (c) { out.c = c; finish(); });
+      }
+      // more: still looking for the others (the cards found so far show straight away)
+      function finish(more) {
+        if (!out.a) return done({ why: layoutWhy(r, sts) });
+        var list = [];
+        ['a', 'b', 'c'].forEach(function (k) { if (out[k]) list.push(out[k].option || (out[k].option = layoutOption(r, out[k], k))); });
+        done({ list: list, tried: tried, more: !!more });
+      }
+    }
+    // Why nothing fits: how much too narrow the room is for a twin bed and the space around it
+    // (18" at each side and 24" at the foot, the tight end of the checks), or what's in the way
+    function layoutWhy(r, sts) {
+      var b = PLAN.bounds(r.ftShape), tw = FURNITURE.get('twin'), across = (tw.w + 36) / 12, along = (tw.d + 24) / 12;
+      var short = Math.min(Math.max(across - b.w, along - b.h), Math.max(across - b.h, along - b.w));
+      if (short > 1 / 12) return 'This room is ' + fmtFtIn(short) + ' too narrow for a twin bed and the space to walk around it.';
+      if (!sts.some(function (st) { return st.len >= tw.w / 12; })) return 'The doors, openings and windows leave no stretch of wall long enough for the head of a twin bed.';
+      return 'No bed fits here with clear walkways from the doors. Try a twin bed from Furniture and the checks will show what’s in the way.';
+    }
+    // One option: its pieces, its rug, and the words on its card
+    function layoutOption(r, c, which) {
+      var bed = c.places[0], size = BED_WORD[c.g.size] + ' bed', rugAvoid = [];
+      c.places.forEach(function (p) {
+        if (p.spec.role === 'dresser' || p.spec.role === 'desk') rugAvoid.push(GEO.place(FURNITURE.outline(p.spec), p.cx, p.cy, p.rot, 1 / 12));
+      });
+      var rug = LAYOUT.bedRug(r.ftShape, bed, c.st, rugAvoid);
+      var s = c.sides.slice().sort(function (p, q) { return p - q; }), sideText;
+      if (s.length === 2 && s[0] === 0) sideText = s[1] + '" on the open side';
+      else if (s.length === 2 && Math.abs(s[0] - s[1]) <= 2) sideText = s[0] + '" each side';
+      else if (s.length === 2) sideText = s[0] + '" and ' + s[1] + '" at the sides';
+      else sideText = '';
+      var label = which === 'a' ? size + (sideText ? ', ' + sideText : '')
+        : which === 'b' ? size + (c.desk ? ' and a desk' : ', more open floor')
+        : size + ' on the ' + WALL_WORD(c.st.n) + ' wall';
+      var ns = c.places.filter(function (p) { return p.spec.role === 'nightstand'; }).length, parts = [];
+      if (ns) parts.push(ns === 2 ? 'two nightstands' : 'a nightstand');
+      if (c.dresser) parts.push('a dresser');
+      if (c.desk) parts.push('a desk');
+      if (rug) parts.push((/^(8|11|18)'/.test(RUG.get(rug.size).label) ? 'an ' : 'a ') + RUG.get(rug.size).label + ' rug');
+      var what = parts.length ? parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0] : '';
+      var notes = [];
+      if (what) notes.push('With ' + what + '.');
+      if (which === 'c' && sideText) notes.push(sideText.charAt(0).toUpperCase() + sideText.slice(1) + '.');
+      if (c.g.window) notes.push('Headboard under the window.');
+      if (c.full && c.full.tight) notes.push(c.full.tight === 1 ? 'One spot is tight.' : c.full.tight + ' spots are tight.');
+      return { label: label, note: notes.join(' '), places: c.places, rug: rug };
+    }
+    function startLayouts() {
+      var r = state.rooms[state.selected];
+      if (!layoutKind(r)) return;
+      deselect();
+      var id = r.id, run = (LAY.run = (LAY.run || 0) + 1);
+      state.layout = { room: id, busy: true, list: null, why: null, pick: -1 };
+      renderLayouts(); showPane();
+      setTimeout(function () {
+        if (!state.layout || state.layout.room !== id || LAY.run !== run) return;
+        layoutsFor(r, function (res) {
+          if (!state.layout || state.layout.room !== id || LAY.run !== run) return;
+          state.layout.busy = !!res.more; state.layout.list = res.list || []; state.layout.why = res.why || null;
+          state.layout.thumbs = (res.list || []).map(function (o) { return o.thumb || (o.thumb = layoutThumb(r, o)); });
+          renderLayouts(); draw();
+        });
+      }, 30);
+    }
+    function closeLayouts() { state.layout = null; LAY.run = (LAY.run || 0) + 1; showPane(); renderCatalog(); draw(); }
+    // The picked option, ready to draw: the plan's pieces with this room's swapped for the option's, faded
+    function layoutPreview() {
+      var L = state.layout, r = L && L.pick > -1 && layoutOpen() ? roomById(L.room) : null;
+      if (!r || !L.list || !L.list[L.pick]) return null;
+      var o = L.list[L.pick];
+      if (!o.pcs) o.pcs = o.places.map(function (p) { return layPiece(p); });
+      var f = state.scale.ftPerPx;
+      return { room: r, pieces: state.pieces.filter(function (pc) { return pieceRoom(pc) !== r; }).concat(o.pcs),
+               rug: o.rug ? { size: o.rug.size, rot: o.rug.rot, x: o.rug.cx / f / state.W * 100, y: o.rug.cy / f / state.H * 100, style: 'walls', _pv: true } : null };
+    }
+    function useLayout() {
+      var L = state.layout, r = L && roomById(L.room), o = r && L.list && L.list[L.pick];
+      if (!o) return;
+      pushUndo();
+      var f = state.scale.ftPerPx;
+      state.pieces = state.pieces.filter(function (pc) { return pieceRoom(pc) !== r; });
+      o.places.forEach(function (p) { state.pieces.push(layPiece(p, true)); });
+      r.rug = o.rug ? { size: o.rug.size, rot: o.rug.rot, x: o.rug.cx / f / state.W * 100, y: o.rug.cy / f / state.H * 100, style: 'walls' } : null;
+      state.layout = null; state.pieceSel = -1; state.extra = []; state.extraRugs = []; state.ptab = 'add';
+      renderAll(); renderPieceBar(); showPane(); renderCatalog();
+    }
+    // A small drawing of an option for its card: the room, the rug and the pieces
+    function layoutThumb(r, o) {
+      var dpr = 2, W = 84, H = 64, cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+      cv.width = W * dpr; cv.height = H * dpr;
+      var b = PLAN.bounds(r.ftShape), pad = 5 * dpr, k = Math.min((cv.width - 2 * pad) / b.w, (cv.height - 2 * pad) / b.h);
+      ctx.translate(cv.width / 2 - (b.x + b.w / 2) * k, cv.height / 2 - (b.y + b.h / 2) * k);
+      ctx.beginPath(); r.ftShape.forEach(function (p, i) { if (i) ctx.lineTo(p.x * k, p.y * k); else ctx.moveTo(p.x * k, p.y * k); }); ctx.closePath();
+      ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 2 * dpr; ctx.strokeStyle = '#433E3C'; ctx.stroke();
+      if (o.rug) {
+        var rp = RUG.outline(RUG.get(o.rug.size), o.rug.rot, o.rug.cx, o.rug.cy);
+        ctx.beginPath(); rp.forEach(function (p, i) { if (i) ctx.lineTo(p.x * k, p.y * k); else ctx.moveTo(p.x * k, p.y * k); }); ctx.closePath();
+        ctx.fillStyle = 'rgba(232,201,122,0.45)'; ctx.fill();
+      }
+      o.places.forEach(function (p) {
+        ctx.save(); ctx.translate(p.cx * k, p.cy * k); ctx.rotate(p.rot * Math.PI / 180);
+        FURNART.draw(ctx, { type: p.spec.id, role: p.spec.role, kind: p.spec.kind, shape: p.spec.shape || 'rect', w: p.spec.w, d: p.spec.d, noLamp: true }, k / 12, { ratio: dpr * 0.6, detail: false, shadow: false });
+        ctx.restore();
+      });
+      return cv.toDataURL('image/png');
+    }
+    function renderLayouts() {
+      var L = state.layout, el = $('pane-layout'), r = L && roomById(L.room);
+      if (!el || !r) return;
+      var html = '<button class="link-btn detail-back" data-lyback="1">' + backToRoom(r) + '</button>' +
+        '<p class="lay-title">Layouts for ' + esc(r.name) + '</p>';
+      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the bed on each wall and checking the walkways from the doors...</p>';
+      else if (!L.list.length) html += '<p class="pane-sub">' + esc(L.why || 'No layout fits this room yet.') + '</p>';
+      else {
+        html += '<p class="pane-sub">Each one passes the spacing and walkway checks. Tap one to see it on the plan.</p><div class="lay-list">' +
+          L.list.map(function (o, k) {
+            return '<button class="lay-card' + (k === L.pick ? ' on' : '') + '" data-lay="' + k + '"><img src="' + (L.thumbs[k] || '') + '" alt=""><span><b>' + esc(o.label) + '</b><small>' + esc(o.note) + '</small></span></button>';
+          }).join('') + '</div>' + (L.busy ? '<p class="l-note" style="margin-top:8px">Looking for one more...</p>' : '');
+        if (L.pick > -1) {
+          var n = state.pieces.filter(function (pc) { return pieceRoom(pc) === r && !(pc.role === 'chair' && pc.group); }).length;
+          html += '<div class="lay-use"><button class="btn-primary btn-sm" data-lact="use">Use this layout</button>' +
+            (n || r.rug ? '<p class="l-note">This replaces the ' + (n ? (n === 1 ? 'piece' : n + ' pieces') + (r.rug ? ' and the rug' : '') : 'rug') + ' in ' + esc(r.name) + '. Undo brings ' + (n + (r.rug ? 1 : 0) === 1 ? 'it' : 'them') + ' back.</p>' : '') + '</div>';
+        }
+      }
+      el.innerHTML = html;
+    }
+    function onLayoutClick(e) {
+      var b = e.target.closest('button');
+      if (!b) return false;
+      if (b.hasAttribute('data-layopen')) { startLayouts(); return true; }
+      if (b.hasAttribute('data-lyback')) { closeLayouts(); return true; }
+      if (b.hasAttribute('data-lay')) { var k = +b.getAttribute('data-lay'); state.layout.pick = state.layout.pick === k ? -1 : k; renderLayouts(); draw(); return true; }
+      if (b.getAttribute('data-lact') === 'use') { useLayout(); return true; }
+      return false;
+    }
+
     /* ---------- Modes ---------- */
     function setMode(m) {
       if (state.tool === 'scale') endScaleTool();
@@ -4532,6 +4914,7 @@
     }
     // Furnish: grab a rug to move it, or tap a room to pick it
     function furnishDown(e) {
+      if (state.layout && state.layout.pick > -1) { state.layout.pick = -1; renderLayouts(); }   // a tap on the plan ends the preview
       var p = toCanvas(e), hh = e.shiftKey || e.metaKey || e.ctrlKey ? null : hitPieceHandle(p);   // a modifier click always means 'add this piece'
       if (hh) { startHandleDrag(e, hh, p); return; }
       var pk = state.space || e.button === 1 ? -1 : hitPiece(p);
@@ -5247,6 +5630,7 @@
       }
       var changed = state.selected !== i;
       state.selected = i;
+      if (changed && state.layout && (!state.rooms[i] || state.rooms[i].id !== state.layout.room)) state.layout = null;
       if (changed && state.cat !== 'Rugs' && state.mode === 'furnish') renderCatalog();   // show the pieces that suit the room
       if (changed) { renderCards(); renderFurnishRooms(); }   // the list, or the picked room's view
       $('planCanvas').classList.toggle('editing', i > -1);
@@ -6014,6 +6398,7 @@
         var row = e.target.closest('[data-room]');
         if (row) { select(+row.getAttribute('data-room'), false); showPane(); return; }
         if (e.target.closest('[data-fback]')) { select(-1, false); showPane(); return; }
+        if (onLayoutClick(e)) return;
         onPieceClick(e);
       });
       fp.addEventListener('change', onDetailChange);
@@ -6323,6 +6708,8 @@
             <button class="ptab" data-ptab="checks">Checks<span class="count hidden" id="checkCount"></span></button>
           </div>
 
+          <div class="pane hidden" id="pane-layout"></div>
+
           <div class="pane hidden" id="pane-erase">
             <p class="detail-name" style="border:none;padding-left:0">Clear the plan</p>
             <p class="pane-sub">Paint over furniture drawn on the plan to clear the floor. Walls stay put, and your rooms and scale don't change.</p>
@@ -6340,6 +6727,7 @@
           <div class="pane" id="pane-add">
             <div class="tip-slot" data-tipslot="add"></div>
             <p class="pane-sub" id="pieceSub"></p>
+            <p class="lay-link hidden" id="layoutLink"><button class="link-btn" data-layopen="1">Suggest a layout</button></p>
             <div class="cats" id="catTabs"></div>
             <div class="cat-grid" id="pieceChips"></div>
             <div class="hidden" id="rugWrap"><p class="pane-sub" id="rugSub"></p><div id="rugBody"></div></div>

@@ -998,6 +998,7 @@ var FURNITURE = (function () {
       { id: 'console', name: 'Console table', w: 60, d: 14, h: 30, kind: 'table', role: 'console' }
     ] },
     { group: 'Bedroom', items: [
+      { id: 'twin', name: 'Twin bed', w: 42, d: 80, h: 24, kind: 'bed', role: 'bed' },
       { id: 'full', name: 'Full bed', w: 58, d: 80, h: 24, kind: 'bed', role: 'bed' },
       { id: 'queen', name: 'Queen bed', w: 64, d: 86, h: 24, kind: 'bed', role: 'bed' },
       { id: 'king', name: 'King bed', w: 80, d: 86, h: 24, kind: 'bed', role: 'bed' },
@@ -1179,7 +1180,38 @@ var FURNITURE = (function () {
   // Bounding box of the piece on the plan, same units as cx, cy
   function bounds(pc, cx, cy, k) { return PLAN.bounds(shapeAt(pc, cx, cy, k)); }
 
+  // The size switch: a bed or a dining table swaps to another standard size where it stands.
+  // Beds go by mattress size; dining tables by seats, keeping their shape (rectangle, round or oval).
+  var SIZES = {
+    bed: [{ label: 'Twin', id: 'twin' }, { label: 'Full', id: 'full' }, { label: 'Queen', id: 'queen' }, { label: 'King', id: 'king' }],
+    rect: [{ label: '4', id: 'dining4' }, { label: '6', id: 'dining6' }, { label: '8', id: 'dining8' }],
+    round: [{ label: '4', id: 'dining4r' }, { label: '6', id: 'dining6r' }, { label: '8', id: 'dining6r', w: 72, d: 72, name: 'Round table for 8' }],
+    oval: [{ label: '4', id: 'dining6o', w: 54, d: 36, name: 'Oval table for 4' }, { label: '6', id: 'dining6o' }, { label: '8', id: 'dining6o', w: 96, d: 44, name: 'Oval table for 8' }]
+  };
+  function sizeFamily(pc) {
+    if (!pc) return null;
+    if (pc.role === 'bed' && /^(twin|full|queen|king)$/.test(pc.type)) return 'bed';
+    if (pc.role !== 'dining' || !get(pc.type)) return null;
+    return pc.shape === 'round' ? (pc.type === 'dining6o' ? 'oval' : 'round') : 'rect';
+  }
+  // The catalog item for one step of a family, at that step's size and name
+  function sizeSpec(fam, k) {
+    var o = SIZES[fam][k], base = get(o.id);
+    return { id: base.id, name: o.name || base.name, w: o.w || base.w, d: o.d || base.d, h: base.h, kind: base.kind, role: base.role, shape: base.shape, chairs: base.chairs };
+  }
+  // Which step the piece is on now (-1 when it has been stretched to a size of its own)
+  function sizeNow(pc) {
+    var fam = sizeFamily(pc);
+    if (!fam) return -1;
+    for (var k = 0; k < SIZES[fam].length; k++) {
+      var sp = sizeSpec(fam, k);
+      if (sp.id === pc.type && Math.round(sp.w) === Math.round(pc.w) && Math.round(sp.d) === Math.round(pc.d)) return k;
+    }
+    return -1;
+  }
+
   return { CATALOG: CATALOG, get: get, parseInches: parseInches, fmtIn: fmtIn, outline: outline, legs: legs, parts: parts,
+           SIZES: SIZES, sizeFamily: sizeFamily, sizeSpec: sizeSpec, sizeNow: sizeNow,
            chairLayout: chairLayout, fitChairs: fitChairs, seatFor: seatFor, seated: seated, shapeAt: shapeAt, toLocal: toLocal, contains: contains, bounds: bounds };
 })();
 
@@ -1738,7 +1770,7 @@ var FURNART = (function () {
   var BY_ID = {
     sofa: seat, loveseat: seat, armchair: seat, sectional: sectional,
     coffee: coffee, coffeeR: roundCoffee, ottoman: ottoman, side: side, sideR: roundSide, media: media, console: consoleTable,
-    full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser,
+    twin: bed, full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser,
     chair: diningChair, desk: desk, deskchair: deskChair, bookcase: bookcase,
     bench: bench, counter: counter, sink: sink, range: range, fridge: fridge, pantry: pantry, island: island, islandP: island, stool: stool, vanity: vanity, vanity2: vanity,
     plant: fiddle, palm: palm, plantS: snake, tree: olive, lamp: floorLamp, pouf: ottoman
@@ -3796,4 +3828,229 @@ var LIGHT = (function () {
            pendantSpots: pendantSpots, vanitySpots: vanitySpots, vanityNeed: vanityNeed, vanityLm: vanityLm, SCONCE_H: SCONCE_H, taskFc: taskFc, edgeDist: edgeDist,
            type: type, typeOf: typeOf, typeKnown: typeKnown, target: target, general: general, taskRoom: taskRoom, defaultSize: defaultSize, needed: needed, fc: fcOf, status: status,
            isLamp: isLamp, hasLampSpot: hasLampSpot, lampSpot: lampSpot, at: at, map: map, darkSpots: darkSpots, suggest: suggest, evaluate: evaluate, polyArea: polyArea, inPoly: inPoly };
+})();
+
+/* =====================================================================
+   LAYOUT: suggested layouts, room by room (session 1: bedrooms)
+   Designer patterns are tried against the room's usable wall stretches
+   (the lengths of wall between doors, openings and windows). This module
+   only makes the candidates, in feet like SPACE and WALK; the page judges
+   every one with the same checks the person sees, and offers only the
+   ones that pass. The AI never places furniture: this is all geometry.
+     stretches(poly, openings, wallTest)  the usable lengths of wall
+       openings: [{ a, b (its two ends, feet), window: true for a window }]
+       returns [{ edge, a (the wall's start), u (along it), n (into the room),
+                  L (wall length), t0, t1 (the stretch, feet along the wall),
+                  len, windows: [[from, to], ...] }]
+     beds(sts, sizes)       a bed against each stretch, with nightstands where they fit
+     wallSpots(sts, wIn)    places a piece this wide fits along the walls
+     against(spec, st, t)   a piece with its back to the wall, centered t feet along it
+     desk(st, t)            a desk against the wall with its chair pulled in
+     bedRug(poly, bed, avoid)  the rug under a bed: across it, under its lower part
+   ===================================================================== */
+var LAYOUT = (function () {
+  var SAMPLE = 2 / 12;     // feet between samples along a wall
+  var DOOR_PAD = 3 / 12;   // feet kept clear past each side of a door or opening
+  var GAP = 0.5 / 12;      // feet between a piece's back and the room outline
+  var NS_GAP = 1 / 12;     // feet between a bed and its nightstands
+
+  // The direction into the room from a wall (the outline can run either way round)
+  function inward(poly, a, u, L) {
+    var n = { x: -u.y, y: u.x }, m = { x: a.x + u.x * L / 2 + n.x * 0.25, y: a.y + u.y * L / 2 + n.y * 0.25 };
+    return PLAN.pointInPoly(m, poly) ? n : { x: -n.x, y: -n.y };
+  }
+  // The turn that puts a piece's back to the wall and its front into the room (front = n)
+  function rotFacing(n) {
+    var r = Math.round(Math.atan2(-n.x, n.y) * 180 / Math.PI * 1000) / 1000;
+    r = ((r % 360) + 360) % 360;
+    return r >= 359.999 ? 0 : r;
+  }
+  // Walls run level and plumb (rectangles, L shapes): the patterns are made for these
+  function square(poly) {
+    return !!poly && poly.length >= 4 && poly.every(function (a, k) {
+      var b = poly[(k + 1) % poly.length];
+      return Math.abs(a.x - b.x) < 0.05 || Math.abs(a.y - b.y) < 0.05;
+    });
+  }
+
+  function stretches(poly, openings, wallTest) {
+    var out = [];
+    poly.forEach(function (a, k) {
+      var b = poly[(k + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+      if (L < 1.5) return;
+      var u = { x: dx / L, y: dy / L }, n = inward(poly, a, u, L), spans = [], wins = [];
+      openings.forEach(function (o) {
+        var off = function (p) { return Math.abs((p.x - a.x) * n.x + (p.y - a.y) * n.y); };
+        var along = function (p) { return (p.x - a.x) * u.x + (p.y - a.y) * u.y; };
+        if (Math.max(off(o.a), off(o.b)) > 0.75) return;   // not on this wall
+        var lo = Math.min(along(o.a), along(o.b)), hi = Math.max(along(o.a), along(o.b));
+        if (hi < -0.1 || lo > L + 0.1) return;
+        (o.window ? wins : spans).push([lo, hi]);
+      });
+      var steps = Math.max(2, Math.round(L / SAMPLE)), ok = [], door = [], i, j;
+      for (i = 0; i <= steps; i++) {
+        var t = L * i / steps, good = !spans.some(function (sp) { return t >= sp[0] - DOOR_PAD && t <= sp[1] + DOOR_PAD; });
+        door.push(!good);
+        if (good && wallTest && !wins.some(function (w) { return t >= w[0] && t <= w[1]; })) {
+          // A wall has ink just past the outline (outlines sit a little inside the drawn walls);
+          // with none, it's open to the next room
+          var p = { x: a.x + u.x * t, y: a.y + u.y * t };
+          good = [2, 4, 6, 9, 12].some(function (d) { return wallTest({ x: p.x - n.x * d / 12, y: p.y - n.y * d / 12 }); });
+        }
+        ok.push(good);
+      }
+      // A few inches with no ink between two stretches of wall (a thin window jamb) is still wall
+      for (i = 1; i < steps; i++) {
+        if (ok[i] || door[i] || !ok[i - 1]) continue;
+        for (j = i; j <= steps && !ok[j] && !door[j]; j++);
+        if (j <= steps && ok[j] && (j - i) * L / steps <= 0.75) for (var q = i; q < j; q++) ok[q] = true;
+        i = j;
+      }
+      var start = -1;
+      for (i = 0; i <= steps + 1; i++) {
+        if (i <= steps && ok[i]) { if (start < 0) start = i; continue; }
+        if (start > -1) {
+          var t0 = L * start / steps, t1 = L * (i - 1) / steps;
+          if (t1 - t0 >= 1.5) out.push({ edge: k, a: a, u: u, n: n, L: L, t0: t0, t1: t1, len: t1 - t0,
+            windows: wins.filter(function (w) { return w[1] > t0 && w[0] < t1; }) });
+          start = -1;
+        }
+      }
+    });
+    return out;
+  }
+
+  // The open stretches of a room's outline (no wall drawn, no door: open to the next room), 18" and
+  // longer: for each, the floor just across it (a 2' deep strip), so a walking route worked out for
+  // this room alone still comes in through the opening the way it does on the whole plan
+  function openSides(poly, openings, wallTest) {
+    var out = [];
+    if (!wallTest) return out;
+    poly.forEach(function (a, k) {
+      var b = poly[(k + 1) % poly.length], dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
+      if (L < 1.5) return;
+      var u = { x: dx / L, y: dy / L }, n = inward(poly, a, u, L), shut = [];
+      openings.forEach(function (o) {
+        var off = function (p) { return Math.abs((p.x - a.x) * n.x + (p.y - a.y) * n.y); };
+        var along = function (p) { return (p.x - a.x) * u.x + (p.y - a.y) * u.y; };
+        if (Math.max(off(o.a), off(o.b)) > 0.75) return;
+        shut.push([Math.min(along(o.a), along(o.b)) - DOOR_PAD, Math.max(along(o.a), along(o.b)) + DOOR_PAD]);
+      });
+      var steps = Math.max(2, Math.round(L / SAMPLE)), run0 = -1;
+      for (var i = 0; i <= steps + 1; i++) {
+        var t = L * i / steps, open = false;
+        if (i <= steps && !shut.some(function (sp) { return t >= sp[0] && t <= sp[1]; })) {
+          var p = { x: a.x + u.x * t, y: a.y + u.y * t };
+          open = ![2, 4, 6, 9, 12].some(function (d) { return wallTest({ x: p.x - n.x * d / 12, y: p.y - n.y * d / 12 }); });
+        }
+        if (open) { if (run0 < 0) run0 = i; continue; }
+        if (run0 > -1) {
+          var t0 = L * run0 / steps, t1 = L * (i - 1) / steps;
+          // the floor just across it, 2' deep, as a stand-in for the next room
+          var p0 = { x: a.x + u.x * t0, y: a.y + u.y * t0 }, p1 = { x: a.x + u.x * t1, y: a.y + u.y * t1 };
+          // and a way in at its far side, where people come from
+          if (t1 - t0 >= 1.5) out.push({
+            strip: [p0, p1, { x: p1.x - n.x * 2.25, y: p1.y - n.y * 2.25 }, { x: p0.x - n.x * 2.25, y: p0.y - n.y * 2.25 }].map(function (q, j) {
+              return j < 2 ? { x: q.x - n.x * 0.25, y: q.y - n.y * 0.25 } : q;
+            }),
+            door: { cx: (p0.x + p1.x) / 2 - n.x * 2, cy: (p0.y + p1.y) / 2 - n.y * 2, ux: u.x, uy: u.y, nx: n.x, ny: n.y, w: Math.round((t1 - t0) * 12), hinge: 1, type: 'opening' }
+          });
+          run0 = -1;
+        }
+      }
+    });
+    return out;
+  }
+
+  function fits(st, t, wIn) { var h = wIn / 24; return t - h >= st.t0 - 1e-6 && t + h <= st.t1 + 1e-6; }
+  function underWindow(st, t, wIn) { var h = wIn / 24; return st.windows.some(function (w) { return t + h > w[0] + 0.05 && t - h < w[1] - 0.05; }); }
+  function against(spec, st, t, out) {
+    var dep = spec.d / 12 / 2 + GAP + (out || 0);
+    return { spec: spec, cx: st.a.x + st.u.x * t + st.n.x * dep, cy: st.a.y + st.u.y * t + st.n.y * dep, rot: rotFacing(st.n), edge: st.edge, t: t };
+  }
+  function uniq(list) {
+    var out = [];
+    list.forEach(function (t) { if (!out.some(function (o) { return Math.abs(o - t) < 0.2; })) out.push(t); });
+    return out;
+  }
+  // Where along the walls a piece this wide fits: the middle of the wall, the middle of each
+  // stretch, each end of it, and every 6" between
+  function wallSpots(sts, wIn) {
+    var out = [];
+    sts.forEach(function (st, i) {
+      var h = wIn / 24, ts = [st.L / 2, (st.t0 + st.t1) / 2, st.t0 + h, st.t1 - h];
+      for (var t = st.t0 + h; t <= st.t1 - h + 1e-6; t += 0.5) ts.push(t);
+      uniq(ts).forEach(function (t) { if (fits(st, t, wIn)) out.push({ st: i, t: t, window: underWindow(st, t, wIn) }); });
+    });
+    return out;
+  }
+
+  // A bed with its head to each stretch: centered on the wall, centered on the stretch, or pushed
+  // to one end so a nightstand still fits beside it. Nightstands go wherever the stretch has room.
+  function beds(sts, sizes) {
+    var ns = FURNITURE.get('nightstand'), out = [];
+    sizes.forEach(function (spec) {
+      sts.forEach(function (st, i) {
+        if (st.len < spec.w / 12) return;
+        var reach = spec.w / 24 + NS_GAP + ns.w / 12, ts = [st.L / 2, (st.t0 + st.t1) / 2, st.t0 + reach, st.t1 - reach];
+        // A twin can also go in a corner, one side against the wall, the way a narrow room takes it
+        if (spec.w < 48) {
+          if (st.t0 < 0.1) ts.push(st.t0 + spec.w / 24 + GAP);
+          if (st.t1 > st.L - 0.1) ts.push(st.t1 - spec.w / 24 - GAP);
+        }
+        uniq(ts).forEach(function (t) {
+          if (!fits(st, t, spec.w)) return;
+          var bed = against(spec, st, t), pcs = [bed];
+          [-1, 1].forEach(function (s) {
+            var nt = t + s * (spec.w / 24 + NS_GAP + ns.w / 24);
+            if (fits(st, nt, ns.w)) pcs.push(against(ns, st, nt));
+          });
+          out.push({ size: spec.id, st: i, edge: st.edge, t: t, pieces: pcs, nightstands: pcs.length - 1,
+                     window: underWindow(st, t, spec.w), offCenter: Math.abs(t - st.L / 2) });
+        });
+      });
+    });
+    return out;
+  }
+
+  // A desk against the wall, its chair pulled in 8" under the front edge
+  function desk(st, t) {
+    var dk = FURNITURE.get('desk'), ch = FURNITURE.get('deskchair'), d = against(dk, st, t);
+    var c = against(ch, st, t, dk.d / 12 - 8 / 12);
+    c.rot = rotFacing({ x: -st.n.x, y: -st.n.y });
+    return [d, c];
+  }
+
+  // The rug under a bed: turned across it (18" to 24" past each side), starting just in front
+  // of the nightstands so it sits under the lower part of the bed. The biggest of the usual sizes
+  // that leaves 6"+ of floor at the walls and doesn't run under the dresser or desk.
+  var BED_RUGS = { king: ['9x12', '8x10'], queen: ['8x10', '6x9'], full: ['8x10', '6x9'], twin: ['5x8'] };
+  function bedRug(poly, bed, st, avoid) {
+    var list = BED_RUGS[bed.spec.id] || [], start = (FURNITURE.get('nightstand').d + 4) / 12 + GAP;
+    var rot = Math.round(bed.rot + 90) % 180;
+    for (var i = 0; i < list.length; i++) {
+      var s = RUG.get(list[i]), along = s.w, off = start + along / 2;
+      // Centered on the bed if it can be; a bed near a corner takes its rug slid toward the room,
+      // as long as it still runs 12" past each side of the bed
+      var slack = Math.max(0, (s.h - bed.spec.w / 12) / 2 - 1), best = null;
+      for (var dt = 0; dt <= slack + 1e-6; dt += 1 / 12) {
+        [dt, -dt].forEach(function (sh) {
+          if (best && best.fit) return;
+          var t = bed.t + sh, c = { x: st.a.x + st.u.x * t + st.n.x * off, y: st.a.y + st.u.y * t + st.n.y * off };
+          var cl = RUG.clearanceAt(poly, s, rot, c.x, c.y);
+          if (cl < RUG.TIGHT - 1e-6) return;
+          var shape = RUG.outline(s, rot, c.x, c.y);
+          if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) return;
+          var fit = cl >= RUG.COMFORT - 1e-6;
+          if (!best || (fit && !best.fit)) best = { size: s.id, rot: rot, cx: c.x, cy: c.y, fit: fit };
+        });
+        if (best && best.fit) break;
+      }
+      if (best) return { size: best.size, rot: best.rot, cx: best.cx, cy: best.cy };
+    }
+    return null;
+  }
+
+  return { stretches: stretches, openSides: openSides, square: square, rotFacing: rotFacing, fits: fits, underWindow: underWindow,
+           against: against, wallSpots: wallSpots, beds: beds, desk: desk, bedRug: bedRug, BED_RUGS: BED_RUGS };
 })();
