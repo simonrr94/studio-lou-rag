@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=42"></script>
+  <script src="/static/tools/plan-engine.js?v=43"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -5198,6 +5198,12 @@
         var f = GEO.turn({ x: 0, y: 1 }, p.rot), back = { x: p.cx - f.x * p.spec.d / 24, y: p.cy - f.y * p.spec.d / 24 };
         return wins.some(function (w) { return GEO.segDist(back, w.a, w.b) < p.spec.w / 24; });
       }
+      // the TV on a wall with windows: furniture in front of them, and the eye goes to the light (Lauren,
+      // Nov 26): the long wall with no windows is the TV wall
+      function onWindowWall(p) {
+        var f = GEO.turn({ x: 0, y: 1 }, p.rot), back = { x: p.cx - f.x * p.spec.d / 24, y: p.cy - f.y * p.spec.d / 24 };
+        return wins.some(function (w) { var m = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 }; return Math.abs((m.x - back.x) * f.x + (m.y - back.y) * f.y) < 0.75; });
+      }
       var op = openPlan(r);
       // an open room: the seating group may slide farther along its wall to leave floor for dining
       LAYOUT.living(stsA, r.ftShape, !!op).forEach(function (c) {
@@ -5207,7 +5213,7 @@
         c.qTight = q.tight;
         // A full room reads better than a bare one: a tight walkway past a side table costs less than leaving the tables out
         c.score = q.tight * 3 + c.offCenter * 10 + (c.kind === 'tv' && !c.chairs ? 4 : 0) + (c.kind !== 'L' ? (!c.sideTables ? 3 : c.sideTables === 'one' ? 1.5 : 0) : 0) +
-          (c.media && byWindow(c.media) ? 4 : 0) + (c.floating ? 1 : 0) + (c.seat.spec.id === 'loveseat' ? 1.5 : 0) +
+          (c.media && byWindow(c.media) ? 4 : 0) + (c.media && onWindowWall(c.media) ? 8 : 0) + (c.floating ? 1 : 0) + (c.seat.spec.id === 'loveseat' ? 1.5 : 0) +
           (c.kind === 'L' && !c.media ? 1 : 0) + (c.dist ? Math.abs(c.dist - 7.5) * 0.3 : 0) + (c.media && c.media.angled ? 0.5 : 0) +
           (c.consoleGap != null && c.consoleGap < 30 / 12 ? 1 : 0) + (c.square ? 0.5 : 0) + (c.noCoffee ? 4 : 0) - (c.kind === 'talk' && facesWindow(c.seat) ? 1 : 0);
         // a floating seat must leave a way into the group: one end open 30"+, best the end nearer the door
@@ -5421,16 +5427,16 @@
         if (fallback && t.si !== fallback.si) return fallback.z;
         if ((checked[t.si] || 0) >= 60) { if (fallback) return fallback.z; continue; }
         var places = LAYOUT.withChairs(t.sp, t.c, t.rot), polys = places.map(polyOf);
-        // inside the room, and 2 ft+ from the seating group (the checks judge the walkway between)
+        // inside the room, and a 36" walkway clear of the seating group: two zones, not one crowd (Lauren, Nov 26)
         if (polys.some(function (pl) { return pl.some(function (q) { return !PLAN.pointInPoly(q, poly) && GEO.edgeDist(q, poly) > 1 / 12; }); })) continue;
-        if (polys.some(function (pl) { return group.some(function (g) { return GEO.polyDist(pl, g) < 2; }); })) continue;
+        if (polys.some(function (pl) { return group.some(function (g) { return GEO.polyDist(pl, g) < 3; }); })) continue;
         if (polys.some(function (pl) { return lands.some(function (l) { return GEO.polyDist(pl, l) <= 1e-6; }); })) continue;
         checked[t.si] = (checked[t.si] || 0) + 1;
         var pcs = layPieces(places), q = layoutQuick(r, c.pcs.concat(pcs));
         if (q.close || q.tight > c.qTight + 1) continue;
         var z = { places: places, pcs: pcs, table: places[0], qTight: q.tight, byKitchen: !!op.kitchen && Math.hypot(t.c.x - op.kitchen.x, t.c.y - op.kitchen.y) < 7,
                   byWindow: wins.some(function (w) { return Math.hypot(w.x - t.c.x, w.y - t.c.y) < 4.5; }) };
-        if (LAYOUT.tableRug(poly, places[0], group, true)) return z;
+        if (LAYOUT.tableRug(poly, places[0], group, true, 1)) return z;
         if (!fallback) fallback = { si: t.si, z: z };
         if (++passed >= 40) return fallback.z;
       }
@@ -5629,7 +5635,7 @@
       if (c.zone) {
         var av2 = c.places.filter(function (p) { return zp.indexOf(p) < 0; }).map(polyOf);
         if (rug) av2.push(RUG.outline(RUG.get(rug.size), rug.rot, rug.cx, rug.cy));
-        rug2 = LAYOUT.tableRug(r.ftShape, c.zone.table, av2);
+        rug2 = LAYOUT.tableRug(r.ftShape, c.zone.table, av2, false, 1);   // a foot of bare floor between the two rugs and the seating
       }
       var zname = c.zone ? c.zone.table.spec.name.charAt(0).toLowerCase() + c.zone.table.spec.name.slice(1) : '';
       var label = c.zone ? (c.kind === 'tv' ? seat + ' facing the TV' : c.kind === 'talk' ? 'Seating for conversation' : 'Sectional') + ' and a ' + zname
