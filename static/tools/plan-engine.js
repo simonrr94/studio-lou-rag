@@ -3985,29 +3985,33 @@ var LAYOUT = (function () {
     return out;
   }
 
-  // A bed with its head to each stretch: centered on the wall, centered on the stretch, or pushed
-  // to one end so a nightstand still fits beside it. Nightstands go wherever the stretch has room.
+  // A bed with its head to each stretch, centered: on the wall, or on the stretch when a door or
+  // opening takes part of the wall. Nightstands come in pairs, the same on both sides: 24" ones, or
+  // 18" ones where those don't fit, or none. A twin can also go into a corner, one side against the
+  // wall (a narrow room), with one nightstand on its open side.
+  var SMALL_NS = { w: 18, d: 16 };
   function beds(sts, sizes) {
     var ns = FURNITURE.get('nightstand'), out = [];
+    var stands = [ns, { id: ns.id, name: ns.name, w: SMALL_NS.w, d: SMALL_NS.d, h: ns.h, kind: ns.kind, role: ns.role }];
     sizes.forEach(function (spec) {
       sts.forEach(function (st, i) {
         if (st.len < spec.w / 12) return;
-        var reach = spec.w / 24 + NS_GAP + ns.w / 12, ts = [st.L / 2, (st.t0 + st.t1) / 2, st.t0 + reach, st.t1 - reach];
-        // A twin can also go in a corner, one side against the wall, the way a narrow room takes it
-        if (spec.w < 48) {
-          if (st.t0 < 0.1) ts.push(st.t0 + spec.w / 24 + GAP);
-          if (st.t1 > st.L - 0.1) ts.push(st.t1 - spec.w / 24 - GAP);
-        }
-        uniq(ts).forEach(function (t) {
+        function add(t, corner) {
           if (!fits(st, t, spec.w)) return;
           var bed = against(spec, st, t), pcs = [bed];
-          [-1, 1].forEach(function (s) {
-            var nt = t + s * (spec.w / 24 + NS_GAP + ns.w / 24);
-            if (fits(st, nt, ns.w)) pcs.push(against(ns, st, nt));
-          });
-          out.push({ size: spec.id, st: i, edge: st.edge, t: t, pieces: pcs, nightstands: pcs.length - 1,
-                     window: underWindow(st, t, spec.w), offCenter: Math.abs(t - st.L / 2) });
-        });
+          for (var k = 0; k < stands.length; k++) {
+            var nsk = stands[k], sides = corner ? [t < st.L / 2 ? 1 : -1] : [-1, 1];
+            var spots = sides.map(function (sg) { return t + sg * (spec.w / 24 + NS_GAP + nsk.w / 24); });
+            if (spots.every(function (nt) { return fits(st, nt, nsk.w); })) { spots.forEach(function (nt) { pcs.push(against(nsk, st, nt)); }); break; }
+          }
+          out.push({ size: spec.id, st: i, edge: st.edge, t: t, pieces: pcs, nightstands: pcs.length - 1, corner: !!corner,
+                     window: underWindow(st, t, spec.w), offCenter: corner ? 0 : Math.abs(t - st.L / 2) });
+        }
+        uniq([st.L / 2, (st.t0 + st.t1) / 2]).forEach(function (t) { add(t, false); });
+        if (spec.w < 48) {
+          if (st.t0 < 0.1) add(st.t0 + spec.w / 24 + GAP, true);
+          if (st.t1 > st.L - 0.1) add(st.t1 - spec.w / 24 - GAP, true);
+        }
       });
     });
     return out;
@@ -4024,29 +4028,18 @@ var LAYOUT = (function () {
   // The rug under a bed: turned across it (18" to 24" past each side), starting just in front
   // of the nightstands so it sits under the lower part of the bed. The biggest of the usual sizes
   // that leaves 6"+ of floor at the walls and doesn't run under the dresser or desk.
-  var BED_RUGS = { king: ['9x12', '8x10'], queen: ['8x10', '6x9'], full: ['8x10', '6x9'], twin: ['5x8'] };
+  var BED_RUGS = { king: ['9x12', '8x10', '6x9'], queen: ['8x10', '6x9'], full: ['8x10', '6x9', '5x8'], twin: ['5x8'] };
   function bedRug(poly, bed, st, avoid) {
     var list = BED_RUGS[bed.spec.id] || [], start = (FURNITURE.get('nightstand').d + 4) / 12 + GAP;
     var rot = Math.round(bed.rot + 90) % 180;
     for (var i = 0; i < list.length; i++) {
       var s = RUG.get(list[i]), along = s.w, off = start + along / 2;
-      // Centered on the bed if it can be; a bed near a corner takes its rug slid toward the room,
-      // as long as it still runs 12" past each side of the bed
-      var slack = Math.max(0, (s.h - bed.spec.w / 12) / 2 - 1), best = null;
-      for (var dt = 0; dt <= slack + 1e-6; dt += 1 / 12) {
-        [dt, -dt].forEach(function (sh) {
-          if (best && best.fit) return;
-          var t = bed.t + sh, c = { x: st.a.x + st.u.x * t + st.n.x * off, y: st.a.y + st.u.y * t + st.n.y * off };
-          var cl = RUG.clearanceAt(poly, s, rot, c.x, c.y);
-          if (cl < RUG.TIGHT - 1e-6) return;
-          var shape = RUG.outline(s, rot, c.x, c.y);
-          if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) return;
-          var fit = cl >= RUG.COMFORT - 1e-6;
-          if (!best || (fit && !best.fit)) best = { size: s.id, rot: rot, cx: c.x, cy: c.y, fit: fit };
-        });
-        if (best && best.fit) break;
-      }
-      if (best) return { size: best.size, rot: best.rot, cx: best.cx, cy: best.cy };
+      // Always centered on the bed; if this size doesn't fit there, the next size down
+      var c = { x: st.a.x + st.u.x * bed.t + st.n.x * off, y: st.a.y + st.u.y * bed.t + st.n.y * off };
+      if (RUG.clearanceAt(poly, s, rot, c.x, c.y) < RUG.TIGHT - 1e-6) continue;
+      var shape = RUG.outline(s, rot, c.x, c.y);
+      if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) continue;
+      return { size: s.id, rot: rot, cx: c.x, cy: c.y };
     }
     return null;
   }
