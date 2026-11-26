@@ -4519,12 +4519,25 @@
                            doors: ent.doors.concat(ent.across.map(function (o) { return o.door; })) });
       } catch (e) { return res; }
       if (!wk) return res;
+      // What the empty room already has (worked out once per room): a way in that leads nowhere
+      // (a thin wall stub read as an opening, a closet too shallow to walk into) and narrow spots
+      // nothing in the room causes. Neither counts against a layout.
+      var base = ent.base;
+      if (!base && pcs.length) { layoutWalk(r, [], ent); base = ent.base; }
+      if (!pcs.length) { base = ent.base = { dead: {}, pinch: {} }; }
       var seen = {};
       wk.routes.forEach(function (rt) {
+        var at = rt.pinch ? Math.round((rt.pinch.a.x + rt.pinch.b.x) * 2) + ',' + Math.round((rt.pinch.a.y + rt.pinch.b.y) * 2) + '|' + Math.round(rt.width) : null;
+        if (!pcs.length) {
+          if (rt.blocked || rt.from < 0) { if (rt.from > -1) base.dead[rt.from] = 1; if (rt.to.node != null) base.dead[rt.to.node] = 1; }
+          else if (at && rt.status !== 'ok') base.pinch[at] = 1;
+          return;
+        }
         if (rt.status === 'ok' && !rt.blocked) return;
-        var at = rt.pinch ? Math.round((rt.pinch.a.x + rt.pinch.b.x) * 2) + ',' + Math.round((rt.pinch.a.y + rt.pinch.b.y) * 2) : 'x' + Object.keys(seen).length;
-        if (seen[at]) return;
-        seen[at] = 1;
+        if (base.dead[rt.from] || (rt.to.node != null && base.dead[rt.to.node]) || (at && base.pinch[at])) return;
+        var key = at || 'x' + Object.keys(seen).length;
+        if (seen[key]) return;
+        seen[key] = 1;
         if (rt.blocked || rt.from < 0 || rt.status === 'close') res.close++; else res.tight++;
       });
       return res;
@@ -4562,6 +4575,8 @@
           Math.abs((o.b.x - st.a.x) * st.n.x + (o.b.y - st.a.y) * st.n.y) < 0.75; });
         var sides = base.lines.filter(function (l) { return l.piece === 0 && l.rule === 'bed'; }).map(function (l) { return l.against ? 0 : l.inch; });
         var minSide = sides.length ? Math.min.apply(null, sides) : 0;
+        // only a twin set into a corner on purpose has a side against the wall
+        if (!g.corner && sides.some(function (v) { return v === 0; })) return;
         // Centered on its wall comes first: every foot off the middle costs as much as a tight spot.
         // A twin set into a corner on purpose (a narrow room) is judged as a corner, not as off center.
         var gScore = base.tight * 10 + g.offCenter * 10 + (g.corner ? 8 : 0) + ((g.corner ? 1 : 2) - g.nightstands) * 4 + (g.window ? 3 : 0) + (facing ? 1 : 0) + (doorWall ? 2 : 0) - Math.min(minSide, 36) / 36;
@@ -4621,14 +4636,23 @@
         });
         return dk;
       }
-      var sizes = BED_ORDER.filter(function (id) { return bySize(id).length; }), si = 0;
+      // The biggest bed with good walkways (nothing tight); if no size has that, the biggest that passes
+      var sizes = BED_ORDER.filter(function (id) { return bySize(id).length; }), si = 0, roomy = true;
+      var easy = function (c) { return !c.full.tight; };
       (function findA() {
-        if (si >= sizes.length) return finish();
-        first(bySize(sizes[si++]), 3, function (c) { if (c) { out.a = c; finish(true); findB(); } else findA(); });
+        if (si >= sizes.length) {
+          if (!roomy) return finish();
+          roomy = false; si = 0;
+        }
+        first(bySize(sizes[si++]), 3, function (c) { if (c) { out.a = c; finish(true); findB(); } else findA(); }, roomy ? easy : null);
       })();
       function findB() {
         var i = BED_ORDER.indexOf(out.a.g.size) + 1;
-        if (i >= BED_ORDER.length) return findC();
+        if (i >= BED_ORDER.length) {
+          // a twin was the roomy pick: a bigger bed that only fits tight is still worth a card
+          var bigger = cands.filter(function (c) { return BED_ORDER.indexOf(c.g.size) < BED_ORDER.indexOf(out.a.g.size); });
+          return first(bigger, 3, function (c) { if (c) { out.b = c; c.tightPick = true; finish(true); } findC(); });
+        }
         var list = bySize(BED_ORDER[i]), desks = [];
         list.slice(0, 3).forEach(function (c) { var d = withDesk(c); if (d) desks.push(d); });
         // a smaller bed is only worth offering if it's no tighter than the bigger one
@@ -4673,6 +4697,7 @@
       else if (s.length === 2) sideText = s[0] + '" and ' + s[1] + '" at the sides';
       else sideText = '';
       var label = which === 'a' ? size + (sideText ? ', ' + sideText : '')
+        : which === 'b' && c.tightPick ? size + (sideText ? ', ' + sideText : '')
         : which === 'b' ? size + (c.desk ? ' and a desk' : ', more open floor')
         : size + ' on the ' + WALL_WORD(c.st.n) + ' wall';
       var ns = c.places.filter(function (p) { return p.spec.role === 'nightstand'; }).length, parts = [];
