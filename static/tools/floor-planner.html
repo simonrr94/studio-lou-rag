@@ -4487,11 +4487,42 @@
     }
     // The quick check: spacing, walls and overlaps, door swings and windows, for these pieces alone.
     // Gaps to plain walls are only measured (the walking routes judge those in the full check).
+    // The landing inside every way into the room: 36" deep across the full width of each door,
+    // sliding door, opening and open side, plus 3" past each side. Nothing a layout places may stand
+    // there: the swing check only covers doors that swing, and the walkway check leaves the doorway
+    // itself out, so a side table in front of a sliding door used to pass.
+    function layoutLandings(r) {
+      if (LAY.landRoom === r.id && LAY.landImg === state.img) return LAY.lands;
+      var poly = r.ftShape, out = [], DEEP = 3, PAD = 3 / 12;
+      function land(a, b, n) {
+        var L = Math.hypot(b.x - a.x, b.y - a.y);
+        if (L < 0.5) return;
+        var u = { x: (b.x - a.x) / L, y: (b.y - a.y) / L }, a2 = { x: a.x - u.x * PAD, y: a.y - u.y * PAD }, b2 = { x: b.x + u.x * PAD, y: b.y + u.y * PAD };
+        out.push([a2, b2, { x: b2.x + n.x * DEEP, y: b2.y + n.y * DEEP }, { x: a2.x + n.x * DEEP, y: a2.y + n.y * DEEP }]);
+      }
+      state.doors.forEach(function (d) {
+        if (isWin(d)) return;
+        var df = doorFt(d), g = DOOR.geom(df), mid = { x: (g.jambs[0].x + g.jambs[1].x) / 2, y: (g.jambs[0].y + g.jambs[1].y) / 2 };
+        if (GEO.edgeDist(mid, poly) > 1) return;   // not a way into this room
+        var n = { x: df.nx, y: df.ny };
+        if (!PLAN.pointInPoly({ x: mid.x + n.x, y: mid.y + n.y }, poly)) n = { x: -n.x, y: -n.y };
+        land(g.jambs[0], g.jambs[1], n);
+      });
+      layoutEntries(r).across.forEach(function (o) {
+        var dr = o.door, n = { x: dr.nx, y: dr.ny }, u = { x: dr.ux, y: dr.uy }, w = dr.w / 24;
+        var c = { x: o.strip[0].x / 2 + o.strip[1].x / 2 + n.x * 0.25, y: o.strip[0].y / 2 + o.strip[1].y / 2 + n.y * 0.25 };
+        land({ x: c.x - u.x * w, y: c.y - u.y * w }, { x: c.x + u.x * w, y: c.y + u.y * w }, n);
+      });
+      LAY.landRoom = r.id; LAY.landImg = state.img; LAY.lands = out;
+      return out;
+    }
     function layoutQuick(r, pcs) {
       var pft = withLayout(r, pcs, function () { return pcs.map(pieceFt); });
       var res = { close: 0, tight: 0, lines: [] }, poly = r.ftShape;
       var outside = pft.some(function (q) { return q.poly.some(function (pt) { return !PLAN.pointInPoly(pt, poly) && GEO.edgeDist(pt, poly) > 1 / 12; }); });
       if (outside) { res.close++; return res; }
+      var lands = layoutLandings(r);
+      if (pft.some(function (q) { return lands.some(function (l) { return GEO.polyDist(q.poly, l) <= 1e-6; }); })) { res.close++; res.landing = true; return res; }
       res.close += SPACE.conflicts(pft, wallTestFt()).length;
       if (res.close) return res;
       state.doors.forEach(function (d) { if (DOOR.check(doorFt(d), pft).hits.length) res.close++; });
@@ -4612,6 +4643,7 @@
     }
     function layoutsFor(r, done) {
       var poly = r.ftShape;
+      LAY.landRoom = null;
       var opens = state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); return { a: g.jambs[0], b: g.jambs[1], window: isWin(d) }; });
       var sts = LAYOUT.stretches(poly, opens, wallTestFt());
       if (!sts.length) return done({ why: 'This room has no straight stretch of wall to set furniture against. Add pieces from Furniture and the checks will show what fits.' });
@@ -4736,7 +4768,7 @@
         var q = layoutQuick(r, c.pcs);
         if (q.close) return;
         // A full room reads better than a bare one: a tight walkway past a side table costs less than leaving the tables out
-        c.score = q.tight * 3 + c.offCenter * 10 + (c.kind === 'tv' && !c.chairs ? 4 : 0) + (c.kind !== 'L' && !c.sideTables ? 3 : 0) +
+        c.score = q.tight * 3 + c.offCenter * 10 + (c.kind === 'tv' && !c.chairs ? 4 : 0) + (c.kind !== 'L' ? (!c.sideTables ? 3 : c.sideTables === 'one' ? 1.5 : 0) : 0) +
           (c.media && byWindow(c.media) ? 4 : 0) + (c.floating ? 1 : 0) + (c.seat.spec.id === 'loveseat' ? 1.5 : 0) +
           (c.kind === 'L' && !c.media ? 1 : 0) + (c.dist ? Math.abs(c.dist - 7.5) * 0.3 : 0);
         cands.push(c);
@@ -4775,7 +4807,8 @@
         parts.push('a coffee table');
         if (c.kind === 'tv' && c.chairs) parts.push('two armchairs');
       }
-      if (c.sideTables) parts.push('side tables');
+      if (c.sideTables === 'one') parts.push('a side table');
+      else if (c.sideTables) parts.push('side tables');
       if (rug) parts.push((/^(8|11|18)'/.test(RUG.get(rug.size).label) ? 'an ' : 'a ') + RUG.get(rug.size).label + ' rug');
       var notes = ['With ' + (parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0]) + '.'];
       if (c.media) notes.push('Sized for a ' + c.media.tv + '" TV.');

@@ -4088,13 +4088,21 @@ var LAYOUT = (function () {
   }
   function living(sts, poly) {
     var out = [], media = FURNITURE.get('media'), seats = [FURNITURE.get('sofa'), FURNITURE.get('loveseat')], ch = FURNITURE.get('armchair');
-    function centers(st, wIn) { return uniq([st.L / 2, (st.t0 + st.t1) / 2]).filter(function (t) { return fits(st, t, wIn); }); }
+    // Centered on the wall (or the stretch); then up to a foot either way, for when a doorway's landing
+    // takes one end (these rank below centered ones: each foot off costs as much as a tight spot)
+    function centers(st, wIn) {
+      var m = [st.L / 2, (st.t0 + st.t1) / 2], ts = m.slice();
+      m.forEach(function (t) { [-1, -0.5, 0.5, 1].forEach(function (k) { ts.push(t + k); }); });
+      return uniq(ts).filter(function (t) { return fits(st, t, wIn); });
+    }
     function variants(kind, st, t, seat, seatPl, c0, face, right, extra) {
       [true, false].forEach(function (chairs) {
         if (kind === 'talk' && !chairs) return;
         var g = seatGroup(seat, c0, face, right, kind === 'tv' && chairs);
-        [true, false].forEach(function (withSides) {
-          var places = [seatPl, g.coffee].concat(withSides ? g.sides : []).concat(g.chairs);
+        // side tables: a matching pair, or one on either end (when the other end is the way in), or none
+        [[0, 1], [0], [1], []].forEach(function (which) {
+          var withSides = which.length === 2 ? true : which.length ? 'one' : false;
+          var places = [seatPl, g.coffee].concat(which.map(function (k) { return g.sides[k]; })).concat(g.chairs);
           if (kind === 'talk') {
             // two armchairs across the coffee table, facing the sofa, 4" apart from the middle
             var far = add({ x: g.coffee.cx, y: g.coffee.cy }, face, FURNITURE.get('coffee').d / 24 + COFFEE_GAP + ch.d / 24);
@@ -4116,7 +4124,7 @@ var LAYOUT = (function () {
         var mc = at(st, t, GAP + media.d / 24), far = GEO.rayPoly(at(st, t, media.d / 12), st.n.x, st.n.y, poly);
         if (far == null) return;
         seats.forEach(function (seat) {
-          var wallV = media.d / 24 + far - seat.d / 24 - GAP, vs = [6.5, 7.5, 8.5];
+          var wallV = media.d / 24 + far - seat.d / 24 - GAP, vs = [6, 6.5, 7.5, 8.5];
           if (wallV >= 5.5 && wallV <= 9.5) vs.push(wallV);
           uniq(vs).forEach(function (V) {
             if (V > wallV + 1e-6) return;
