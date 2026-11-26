@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=39"></script>
+  <script src="/static/tools/plan-engine.js?v=40"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -4577,11 +4577,13 @@
       // A dining table's chairs may come within 2 ft of a way in (the walking routes judge the rest):
       // a small dining room's doorways would otherwise push the table off center. In a living room
       // (a dining zone) a kitchen's open side keeps its full 42" for them too.
-      var shallow = [], shallow2 = [];
+      var shallow = [], shallow2 = [], seatL = [];
       function land(a, b, n, deep) {
         var DEEP = deep || 3;
         land2(a, b, n, DEEP > 3 ? DEEP : 2, shallow);
         land2(a, b, n, 2, shallow2);
+        // behind a seat at a kitchen's open side it's a walkway: 36" is enough (Lauren, Nov 26)
+        land2(a, b, n, Math.min(DEEP, 3), seatL);
         var L = Math.hypot(b.x - a.x, b.y - a.y);
         if (L < 0.5) return;
         var u = { x: (b.x - a.x) / L, y: (b.y - a.y) / L }, a2 = { x: a.x - u.x * PAD, y: a.y - u.y * PAD }, b2 = { x: b.x + u.x * PAD, y: b.y + u.y * PAD };
@@ -4607,6 +4609,7 @@
         land({ x: c.x - u.x * w, y: c.y - u.y * w }, { x: c.x + u.x * w, y: c.y + u.y * w }, n, kitchenAt(r, { x: dr.cx, y: dr.cy }) ? 3.5 : 3);
       });
       out.shallow = roomLType(r) === 'dining' ? shallow2 : shallow;
+      out.seat = seatL;
       LAY.landRoom = r.id; LAY.landImg = state.img; LAY.lands = out;
       return out;
     }
@@ -4617,7 +4620,7 @@
       if (outside) { res.close++; return res; }
       var lands = layoutLandings(r);
       if (pft.some(function (q) {
-        var ls = q.role === 'dining' || (q.role === 'chair' && q.group) ? lands.shallow : lands;
+        var ls = q.role === 'dining' || (q.role === 'chair' && q.group) ? lands.shallow : q.role === 'seat' || q.role === 'side' ? lands.seat : lands;
         return ls.some(function (l) { return GEO.polyDist(q.poly, l) <= 1e-6; });
       })) { res.close++; res.landing = true; return res; }
       res.close += SPACE.conflicts(pft, wallTestFt()).length;
@@ -4631,6 +4634,9 @@
         // patterns never offer less), the walking routes judge whether people pass there
         var o = l.hit.type === 'piece' ? pft[l.hit.i] : null, a = pft[l.piece];
         if (o && a && l.rule === 'walk' && ((a.role === 'coffee' && o.role === 'media') || (a.role === 'media' && o.role === 'coffee')) && l.inch >= 24) l.status = 'ok';
+        // an armchair beside a nightstand, side table or dresser: breathing room, not a walkway (10"+)
+        var small = { nightstand: 1, side: 1, dresser: 1 };
+        if (o && a && l.rule === 'walk' && l.inch >= 10 && ((a.role === 'seat' && a.w <= 40 && small[o.role]) || (o.role === 'seat' && o.w <= 40 && small[a.role]))) l.status = 'ok';
       });
       SPACE.report(lines).forEach(function (rw) { if (rw.status === 'close') res.close++; else if (rw.status === 'tight') res.tight++; });
       res.lines = lines;
@@ -4779,21 +4785,32 @@
         if (away && away.some(function (a) { return Math.hypot(p.x - a.x, p.y - a.y) < 6; })) return -1;
         return Math.hypot(p.x - mid.x, p.y - mid.y);
       }
+      // In a bedroom the chair never extends the bed's row (not on the headboard wall) and keeps 12"+
+      // from the bed and nightstands; in a corner it stands alone, turned 45 degrees (Lauren, Nov 26)
+      var row = bed ? c.places.filter(function (p) { return p.spec.role === 'bed' || p.spec.role === 'nightstand'; }).map(polyOf) : [];
+      function roomy(places) { return !row.length || places.every(function (p) { var pl = polyOf(p); return row.every(function (q) { return GEO.polyDist(pl, q) >= 1; }); }); }
       // in a room corner: the chair turned 45 degrees out of the corner, a round side table beside it
       roomCorners(sts).forEach(function (k) {
-        var off = 2.05, cc = { x: k.p.x + (k.st.n.x + k.inw.x) * off, y: k.p.y + (k.st.n.y + k.inw.y) * off };
+        if (bed && k.st.edge === bed.edge) return;
+        var off = 2.2, cc = { x: k.p.x + (k.st.n.x + k.inw.x) * off, y: k.p.y + (k.st.n.y + k.inw.y) * off };
         var f = { x: (k.st.n.x + k.inw.x) / Math.SQRT2, y: (k.st.n.y + k.inw.y) / Math.SQRT2 };
+        var chairP = { spec: ch, cx: cc.x, cy: cc.y, rot: LAYOUT.rotFacing(f) }, far = farFrom(cc);
+        if (bed) {
+          if (roomy([chairP])) tries.push({ places: [chairP], score: far < 0 ? -1 : far + 5 + (nearWin(cc) ? 2 : 0), at: cc, corner: true });
+          return;
+        }
         var tt = k.end + k.dir * (off * 2 + 2 / 12 + sdR.w / 24);
         if (!LAYOUT.fits(k.st, tt, sdR.w)) return;
-        var far = farFrom(cc);
-        tries.push({ places: [{ spec: ch, cx: cc.x, cy: cc.y, rot: LAYOUT.rotFacing(f) }, LAYOUT.against(sdR, k.st, tt)], score: far < 0 ? -1 : far + 3 + (nearWin(cc) ? 2 : 0), at: cc });
+        tries.push({ places: [chairP, LAYOUT.against(sdR, k.st, tt)], score: far < 0 ? -1 : far + 3 + (nearWin(cc) ? 2 : 0), at: cc });
       });
       // along a wall, the chair square to it with a side table beside it
       LAYOUT.wallSpots(sts, wIn).forEach(function (sp) {
         var st = sts[sp.st], w = { x: st.a.x + st.u.x * sp.t, y: st.a.y + st.u.y * sp.t }, h = wIn / 24;
+        if (bed && st.edge === bed.edge) return;
         var corner = Math.min(sp.t - h - st.t0, st.t1 - sp.t - h) < 0.6 ? 2 : 0, far = farFrom(w);
         for (var sg = -1; sg <= 1; sg += 2) {
           var chair = LAYOUT.against(ch, st, sp.t - sg * (sd.w + 3) / 24), table = LAYOUT.against(sd, st, sp.t + sg * (ch.w + 3) / 24);
+          if (!roomy([chair, table])) continue;
           tries.push({ places: [chair, table], score: far < 0 ? -1 : far + corner + (nearWin(w) ? 2 : 0), at: { x: chair.cx, y: chair.cy } });
         }
       });
@@ -4849,7 +4866,7 @@
           take([{ spec: bn, cx: bed.cx + f.x * off, cy: bed.cy + f.y * off, rot: bed.rot }], 'a bench at the foot of the bed');
         }
         var nook = readingNook(r, cur(), sts, bed);
-        if (nook) take(nook.places, 'a reading chair');
+        if (nook) take(nook.places, nook.corner ? 'a reading chair in the corner' : 'a reading chair');
         if (!c.desk && area >= 180) {
           var kd = FURNITURE.get('desk');
           LAYOUT.wallSpots(sts, kd.w).some(function (sp) { return take(LAYOUT.desk(sts[sp.st], sp.t), 'a desk'); });
@@ -4898,10 +4915,21 @@
         var pl = FURNITURE.get('plant'), wins = windowSpots(), anchors = cur().places.filter(function (p) { return /dresser|media|storage/.test(p.spec.role); });
         roomCorners(sts).map(function (k) {
           var off = pl.w / 24 + 2 / 12, p = { x: k.p.x + (k.st.n.x + k.inw.x) * off, y: k.p.y + (k.st.n.y + k.inw.y) * off };
-          var sc = (wins.some(function (w) { return Math.hypot(w.x - p.x, w.y - p.y) < 4; }) ? 0 : 2) +
-            Math.min.apply(null, anchors.map(function (a) { return Math.hypot(a.cx - p.x, a.cy - p.y); }).concat([12])) / 6;
+          // next to the dresser (or console, bookcase) first, then by a window
+          var sc = Math.min.apply(null, anchors.map(function (a) { return Math.hypot(a.cx - p.x, a.cy - p.y); }).concat([12])) / 2 +
+            (wins.some(function (w) { return Math.hypot(w.x - p.x, w.y - p.y) < 4; }) ? 0 : 1);
           return { p: p, sc: sc };
-        }).sort(function (a, b) { return a.sc - b.sc; }).some(function (o) {
+        }).concat(
+          // beside a dresser smaller than its wall, on the same wall (first choice)
+          cur().places.filter(function (p) { return p.spec.role === 'dresser' && p.spec.w < 60 && p.edge != null; }).reduce(function (acc, d) {
+            var st = sts.filter(function (x) { return x.edge === d.edge && d.t >= x.t0 && d.t <= x.t1; })[0];
+            if (!st) return acc;
+            [-1, 1].forEach(function (sg) {
+              var t = d.t + sg * (d.spec.w / 24 + 3 / 12 + pl.w / 24);
+              if (LAYOUT.fits(st, t, pl.w)) { var q = LAYOUT.against(pl, st, t); acc.push({ p: { x: q.cx, y: q.cy }, sc: -1 }); }
+            });
+            return acc;
+          }, [])).sort(function (a, b) { return a.sc - b.sc; }).some(function (o) {
           return take([{ spec: pl, cx: o.p.x, cy: o.p.y, rot: 0 }], 'a plant');
         });
       }
@@ -4952,8 +4980,10 @@
           var st = sts[sp.st], win = sp.window ? st.windows.filter(function (w) { return sp.t + ds.w / 24 > w[0] && sp.t - ds.w / 24 < w[1]; })[0] : null;
           // Under a window: centered on it and close to its width. On a plain wall: centered on the
           // wall (or the stretch), the wider the better. A foot off center costs as much as a tight spot.
-          if (win) { var ww = (win[1] - win[0]) * 12; sp.align = Math.abs(sp.t - (win[0] + win[1]) / 2) * 10 + Math.abs(ds.w - ww) / 12 * 0.8 + (ds.w > ww + 12 ? 2 : 0); }
-          else sp.align = Math.min(Math.abs(sp.t - st.L / 2), Math.abs(sp.t - (st.t0 + st.t1) / 2)) * 10 + (72 - ds.w) / 12 * 0.6;
+          // Bigger wherever the wall has room (Lauren, Nov 26): under a window, about the window's width
+          // but never under 60" when 60" fits; on a plain wall, the widest that fits
+          if (win) { var ww = Math.max((win[1] - win[0]) * 12, 60); sp.align = Math.abs(sp.t - (win[0] + win[1]) / 2) * 10 + Math.abs(ds.w - ww) / 12 * 1.2 + (ds.w > ww + 24 ? 2 : 0); }
+          else sp.align = Math.min(Math.abs(sp.t - st.L / 2), Math.abs(sp.t - (st.t0 + st.t1) / 2)) * 10 + (72 - ds.w) / 12 * 2;
           sp.spec = ds; sp.place = LAYOUT.against(ds, st, sp.t); sp.pc = layPiece(sp.place);
           sp.poly = GEO.place(FURNITURE.outline(ds), sp.place.cx, sp.place.cy, sp.place.rot, 1 / 12);
           if (!layoutQuick(r, [sp.pc]).close) dSpots.push(sp);
@@ -4999,15 +5029,22 @@
             var dp = sp.pc, q = layoutQuick(r, under.concat([dp]));
             if (q.close) return;
             var dl = q.lines.filter(function (l) { return l.piece === under.length && l.rule === 'drawers'; })[0];
-            var sc = q.tight * 30 + sp.align - Math.min(dl ? dl.inch : 96, 72) / 72;
+            // a tight spot costs less than a dresser too small for the room (Lauren, Nov 26)
+            var sc = q.tight * 4 + sp.align - Math.min(dl ? dl.inch : 96, 72) / 72;
             var o = { sc: sc, pc: dp, place: sp.place, q: q, st: sp.st, roomy: q.tight * 10 - Math.min(dl ? dl.inch : 96, 72) / 72 };
             if (!best || sc < best.sc) best = o;
             all.push(o);
           });
         }
-        // a dresser that leaves the bench its room; if there's none, the dresser wins over the bench
+        // a dresser that leaves the bench its room, unless that means a smaller dresser: a dresser in
+        // proportion to the room wins over the bench (Lauren, Nov 26)
         pickDresser(withB);
-        if (!best && withB !== bedPc) pickDresser(bedPc);
+        if (withB !== bedPc) {
+          var keep = { best: best, alt: alt, all: all };
+          best = null; alt = null; all = [];
+          pickDresser(bedPc);
+          if (keep.best && (!best || keep.best.place.spec.w >= best.place.spec.w)) { best = keep.best; alt = keep.alt; all = keep.all; }
+        }
         // the best dresser spot, and the best on another wall (the walking routes, checked later, may
         // find the first pinches a way through)
         all.forEach(function (o) { if (best && o.st !== best.st && (!alt || o.sc < alt.sc)) alt = o; });
@@ -5289,22 +5326,23 @@
       var wins = windowSpots();
       var gm = c.places.reduce(function (s, p) { return { x: s.x + p.cx / c.places.length, y: s.y + p.cy / c.places.length }; }, { x: 0, y: 0 });
       var tries = [];
-      for (var y = b.y + 2; y <= b.y + b.h - 2; y += 0.5) for (var x = b.x + 2; x <= b.x + b.w - 2; x += 0.5) {
+      for (var y = b.y + 1; y <= b.y + b.h - 1; y += 0.5) for (var x = b.x + 1; x <= b.x + b.w - 1; x += 0.5) {
         var p = { x: x, y: y };
         if (!PLAN.pointInPoly(p, poly)) continue;
         // nearest the kitchen; a spot by a window counts as 3 ft nearer (a table by the window)
         var near = (op.kitchen ? Math.hypot(x - op.kitchen.x, y - op.kitchen.y) : -Math.hypot(x - gm.x, y - gm.y)) -
           (wins.some(function (w) { return Math.hypot(w.x - x, w.y - y) < 4.5; }) ? 3 : 0);
         specs.forEach(function (sp, si) {
-          (sp.shape === 'round' && sp.w === sp.d ? [0] : [0, 90]).forEach(function (rot) { tries.push({ sp: sp, si: si, c: p, rot: rot, near: near }); });
+          // a round table's chairs can turn too (a bistro table's two chairs side by side under a slanted wall)
+          (sp.shape === 'round' && sp.w === sp.d ? [0, 45, 90] : [0, 90]).forEach(function (rot) { tries.push({ sp: sp, si: si, c: p, rot: rot, near: near }); });
         });
       }
-      // the bigger tables first, each nearest the kitchen first, 25 checks each at most
+      // the bigger tables first, each nearest the kitchen first, 60 checks each at most
       tries.sort(function (a, b2) { return a.si - b2.si || a.near - b2.near; });
       var checked = {}, lands = layoutLandings(r).shallow;
       for (var i = 0; i < tries.length; i++) {
         var t = tries[i];
-        if ((checked[t.si] || 0) >= 25) continue;
+        if ((checked[t.si] || 0) >= 60) continue;
         var places = LAYOUT.withChairs(t.sp, t.c, t.rot), polys = places.map(polyOf);
         // inside the room, and 2 ft+ from the seating group (the checks judge the walkway between)
         if (polys.some(function (pl) { return pl.some(function (q) { return !PLAN.pointInPoly(q, poly) && GEO.edgeDist(q, poly) > 1 / 12; }); })) continue;
@@ -5313,7 +5351,7 @@
         checked[t.si] = (checked[t.si] || 0) + 1;
         var pcs = layPieces(places), q = layoutQuick(r, c.pcs.concat(pcs));
         if (q.close || q.tight > c.qTight + 1) continue;
-        return { places: places, pcs: pcs, table: places[0], qTight: q.tight, byKitchen: !!op.kitchen,
+        return { places: places, pcs: pcs, table: places[0], qTight: q.tight, byKitchen: !!op.kitchen && Math.hypot(t.c.x - op.kitchen.x, t.c.y - op.kitchen.y) < 7,
                  byWindow: wins.some(function (w) { return Math.hypot(w.x - t.c.x, w.y - t.c.y) < 4.5; }) };
       }
       return null;
@@ -5500,7 +5538,7 @@
       // the dining zone's table and chairs)
       var zp = c.zone ? c.zone.places : [];
       zp.forEach(function (p) { avoid.push(polyOf(p)); });
-      var group = c.extras || c.zone ? { places: c.places.slice(0, c.places.length - (c.nAdded || 0)).filter(function (p) { return zp.indexOf(p) < 0; }), coffee: c.coffee, seat: c.seat } : c;
+      var group = c.extras || c.zone ? { places: c.places.slice(0, c.places.length - (c.nAdded || 0)).filter(function (p) { return zp.indexOf(p) < 0; }), coffee: c.coffee, seat: c.seat, media: c.media } : c;
       var rug = LAYOUT.seatRug(r.ftShape, group, avoid), seat = c.seat.spec.id === 'loveseat' ? 'Loveseat' : 'Sofa';
       var zname = c.zone ? c.zone.table.spec.name.charAt(0).toLowerCase() + c.zone.table.spec.name.slice(1) : '';
       var label = c.zone ? (c.kind === 'tv' ? seat + ' facing the TV' : c.kind === 'talk' ? 'Seating for conversation' : 'Sectional') + ' and a ' + zname
