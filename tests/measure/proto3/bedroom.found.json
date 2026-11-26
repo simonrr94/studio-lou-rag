@@ -1,1 +1,0 @@
-{"ppf": 38.893090163441485, "from": ["overall size", "room sizes"], "openings": [{"kind": "swing", "a": [477.0, 518.0], "b": [602.0, 518.0], "hinge_pt": [602.0, 518.0], "into": "Bedroom", "model": "swing"}, {"kind": "window", "a": [142.0, 110.0], "b": [142.0, 363.0], "model": "window"}, {"kind": "window", "a": [657.0, 110.0], "b": [657.0, 338.0], "model": "window"}]}
