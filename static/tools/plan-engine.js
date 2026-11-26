@@ -1009,6 +1009,7 @@ var FURNITURE = (function () {
       { id: 'bench', name: 'Bench', w: 48, d: 16, h: 18, kind: 'seat', role: 'bench' }
     ] },
     { group: 'Dining', items: [
+      { id: 'dining2r', name: 'Bistro table for 2', w: 30, d: 30, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: { around: 2 } },
       { id: 'dining4r', name: 'Round table for 4', w: 48, d: 48, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: { around: 4 } },
       { id: 'dining6r', name: 'Round table for 6', w: 60, d: 60, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: { around: 6 } },
       { id: 'dining6o', name: 'Oval table for 6', w: 78, d: 42, h: 30, kind: 'table', role: 'dining', shape: 'round', chairs: [2, 1] },
@@ -1193,7 +1194,7 @@ var FURNITURE = (function () {
   function sizeFamily(pc) {
     if (!pc) return null;
     if (pc.role === 'bed' && /^(twin|full|queen|king)$/.test(pc.type)) return 'bed';
-    if (pc.role !== 'dining' || !get(pc.type)) return null;
+    if (pc.role !== 'dining' || !get(pc.type) || pc.type === 'dining2r') return null;   // the bistro table has one size
     return pc.shape === 'round' ? (pc.type === 'dining6o' ? 'oval' : 'round') : 'rect';
   }
   // The catalog item for one step of a family, at that step's size and name
@@ -4043,7 +4044,32 @@ var LAYOUT = (function () {
   // of the nightstands so it sits under the lower part of the bed. The biggest of the usual sizes
   // that leaves 6"+ of floor at the walls and doesn't run under the dresser or desk.
   var BED_RUGS = { king: ['9x12', '8x10', '6x9'], queen: ['8x10', '6x9', '5x8'], full: ['8x10', '6x9', '5x8'], twin: ['5x8'] };
-  function bedRug(poly, bed, st, avoid) {
+  // The designer rule (Nov 26): the rug starts 6" to 12" in front of the nightstands (9" first), runs
+  // under about the lower two thirds of the bed, and shows 18" past each side and past the foot (or
+  // past the bench at the foot). A room that can't take that gets 12" past the foot, then the old
+  // placement (4" in front of the nightstands). opts: { ns: nightstand depth (inches, 0 for none),
+  // foot: inches from the bed's foot to the front of a bench there }
+  function bedRug(poly, bed, st, avoid, opts) {
+    opts = opts || {};
+    var list = BED_RUGS[bed.spec.id] || [], rot = Math.round(bed.rot + 90) % 180, ns = opts.ns != null ? opts.ns : FURNITURE.get('nightstand').d;
+    var tiers = [[9, 18], [6, 18], [12, 18], [9, 12], [6, 12]];
+    for (var ti = 0; ti < tiers.length; ti++) for (var i = 0; i < list.length; i++) {
+      var s = RUG.get(list[i]);
+      if (!s) continue;
+      var across = Math.max(s.w, s.h), along = Math.min(s.w, s.h), start = (ns + tiers[ti][0]) / 12 + GAP;
+      if (across * 12 < bed.spec.w + 36) continue;   // 18" past each side
+      if (start + along < (bed.spec.d + (opts.foot || 0) + tiers[ti][1]) / 12 + GAP) continue;   // past the foot (or the bench)
+      if (start > bed.spec.d / 12 / 3 + GAP + 1e-6) continue;   // under the lower two thirds at least
+      var off = start + along / 2, c = { x: st.a.x + st.u.x * bed.t + st.n.x * off, y: st.a.y + st.u.y * bed.t + st.n.y * off };
+      // rot turns the rug so its long side (h) runs across the bed
+      if (RUG.clearanceAt(poly, s, rot, c.x, c.y) < RUG.TIGHT - 1e-6) continue;
+      var shape = RUG.outline(s, rot, c.x, c.y);
+      if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) continue;
+      return { size: s.id, rot: rot, cx: c.x, cy: c.y };
+    }
+    return bedRugOld(poly, bed, st, avoid);
+  }
+  function bedRugOld(poly, bed, st, avoid) {
     var list = BED_RUGS[bed.spec.id] || [], start = (FURNITURE.get('nightstand').d + 4) / 12 + GAP;
     var rot = Math.round(bed.rot + 90) % 180;
     function tryAt(s, slide, along) {
@@ -4087,6 +4113,9 @@ var LAYOUT = (function () {
      Each candidate: { kind, st (the anchor stretch), places: [...], seat (the main seat), coffee,
      dist (feet, screen to the seat's front, tv and L), tv (inches) }. Feet, like the rest. */
   var COFFEE_GAP = 16 / 12;   // seat front to coffee table: the middle of the designer range
+  // Coffee table to media console: 24" at the least, room to reach the console and step past (it's
+  // not the main walkway; the walking routes judge those). Below 24" a TV layout isn't offered.
+  var CONSOLE_GAP = 24 / 12;
   function at(st, t, out) { return { x: st.a.x + st.u.x * t + st.n.x * out, y: st.a.y + st.u.y * t + st.n.y * out }; }
   function put(spec, p, front, extra) {
     var o = { spec: spec, cx: p.x, cy: p.y, rot: rotFacing(front) };
@@ -4102,8 +4131,11 @@ var LAYOUT = (function () {
     var coffee = put(cof, cc, face);
     out.push(coffee);
     var sides = [-1, 1].map(function (sg) { return put(side, add(add(c0, right, sg * (seat.w / 24 + 2 / 12 + side.w / 24)), face, (side.d - seat.d) / 24), face); });
+    // the armchairs beside the coffee table face in, turned 30 degrees toward the seat (chairs ==
+    // 'square' for the plain version): a conversation, not two chairs staring at each other
     var arm = chairs ? [-1, 1].map(function (sg) {
-      return put(ch, add(cc, right, sg * (cof.w / 24 + COFFEE_GAP + ch.d / 24)), { x: -right.x * sg, y: -right.y * sg });
+      var ang = chairs === 'square' ? 0 : 30 * Math.PI / 180, f = { x: -right.x * sg * Math.cos(ang) - face.x * Math.sin(ang), y: -right.y * sg * Math.cos(ang) - face.y * Math.sin(ang) };
+      return put(ch, add(cc, right, sg * (cof.w / 24 + COFFEE_GAP + ch.d / 24)), f);
     }) : [];
     return { coffee: coffee, sides: sides, chairs: arm };
   }
@@ -4118,20 +4150,24 @@ var LAYOUT = (function () {
       return uniq(ts).filter(function (t) { return fits(st, t, wIn); });
     }
     function variants(kind, st, t, seat, seatPl, c0, face, right, extra) {
-      [true, false].forEach(function (chairs) {
-        if (kind === 'talk' && !chairs) return;
+      var bare = extra && extra.noCoffee;
+      [true, 'square', false].forEach(function (chairs) {
+        if (kind === 'talk' && chairs !== true) return;
+        if (bare && chairs) return;
         var g = seatGroup(seat, c0, face, right, kind === 'tv' && chairs);
+        if (bare) g.coffee = null;
         // side tables: a matching pair, or one on either end (when the other end is the way in), or none
         [[0, 1], [0], [1], []].forEach(function (which) {
           var withSides = which.length === 2 ? true : which.length ? 'one' : false;
-          var places = [seatPl, g.coffee].concat(which.map(function (k) { return g.sides[k]; })).concat(g.chairs);
+          if (bare && !which.length) return;   // without a coffee table, side tables hold the drinks
+          var places = (g.coffee ? [seatPl, g.coffee] : [seatPl]).concat(which.map(function (k) { return g.sides[k]; })).concat(g.chairs);
           if (kind === 'talk') {
             // two armchairs across the coffee table, facing the sofa, 4" apart from the middle
             var far = add({ x: g.coffee.cx, y: g.coffee.cy }, face, FURNITURE.get('coffee').d / 24 + COFFEE_GAP + ch.d / 24);
             places = places.concat([-1, 1].map(function (sg) { return put(ch, add(far, right, sg * (ch.w / 24 + 2 / 12)), neg(face)); }));
           }
           if (extra && extra.media) places = places.concat([extra.media]);
-          var o = { kind: kind, st: st, t: t, seat: seatPl, coffee: g.coffee, places: places, chairs: kind === 'talk' || chairs, sideTables: withSides, offCenter: Math.abs(t - st.L / 2) };
+          var o = { kind: kind, st: st, t: t, seat: seatPl, coffee: g.coffee, places: places, chairs: kind === 'talk' || !!chairs, square: chairs === 'square', sideTables: withSides, offCenter: Math.abs(t - st.L / 2) };
           if (extra) for (var k in extra) o[k] = extra[k];
           out.push(o);
         });
@@ -4146,7 +4182,7 @@ var LAYOUT = (function () {
         var mc = at(st, t, GAP + media.d / 24), far = GEO.rayPoly(at(st, t, media.d / 12), st.n.x, st.n.y, poly);
         if (far == null) return;
         seats.forEach(function (seat) {
-          var wallV = media.d / 24 + far - seat.d / 24 - GAP, vs = [6, 6.5, 7.5, 8.5];
+          var wallV = media.d / 24 + far - seat.d / 24 - GAP, vs = [6, 6.5, 7, 7.5, 8, 8.5, 9];
           if (wallV >= 5.5 && wallV <= 9.5) vs.push(wallV);
           uniq(vs).forEach(function (V) {
             if (V > wallV + 1e-6) return;
@@ -4154,11 +4190,16 @@ var LAYOUT = (function () {
             var tv = [75, 65, 55].filter(function (sz) { return V * 12 / sz >= 1.0 && V * 12 / sz <= 1.7; })
               .sort(function (p, q) { return Math.abs(V * 12 / p - 1.35) - Math.abs(V * 12 / q - 1.35); })[0];
             if (!tv) return;
+            // the coffee table's far edge to the console's front
+            var cgap = V - seat.d / 24 - COFFEE_GAP - FURNITURE.get('coffee').d / 12 - media.d / 24;
+            // no room for a coffee table: side tables only, with 36"+ between the seat and the console
+            var noCoffee = cgap < CONSOLE_GAP - 1e-6;
+            if (noCoffee && V - seat.d / 24 - media.d / 24 < 3 - 1e-6) return;
             var c0 = add(mc, st.n, V), face = neg(st.n);
             var seatPl = put(seat, c0, face), rt = { x: -right.x, y: -right.y };
             var mpl = against(media, st, t); mpl.tv = tv;
             if (st.angled) mpl.angled = true;
-            variants('tv', st, t, seat, seatPl, c0, face, rt, { media: mpl, dist: V, tv: tv, floating: V < wallV - 1e-6 });
+            variants('tv', st, t, seat, seatPl, c0, face, rt, { media: mpl, dist: V, tv: tv, floating: V < wallV - 1e-6, consoleGap: noCoffee ? null : cgap, noCoffee: noCoffee });
           });
         });
       });
@@ -4203,7 +4244,9 @@ var LAYOUT = (function () {
           var D = Math.abs((mcM.x - C.x) * A.n.x + (mcM.y - C.y) * A.n.y) - arm / 2;   // to the middle of the long run's seat
           mpl.tv = [75, 65, 55].filter(function (sz) { return D * 12 / sz >= 1.0 && D * 12 / sz <= 1.7; })[0];
           if (!mpl.tv) return;
-          out.push({ kind: 'L', st: A, t: tA, seat: secPl, coffee: coffee, places: [secPl, coffee, mpl], media: mpl, dist: D, tv: mpl.tv, chairs: false, sideTables: false, offCenter: 0, corner: B });
+          var cgapL = Math.abs((mcM.x - cc.x) * A.n.x + (mcM.y - cc.y) * A.n.y) - media.d / 24 - cof.d / 24;
+          if (cgapL < CONSOLE_GAP - 1e-6) return;
+          out.push({ kind: 'L', st: A, t: tA, seat: secPl, coffee: coffee, places: [secPl, coffee, mpl], media: mpl, dist: D, tv: mpl.tv, chairs: false, sideTables: false, offCenter: 0, corner: B, consoleGap: cgapL });
         });
       });
     });
@@ -4213,7 +4256,8 @@ var LAYOUT = (function () {
   // reaching 6"+ under the front of every seat (the front legs on it), 6"+ of floor at the walls,
   // and clear of the media console. The biggest of the usual sizes that does all that.
   function seatRug(poly, cand, avoid) {
-    var ids = ['9x12', '8x10', '6x9', '5x8'], c0 = { x: cand.coffee.cx, y: cand.coffee.cy };
+    var ids = ['9x12', '8x10', '6x9', '5x8'], f0 = GEO.turn({ x: 0, y: 1 }, cand.seat.rot);
+    var c0 = cand.coffee ? { x: cand.coffee.cx, y: cand.coffee.cy } : add({ x: cand.seat.cx, y: cand.seat.cy }, f0, cand.seat.spec.d / 24 + 2);
     var rot = Math.round(cand.seat.rot + 90) % 180, toSeat = GEO.turn({ x: 0, y: -1 }, cand.seat.rot);
     var seatsAll = cand.places.filter(function (p) { return p.spec.role === 'seat'; });
     // centered on the coffee table, or moved back toward the seat (along the middle of the group)
