@@ -4378,14 +4378,15 @@ var LAYOUT = (function () {
   // The smallest usual rug (or the biggest, with big: true) that covers every point in must, leaves
   // 6"+ of floor at the walls and runs under none of the avoid outlines. Tried at c, then shifted up
   // to 2 ft along the two slide directions together, in 1" steps. rots: the turns to try (rectangles).
-  function rugAround(poly, c, rots, ids, must, avoid, slides, big) {
+  // reach (optional): how far to shift, in inches, and step: in what steps (a quick look: 6 and 3)
+  function rugAround(poly, c, rots, ids, must, avoid, slides, big, reach, step) {
     var list = ids.slice();
     if (big) list.reverse();
     // every shift up to 2 ft along the first slide direction and the second together, in 1" steps,
     // nearest first
     slides = slides && slides.length ? slides : [{ x: 1, y: 0 }];
-    var s2 = slides[1] || { x: 0, y: 0 }, moves = [];
-    for (var a1 = -24; a1 <= 24; a1++) for (var a2 = slides[1] ? -24 : 0; a2 <= (slides[1] ? 24 : 0); a2++) moves.push([a1 / 12, a2 / 12]);
+    var s2 = slides[1] || { x: 0, y: 0 }, moves = [], R = reach || 24, St = step || 1;
+    for (var a1 = -R; a1 <= R; a1 += St) for (var a2 = slides[1] ? -R : 0; a2 <= (slides[1] ? R : 0); a2 += St) moves.push([a1 / 12, a2 / 12]);
     moves.sort(function (p, q) { return Math.hypot(p[0], p[1]) - Math.hypot(q[0], q[1]); });
     for (var i = 0; i < list.length; i++) {
       var s = RUG.get(list[i]);
@@ -4406,7 +4407,8 @@ var LAYOUT = (function () {
   }
   // The rug under a dining table: every chair still on it when pulled out (24" past the table's edge
   // all round), or 18" if nothing bigger fits. A round rug under a round table when one does it.
-  function tableRug(poly, tbl, avoid) {
+  // quick: a fast look (shifts of 6" at most, in 3" steps), for weighing many table spots
+  function tableRug(poly, tbl, avoid, quick) {
     var sp = tbl.spec, round = sp.shape === 'round' && sp.w === sp.d;
     var ids = (round ? ['6r', '8r'] : []).concat(['5x8', '6x9', '8x10', '9x12', '10x14']);
     for (var m = 24; m >= 18; m -= 6) {
@@ -4418,7 +4420,7 @@ var LAYOUT = (function () {
         var q = GEO.turn({ x: lx / 12, y: ly / 12 }, tbl.rot);
         pts.push({ x: tbl.cx + q.x, y: tbl.cy + q.y });
       }
-      var got = rugAround(poly, { x: tbl.cx, y: tbl.cy }, [tbl.rot % 180, (tbl.rot + 90) % 180], ids, pts, avoid, [GEO.turn({ x: 1, y: 0 }, tbl.rot), GEO.turn({ x: 0, y: 1 }, tbl.rot)]);
+      var got = rugAround(poly, { x: tbl.cx, y: tbl.cy }, [tbl.rot % 180, (tbl.rot + 90) % 180], ids, pts, avoid, [GEO.turn({ x: 1, y: 0 }, tbl.rot), GEO.turn({ x: 0, y: 1 }, tbl.rot)], false, quick ? 6 : 24, quick ? 3 : 1);
       if (got) return got;
     }
     return null;

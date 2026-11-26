@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=41"></script>
+  <script src="/static/tools/plan-engine.js?v=42"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -964,9 +964,9 @@
       var outer = !PASS;
       if (outer) PASS = {};
       // A suggested layout being looked at: drawn in place of the room's own pieces and rug, faded
-      var pv = outer && !forExport && state.scale && state.mode === 'furnish' ? layoutPreview() : null, keep, keepRug;
-      if (pv) { keep = state.pieces; keepRug = pv.room.rug; state.pieces = pv.pieces; pv.room.rug = pv.rug; }
-      try { drawPlan(forExport); } finally { if (pv) { state.pieces = keep; pv.room.rug = keepRug; } if (outer) PASS = null; }
+      var pv = outer && !forExport && state.scale && state.mode === 'furnish' ? layoutPreview() : null, keep, keepRug, keepRug2;
+      if (pv) { keep = state.pieces; keepRug = pv.room.rug; keepRug2 = pv.room.rug2; state.pieces = pv.pieces; pv.room.rug = pv.rug; if (pv.rug2) pv.room.rug2 = pv.rug2; else delete pv.room.rug2; }
+      try { drawPlan(forExport); } finally { if (pv) { state.pieces = keep; pv.room.rug = keepRug; if (keepRug2) pv.room.rug2 = keepRug2; else delete pv.room.rug2; } if (outer) PASS = null; }
     }
     function drawSoon() {
       fitCanvas(); syncGeometry();
@@ -1002,7 +1002,7 @@
         // In Light the furniture steps back so the lights read first
         var lit = state.mode === 'light';
         if (lit) { ctx.save(); ctx.globalAlpha = 0.5; }
-        drawRugs(ctx, forExport); drawPieces(ctx, forExport);
+        RUG_TAGS = []; drawRugs(ctx, forExport); drawPieces(ctx, forExport); drawRugTags(ctx);
         if (lit) ctx.restore();
         drawDoors(ctx, forExport); if (!LP_EXPORT) drawWalkways(ctx, forExport, 'routes');
         if (lit) drawLights(ctx, forExport);
@@ -1074,8 +1074,8 @@
       // the furniture checks, plus every side of the selected piece while it's picked
       // (a lighting export leaves them out so the lights read)
       if (state.scale && state.mode !== 'light') {
-        if (forExport) state.rooms.forEach(function (r) { drawGaps(ctx, r); });
-        else if (state.mode === 'furnish' && state.selected > -1) drawGaps(ctx, state.rooms[state.selected], !rugPicked());
+        if (forExport) allRugs().forEach(function (r) { drawGaps(ctx, r); });
+        else if (state.mode === 'furnish' && state.selected > -1) roomRugs(state.rooms[state.selected]).forEach(function (h) { drawGaps(ctx, h, !rugPicked()); });
         if (forExport || state.mode === 'furnish') {
           var selPc = forExport ? -1 : state.pieceSel;
           spacing().forEach(function (l) {
@@ -1180,7 +1180,33 @@
     /* ---------- Rugs (Furnish mode) ----------
        A placed rug lives on its room: r.rug = { size: '8x10', x, y, rot }.
        The center is in percent of the image, so the rug stays on the same
-       spot of the plan if the scale is corrected; the size is in feet. */
+       spot of the plan if the scale is corrected; the size is in feet.
+       A room can hold a second rug, r.rug2 (a dining zone's rug in an open
+       living room). The rug functions below take a "rug holder": the room
+       itself for r.rug, or a small stand-in for r.rug2 (rugHolder2) with the
+       same .rug, .ftShape, .name and an id of its own (room id + '~2'). The
+       stand-ins live in a WeakMap, so they're never saved or snapshotted. */
+    var RUG2 = typeof WeakMap === 'function' ? new WeakMap() : null;
+    function rugHolder2(r) {
+      var h = RUG2 && RUG2.get(r);
+      if (h) return h;
+      h = { room: r, second: true };
+      Object.defineProperty(h, 'id', { get: function () { return r.id + '~2'; } });
+      Object.defineProperty(h, 'name', { get: function () { return r.name; } });
+      Object.defineProperty(h, 'ftShape', { get: function () { return r.ftShape; } });
+      Object.defineProperty(h, 'rug', { get: function () { return r.rug2 || null; }, set: function (v) { if (v) r.rug2 = v; else delete r.rug2; } });
+      if (RUG2) RUG2.set(r, h);
+      return h;
+    }
+    function holderRoom(h) { return h && h.second ? h.room : h; }
+    // Every rug on the plan, as holders: each room's main rug, then its second rug
+    function allRugs() {
+      var out = [];
+      state.rooms.forEach(function (r) { if (rugOK(r)) out.push(r); if (r.rug2) { var h = rugHolder2(r); if (rugOK(h)) out.push(h); } });
+      return out;
+    }
+    // A room's rugs (holders), main first
+    function roomRugs(r) { return allRugs().filter(function (h) { return holderRoom(h) === r; }); }
     function rugOK(r) { return r && r.rug && RUG.get(r.rug.size) && r.ftShape && state.scale; }
     function rugCenterFt(r) {
       var f = state.scale.ftPerPx;
@@ -1203,25 +1229,25 @@
     }
     function gapColor(g) { var st = RUG.status(g); return st === 'fits' ? '#7f9433' : st === 'tight' ? '#b07d14' : '#582b36'; }
     function fmtGap(ft) { return ft < 3 ? Math.max(0, Math.round(ft * 12)) + '"' : fmtFtIn(ft); }
+    // The rug (holder) under a point, or null. The selected room's rugs win (a second rug, smaller
+    // and laid on its own spot, before the main one), then any other rug
     function hitRug(p) {
-      // The selected room's rug wins, then any other rug
-      var order = state.rooms.map(function (r, i) { return i; });
-      if (state.selected > -1) { order.splice(state.selected, 1); order.unshift(state.selected); }
+      var sr = state.rooms[state.selected];
+      var order = allRugs().sort(function (a, b) {
+        return (holderRoom(b) === sr) - (holderRoom(a) === sr) || (!!b.second) - (!!a.second);
+      });
       for (var n = 0; n < order.length; n++) {
-        var r = state.rooms[order[n]];
-        if (!rugOK(r)) continue;
-        var q = rugPx(r);
+        var r = order[n], q = rugPx(r);
         var inside = q.round ? Math.hypot(p.x - q.cx, p.y - q.cy) <= q.w / 2 : PLAN.pointInPoly(p, rugOutlinePx(r));
-        if (inside) return order[n];
+        if (inside) return r;
       }
-      return -1;
+      return null;
     }
 
     function drawRugs(ctx, forExport) {
       var ratio = displayRatio();
-      state.rooms.forEach(function (r, i) {
-        if (!rugOK(r)) return;
-        var q = rugPx(r), sel = !forExport && state.mode === 'furnish' && i === state.selected;
+      allRugs().forEach(function (r) {
+        var q = rugPx(r), sel = !forExport && state.mode === 'furnish' && holderRoom(r) === state.rooms[state.selected] && (!r.second || state.rugFocus === r.id);
         var picked = !forExport && state.mode === 'furnish' && rugPicked(r);
         var bad = RUG.status(rugInfo(r).clearance) === 'big', turned = !q.round && !RUG.square(r.rug.rot);
         var sz = RUG.get(r.rug.size), f0 = state.scale.ftPerPx;
@@ -1251,12 +1277,38 @@
         var tw = ctx.measureText(q.label).width, pw = tw + 12 * ratio, ph = fs + 8 * ratio;
         var lx = q.round ? q.cx : q.x + 9 * ratio + pw / 2, ly = q.round ? q.y + 9 * ratio + ph / 2 : q.y + 9 * ratio + ph / 2;
         if (turned || pw + 18 * ratio > q.w || ph + 18 * ratio > q.h) { lx = q.cx; ly = q.cy; }
-        ctx.fillStyle = 'rgba(255,255,255,0.92)';
-        roundRect(ctx, lx - pw / 2, ly - ph / 2, pw, ph, ph / 2); ctx.fill();
-        ctx.fillStyle = '#582b36'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(q.label, lx, ly + 0.5 * ratio);
+        else {   // the first spot a piece doesn't cover: the top (round) or top left corner, then the other sides or corners
+          var ix = q.w / 2 - 9 * ratio - pw / 2, iy = q.h / 2 - 9 * ratio - ph / 2;
+          var spots = q.round ? [-90, 90, -135, -45, 135, 45, 180, 0].map(function (a) {   // round: round the rim, the tag kept inside it
+            var t = a * Math.PI / 180, R = q.w / 2 - 6 * ratio - Math.hypot(pw / 2 * Math.cos(t), ph / 2 * Math.sin(t));
+            return [Math.cos(t) * R, Math.sin(t) * R];
+          }) : [[-ix, -iy], [ix, -iy], [-ix, iy], [ix, iy]];
+          // the whole tag clear of the pieces, else at least its middle
+          var clear = function (sx, sy, ends) { return (ends ? [-1, 0, 1] : [0]).every(function (e) { return hitPiece({ x: sx + e * pw / 2, y: sy }) < 0; }); };
+          var got = null;
+          [true, false].forEach(function (ends) {
+            for (var si = 0; si < spots.length && !got; si++) if (clear(q.cx + spots[si][0], q.cy + spots[si][1], ends)) got = spots[si];
+          });
+          got = got || spots[0]; lx = q.cx + got[0]; ly = q.cy + got[1];
+        }
+        // the tag is drawn after the furniture (drawRugTags), so a chair can't cover it
+        RUG_TAGS.push({ label: q.label, x: lx, y: ly, pw: pw, ph: ph, fs: fs, alpha: ctx.globalAlpha });
         ctx.restore();
       });
+    }
+    var RUG_TAGS = [];
+    function drawRugTags(ctx) {
+      var ratio = displayRatio();
+      RUG_TAGS.forEach(function (t) {
+        ctx.save(); ctx.globalAlpha = t.alpha;
+        ctx.font = '600 ' + t.fs + 'px "DM Sans", sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        roundRect(ctx, t.x - t.pw / 2, t.y - t.ph / 2, t.pw, t.ph, t.ph / 2); ctx.fill();
+        ctx.fillStyle = '#582b36'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(t.label, t.x, t.y + 0.5 * ratio);
+        ctx.restore();
+      });
+      RUG_TAGS = [];
     }
 
     // Spacing lines from each side of the rug to the nearest wall, colored by how much floor is left
@@ -1636,7 +1688,7 @@
     // Rugs picked along with pieces: their rooms' ids in state.extraRugs (a rug lives on its room)
     function selRugs() {
       if (state.pieceSel < 0) { state.extraRugs = []; return []; }
-      return state.rooms.filter(function (r) { return rugOK(r) && (state.extraRugs || []).indexOf(r.id) > -1; });
+      return allRugs().filter(function (r) { return (state.extraRugs || []).indexOf(r.id) > -1; });
     }
     function rugPicked(r) { return selRugs().indexOf(r) > -1; }
     function selCount() { return selList().length + selRugs().length; }
@@ -1675,7 +1727,7 @@
     function pickPiece(k, add) {
       var pc = state.pieces[k], mates = pc.gid ? state.pieces.filter(function (o) { return o.gid === pc.gid && o !== pc; }) : [];
       state.doorSel = -1;
-      var gRugs = pc.gid ? state.rooms.filter(function (r) { return rugOK(r) && r.rug.gid === pc.gid; }).map(function (r) { return r.id; }) : [];
+      var gRugs = pc.gid ? allRugs().filter(function (r) { return r.rug.gid === pc.gid; }).map(function (r) { return r.id; }) : [];
       if (!add || state.pieceSel < 0) { state.pieceSel = k; state.extra = mates.map(function (o) { return o.id; }); state.extraRugs = gRugs; return; }
       var sel = selList(), ids = sel.map(function (o) { return o.id; }), take = [pc].concat(mates);
       if (ids.indexOf(pc.id) > -1) {   // already picked: take it (and its group) out
@@ -1688,9 +1740,9 @@
         state.extraRugs = (state.extraRugs || []).concat(gRugs.filter(function (id) { return (state.extraRugs || []).indexOf(id) < 0; }));
       }
     }
-    // Add a room's rug to the selection, or take it out
-    function toggleRug(ri) {
-      var id = state.rooms[ri].id, l = state.extraRugs || [];
+    // Add a rug (holder) to the selection, or take it out
+    function toggleRug(h) {
+      var id = h.id, l = state.extraRugs || [];
       state.extraRugs = l.indexOf(id) > -1 ? l.filter(function (x) { return x !== id; }) : l.concat([id]);
     }
     function rotateAbout(pcs, cen, deg) {
@@ -1731,7 +1783,7 @@
     // The rug under a piece (its middle on the rug), if it isn't grouped yet
     function rugUnder(pc) {
       var p = { x: pc.x / 100 * state.W, y: pc.y / 100 * state.H };
-      return state.rooms.filter(function (r) { return rugOK(r) && !(pc.gid && r.rug.gid === pc.gid) && PLAN.pointInPoly(p, rugOutlinePx(r)); })[0] || null;
+      return allRugs().filter(function (r) { return !(pc.gid && r.rug.gid === pc.gid) && PLAN.pointInPoly(p, rugOutlinePx(r)); })[0] || null;
     }
     function groupWithPartners() {
       var k = state.pieceSel, mates = groupPartners(k), rug = rugUnder(state.pieces[k]);
@@ -4451,6 +4503,16 @@
             '<button class="btn-secondary btn-sm" data-act="remove">Remove</button>' +
           '</div></div>';
       }
+      // the room's second rug (a dining zone's), placed by a suggested layout: turn or remove it here, drag it on the plan
+      var h2 = r.rug2 ? rugHolder2(r) : null;
+      if (h2 && rugOK(h2)) {
+        var s2 = RUG.get(h2.rug.size);
+        placed += '<div class="rug-placed"><p id="rugPlacedMsg2">' + placedMsg(h2, true) + '</p>' +
+          '<div class="btn-row">' +
+            (s2.d ? '' : '<button class="btn-secondary btn-sm" data-act="turn" data-h="2">Turn</button>') +
+            '<button class="btn-secondary btn-sm" data-act="remove" data-h="2">Remove</button>' +
+          '</div></div>';
+      }
       body.innerHTML = '<div class="rug-grid">' + cards + '</div>' + placed;
     }
 
@@ -4470,23 +4532,24 @@
       if (!btn || !r) return;
       if (btn.getAttribute('data-rug')) { placeRug(btn.getAttribute('data-rug')); return; }
       var act = btn.getAttribute('data-act');
+      if (btn.getAttribute('data-h') === '2') r = rugHolder2(r);
       if (!r.rug) return;
       if (act === 'turn') { pushUndo(); r.rug.rot = ((r.rug.rot || 0) + 90) % 360; renderFurnish(); draw(); }
       else if (act === 'center') placeRug(r.rug.size);
       else if (act === 'remove') { pushUndo(); r.rug = null; renderFurnish(); draw(); }
     }
     // The rug where it sits now, judged on the walls and on the room's rug style
-    function placedMsg(r) {
+    function placedMsg(r, second) {
       var info = rugInfo(r), s = RUG.get(r.rug.size);
-      var msg = 'Your <b>' + s.label + '</b> rug ' + (info.clearance < 0 ? 'runs past the walls. Drag it back inside the room, or tap <b>Center it</b>.'
+      var msg = (second ? 'A second rug, <b>' + s.label + '</b>, under the table, ' : 'Your <b>' + s.label + '</b> rug ') + (info.clearance < 0 ? 'runs past the walls. Drag it back inside the room' + (second ? '.' : ', or tap <b>Center it</b>.')
         : 'leaves <b>' + fmtGap(info.clearance) + '</b> of floor at the closest wall (' + STATUS_TEXT[RUG.status(info.clearance)].toLowerCase() + ').');
       return msg;
     }
     // Updates just the sentence under the sizes while a rug is dragged
     function updatePlacedMsg() {
-      var r = state.rooms[state.selected], el = $('rugPlacedMsg');
-      if (!el || !rugOK(r)) return;
-      el.innerHTML = placedMsg(r);
+      var r = state.rooms[state.selected], el = $('rugPlacedMsg'), el2 = $('rugPlacedMsg2');
+      if (el && rugOK(r)) el.innerHTML = placedMsg(r);
+      if (el2 && r && r.rug2 && rugOK(rugHolder2(r))) el2.innerHTML = placedMsg(rugHolder2(r), true);
     }
 
     /* ---------- The size switch ----------
@@ -5350,10 +5413,13 @@
       }
       // the bigger tables first, each nearest the kitchen first, 60 checks each at most
       tries.sort(function (a, b2) { return a.si - b2.si || a.near - b2.near; });
-      var checked = {}, lands = layoutLandings(r).shallow;
+      // a spot where the table can have a rug of its own (every chair on it, pulled out) wins over a
+      // nearer one without: the first 40 spots that pass for a table are weighed, then the nearest is used
+      var checked = {}, lands = layoutLandings(r).shallow, fallback = null, passed = 0;
       for (var i = 0; i < tries.length; i++) {
         var t = tries[i];
-        if ((checked[t.si] || 0) >= 60) continue;
+        if (fallback && t.si !== fallback.si) return fallback.z;
+        if ((checked[t.si] || 0) >= 60) { if (fallback) return fallback.z; continue; }
         var places = LAYOUT.withChairs(t.sp, t.c, t.rot), polys = places.map(polyOf);
         // inside the room, and 2 ft+ from the seating group (the checks judge the walkway between)
         if (polys.some(function (pl) { return pl.some(function (q) { return !PLAN.pointInPoly(q, poly) && GEO.edgeDist(q, poly) > 1 / 12; }); })) continue;
@@ -5362,10 +5428,13 @@
         checked[t.si] = (checked[t.si] || 0) + 1;
         var pcs = layPieces(places), q = layoutQuick(r, c.pcs.concat(pcs));
         if (q.close || q.tight > c.qTight + 1) continue;
-        return { places: places, pcs: pcs, table: places[0], qTight: q.tight, byKitchen: !!op.kitchen && Math.hypot(t.c.x - op.kitchen.x, t.c.y - op.kitchen.y) < 7,
-                 byWindow: wins.some(function (w) { return Math.hypot(w.x - t.c.x, w.y - t.c.y) < 4.5; }) };
+        var z = { places: places, pcs: pcs, table: places[0], qTight: q.tight, byKitchen: !!op.kitchen && Math.hypot(t.c.x - op.kitchen.x, t.c.y - op.kitchen.y) < 7,
+                  byWindow: wins.some(function (w) { return Math.hypot(w.x - t.c.x, w.y - t.c.y) < 4.5; }) };
+        if (LAYOUT.tableRug(poly, places[0], group, true)) return z;
+        if (!fallback) fallback = { si: t.si, z: z };
+        if (++passed >= 40) return fallback.z;
       }
-      return null;
+      return fallback ? fallback.z : null;
     }
 
     /* ---------- Dining rooms (session 3) ----------
@@ -5554,6 +5623,14 @@
       zp.forEach(function (p) { avoid.push(polyOf(p)); });
       var group = c.extras || c.zone ? { places: c.places.slice(0, c.places.length - (c.nAdded || 0)).filter(function (p) { return zp.indexOf(p) < 0; }), coffee: c.coffee, seat: c.seat, media: c.media } : c;
       var rug = LAYOUT.seatRug(r.ftShape, group, avoid), seat = c.seat.spec.id === 'loveseat' ? 'Loveseat' : 'Sofa';
+      // the dining zone gets a rug of its own (the room's second rug): every chair still on it pulled
+      // out, clear of everything else in the room and of the seating rug
+      var rug2 = null;
+      if (c.zone) {
+        var av2 = c.places.filter(function (p) { return zp.indexOf(p) < 0; }).map(polyOf);
+        if (rug) av2.push(RUG.outline(RUG.get(rug.size), rug.rot, rug.cx, rug.cy));
+        rug2 = LAYOUT.tableRug(r.ftShape, c.zone.table, av2);
+      }
       var zname = c.zone ? c.zone.table.spec.name.charAt(0).toLowerCase() + c.zone.table.spec.name.slice(1) : '';
       var label = c.zone ? (c.kind === 'tv' ? seat + ' facing the TV' : c.kind === 'talk' ? 'Seating for conversation' : 'Sectional') + ' and a ' + zname
         : c.kind === 'tv' && c.media.angled ? seat + ' facing the TV on the angled wall' + (c.noCoffee ? ', no coffee table' : '')
@@ -5572,13 +5649,14 @@
       (c.extras || []).forEach(function (x) { parts.push(x); });
       if (rug) parts.push((/^(8|11|18)'/.test(RUG.get(rug.size).label) ? 'an ' : 'a ') + RUG.get(rug.size).label + ' rug');
       var notes = ['With ' + (parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0]) + '.'];
-      if (c.zone) notes.push('A dining zone' + (c.zone.byWindow ? ' by the window' : c.zone.byKitchen ? ' by the kitchen' : '') + ': the ' + zname + ' with its chairs. Light adds a chandelier over it.');
+      if (c.zone) notes.push('A dining zone' + (c.zone.byWindow ? ' by the window' : c.zone.byKitchen ? ' by the kitchen' : '') + ': the ' + zname + ' with its chairs' +
+        (rug2 ? ' on ' + (/^(8|11|18)'/.test(RUG.get(rug2.size).label) ? 'an ' : 'a ') + RUG.get(rug2.size).label + ' rug' : '') + '. Light adds a chandelier over it.');
       if (c.media && (c.zone || c.media.angled)) notes.push('The TV is ' + fmtFtIn(Math.round(c.dist * 2) / 2) + ' away, sized ' + c.media.tv + '".');
       else if (c.media) notes.push('Sized for a ' + c.media.tv + '" TV.');
       if (c.media && c.media.angled && c.zone) notes.push('The console stands on the angled wall.');
       if (c.floating) notes.push('The ' + seat.toLowerCase() + ' floats with a walkway behind it.');
       if (c.full && c.full.tight) notes.push(c.full.tight === 1 ? 'One spot is tight.' : c.full.tight + ' spots are tight.');
-      return { label: label, note: notes.join(' '), places: c.places, rug: rug };
+      return { label: label, note: notes.join(' '), places: c.places, rug: rug, rug2: rug2 };
     }
     // Why nothing fits: how much too narrow the room is for a twin bed and the space around it
     // (18" at each side and 24" at the foot, the tight end of the checks), or what's in the way
@@ -5640,6 +5718,18 @@
         });
       }, 30);
     }
+    function rugJSON(h) {
+      var info = rugInfo(h), c = rugCenterFt(h);
+      return { size: h.rug.size, label: RUG.get(h.rug.size).label, turned_deg: h.rug.rot || 0,
+               center_ft: [+c.x.toFixed(2), +c.y.toFixed(2)], floor_at_closest_wall_in: Math.round(info.clearance * 12) };
+    }
+    // A layout's rug (feet, center and turn) as a room stores it (percent of the image)
+    function layRugPct(o, pv) {
+      if (!o) return null;
+      var f = state.scale.ftPerPx, v = { size: o.size, rot: o.rot, x: o.cx / f / state.W * 100, y: o.cy / f / state.H * 100, style: 'walls' };
+      if (pv) v._pv = true;
+      return v;
+    }
     function closeLayouts() { state.layout = null; LAY.run = (LAY.run || 0) + 1; showPane(); renderCatalog(); draw(); }
     // The picked option, ready to draw: the plan's pieces with this room's swapped for the option's, faded
     function layoutPreview() {
@@ -5647,18 +5737,17 @@
       if (!r || !L.list || !L.list[L.pick]) return null;
       var o = L.list[L.pick];
       if (!o.pcs) o.pcs = o.places.map(function (p) { return layPiece(p); });
-      var f = state.scale.ftPerPx;
       return { room: r, pieces: state.pieces.filter(function (pc) { return pieceRoom(pc) !== r; }).concat(o.pcs),
-               rug: o.rug ? { size: o.rug.size, rot: o.rug.rot, x: o.rug.cx / f / state.W * 100, y: o.rug.cy / f / state.H * 100, style: 'walls', _pv: true } : null };
+               rug: layRugPct(o.rug, true), rug2: layRugPct(o.rug2, true) };
     }
     function useLayout() {
       var L = state.layout, r = L && roomById(L.room), o = r && L.list && L.list[L.pick];
       if (!o) return;
       pushUndo();
-      var f = state.scale.ftPerPx;
       state.pieces = state.pieces.filter(function (pc) { return pieceRoom(pc) !== r; });
       o.places.forEach(function (p) { state.pieces.push(layPiece(p, true)); });
-      r.rug = o.rug ? { size: o.rug.size, rot: o.rug.rot, x: o.rug.cx / f / state.W * 100, y: o.rug.cy / f / state.H * 100, style: 'walls' } : null;
+      r.rug = layRugPct(o.rug);
+      if (o.rug2) r.rug2 = layRugPct(o.rug2); else delete r.rug2;
       state.layout = null; state.pieceSel = -1; state.extra = []; state.extraRugs = []; state.ptab = 'add';
       renderAll(); renderPieceBar(); showPane(); renderCatalog();
     }
@@ -5670,11 +5759,12 @@
       ctx.translate(cv.width / 2 - (b.x + b.w / 2) * k, cv.height / 2 - (b.y + b.h / 2) * k);
       ctx.beginPath(); r.ftShape.forEach(function (p, i) { if (i) ctx.lineTo(p.x * k, p.y * k); else ctx.moveTo(p.x * k, p.y * k); }); ctx.closePath();
       ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 2 * dpr; ctx.strokeStyle = '#433E3C'; ctx.stroke();
-      if (o.rug) {
-        var rp = RUG.outline(RUG.get(o.rug.size), o.rug.rot, o.rug.cx, o.rug.cy);
+      [o.rug, o.rug2].forEach(function (rg) {
+        if (!rg) return;
+        var rp = RUG.outline(RUG.get(rg.size), rg.rot, rg.cx, rg.cy);
         ctx.beginPath(); rp.forEach(function (p, i) { if (i) ctx.lineTo(p.x * k, p.y * k); else ctx.moveTo(p.x * k, p.y * k); }); ctx.closePath();
         ctx.fillStyle = 'rgba(232,201,122,0.45)'; ctx.fill();
-      }
+      });
       o.places.forEach(function (p) {
         ctx.save(); ctx.translate(p.cx * k, p.cy * k); ctx.rotate(p.rot * Math.PI / 180);
         FURNART.draw(ctx, { type: p.spec.id, role: p.spec.role, kind: p.spec.kind, shape: p.spec.shape || 'rect', arm: p.spec.arm, flip: !!p.flip, w: p.spec.w, d: p.spec.d, noLamp: true }, k / 12, { ratio: dpr * 0.6, detail: false, shadow: false });
@@ -5697,7 +5787,10 @@
         if (L.pick > -1) {
           var n = state.pieces.filter(function (pc) { return pieceRoom(pc) === r && !(pc.role === 'chair' && pc.group); }).length;
           html += '<div class="lay-use"><button class="btn-primary btn-sm" data-lact="use">Use this layout</button>' +
-            (n || r.rug ? '<p class="l-note">This replaces the ' + (n ? (n === 1 ? 'piece' : n + ' pieces') + (r.rug ? ' and the rug' : '') : 'rug') + ' in ' + esc(r.name) + '. Undo brings ' + (n + (r.rug ? 1 : 0) === 1 ? 'it' : 'them') + ' back.</p>' : '') + '</div>';
+            (n || r.rug || r.rug2 ? (function () {
+              var nr = (r.rug ? 1 : 0) + (r.rug2 ? 1 : 0), rw = nr === 2 ? 'both rugs' : 'the rug';
+              return '<p class="l-note">This replaces the ' + (n ? (n === 1 ? 'piece' : n + ' pieces') + (nr ? ' and ' + rw : '') : (nr === 2 ? 'two rugs' : 'rug')) + ' in ' + esc(r.name) + '. Undo brings ' + (n + nr === 1 ? 'it' : 'them') + ' back.</p>';
+            })() : '') + '</div>';
         }
       }
       el.innerHTML = html;
@@ -5877,12 +5970,12 @@
         renderPieceBar(); renderDoorBar(); draw();
         return;
       }
-      var ri = state.space || e.button === 1 ? -1 : hitRug(p);
-      if (ri > -1) {
-        var rg = state.rooms[ri].rug, mate = rg.gid ? state.pieces.filter(function (o) { return o.gid === rg.gid; })[0] : null;
-        if ((e.shiftKey || e.metaKey || e.ctrlKey) && state.pieceSel > -1) { toggleRug(ri); e.preventDefault(); renderPieceBar(); draw(); return; }
-        if (mate && !rugPicked(state.rooms[ri])) pickPiece(state.pieces.indexOf(mate), false);   // a grouped rug picks its group
-        if (rugPicked(state.rooms[ri])) {   // part of the selection: drag everything picked
+      var rh = state.space || e.button === 1 ? null : hitRug(p);
+      if (rh) {
+        var rg = rh.rug, mate = rg.gid ? state.pieces.filter(function (o) { return o.gid === rg.gid; })[0] : null;
+        if ((e.shiftKey || e.metaKey || e.ctrlKey) && state.pieceSel > -1) { toggleRug(rh); e.preventDefault(); renderPieceBar(); draw(); return; }
+        if (mate && !rugPicked(rh)) pickPiece(state.pieces.indexOf(mate), false);   // a grouped rug picks its group
+        if (rugPicked(rh)) {   // part of the selection: drag everything picked
           state.drag = { mode: 'piece', start: p, snap: snap(), pk: state.pieceSel, pending: false, list: dragList() };
           try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
           e.preventDefault(); renderPieceBar(); renderDoorBar(); draw();
@@ -5890,11 +5983,12 @@
         }
       }
       if (state.pieceSel > -1 && !state.space && e.button !== 1) { state.pieceSel = -1; state.extra = []; state.extraRugs = []; renderPieceBar(); }
-      var i = hitRug(p);
-      if (i > -1) {
+      var h = hitRug(p);
+      if (h) {
+        var i = state.rooms.indexOf(holderRoom(h));
+        state.rugFocus = h.id;
         if (i !== state.selected) select(i, false);
-        var r = state.rooms[i];
-        state.drag = { mode: 'rug', start: p, snap: snap(), orig: { x: r.rug.x, y: r.rug.y } };
+        state.drag = { mode: 'rug', start: p, snap: snap(), h: h, orig: { x: h.rug.x, y: h.rug.y } };
         try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
         e.preventDefault();
         return;
@@ -5963,7 +6057,7 @@
           moveDoor(state.doors[state.doorSel], p);
           drawSoon();
         } else if (state.drag && state.drag.mode === 'rug') {
-          var rr = state.rooms[state.selected], dd = state.drag;
+          var dd = state.drag, rr = dd.h;
           dd.moved = true;
           rr.rug.x = clamp(dd.orig.x + (p.x - dd.start.x) / state.W * 100, 0, 100);
           rr.rug.y = clamp(dd.orig.y + (p.y - dd.start.y) / state.H * 100, 0, 100);
@@ -6063,10 +6157,10 @@
           });
           state.pieceSel = -1; state.extra = []; state.extraRugs = [];
           inBox.forEach(function (k, n) { pickPiece(k, n > 0); });
-          if (inBox.length) state.rooms.forEach(function (r) {
-            if (!rugOK(r) || rugPicked(r)) return;
+          if (inBox.length) allRugs().forEach(function (r) {
+            if (rugPicked(r)) return;
             var q = rugPx(r);
-            if (q.cx >= x0 && q.cx <= x1 && q.cy >= y0 && q.cy <= y1) toggleRug(state.rooms.indexOf(r));
+            if (q.cx >= x0 && q.cx <= x1 && q.cy >= y0 && q.cy <= y1) toggleRug(r);
           });
           renderPieceBar(); renderDoorBar();
         }
@@ -6868,7 +6962,7 @@
       }
 
       // Rugs placed in Furnish
-      var rugRooms = state.rooms.filter(rugOK);
+      var rugRooms = allRugs();
       if (rugRooms.length) {
         y += 8;
         checkPage(90);
@@ -6889,7 +6983,7 @@
           doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
           doc.rect(margin, y, contentW, 20, 'F');
           doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
-          doc.text(ascii(r.name).slice(0, 30), rc[0], y + 13);
+          doc.text(ascii(r.name + (r.second ? ', second rug' : '')).slice(0, 30), rc[0], y + 13);
           doc.text(ascii(RUG.get(r.rug.size).label), rc[1], y + 13);
           doc.text(info.clearance < 0 ? 'Runs past the walls' : ascii(fmtGap(info.clearance)), rc[2], y + 13);
           if (st === 'big') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
@@ -7140,11 +7234,8 @@
             box_mismatch: !!r.mismatch,
             shape_pct: r.shape ? r.shape.map(function (q) { return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) : null,
             shape_ft: r.shape && r.ftShape ? r.ftShape.map(function (q) { return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) : null,
-            rug: rugOK(r) ? (function () {
-              var info = rugInfo(r), c = rugCenterFt(r);
-              return { size: r.rug.size, label: RUG.get(r.rug.size).label, turned_deg: r.rug.rot || 0,
-                       center_ft: [+c.x.toFixed(2), +c.y.toFixed(2)], floor_at_closest_wall_in: Math.round(info.clearance * 12) };
-            })() : null
+            rug: rugOK(r) ? rugJSON(r) : null,
+            rug2: r.rug2 && rugOK(rugHolder2(r)) ? rugJSON(rugHolder2(r)) : null
           };
         })
       };
@@ -7478,8 +7569,8 @@
         if (e.key === 'Escape') select(-1);
         if (state.mode === 'furnish') {
           // In Furnish, Delete removes the room's rug, never the room
-          var fr = state.rooms[state.selected];
-          if ((e.key === 'Delete' || e.key === 'Backspace') && fr && fr.rug) { pushUndo(); fr.rug = null; renderFurnish(); draw(); e.preventDefault(); }
+          var fr = state.rooms[state.selected], fh = fr && (roomRugs(fr).filter(function (h) { return h.id === state.rugFocus; })[0] || (fr.rug ? fr : null));
+          if ((e.key === 'Delete' || e.key === 'Backspace') && fh) { pushUndo(); fh.rug = null; renderFurnish(); draw(); e.preventDefault(); }
           return;
         }
         if (e.key === 'Delete' || e.key === 'Backspace') { pushUndo(); state.rooms.splice(state.selected, 1); state.selected = -1; renderAll(); e.preventDefault(); }

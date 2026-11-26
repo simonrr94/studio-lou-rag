@@ -1,7 +1,7 @@
 """Pictures of the suggested layouts, room by room, for comparing two versions of the page.
 python3 layshots.py <base_url> <outdir> [plan ...]
 Plans: the five real plans (stand-in model replies; CORE=1 recommended) and 'harness' (the drawn
-10-room test plan in tests/harness). For each room it writes <plan>-<room>.png: one panel per card
+10-room test plan in tests/harness) and 'open' (the great room in tests/harness/open, make_open.py). For each room it writes <plan>-<room>.png: one panel per card
 (the room cropped from the plan with the card's layout previewed), with the card's label and note
 under it, plus <outdir>/cards.txt."""
 import json, os, sys, time, textwrap
@@ -16,7 +16,7 @@ os.makedirs(OUT, exist_ok=True)
 HDIR = os.path.join(os.path.dirname(D), 'harness')
 ROOMS = {'studio': ['Bedroom', 'Living Room'], 'cabin': ['Sleeping', 'Living'], 'twostory': ['Bedroom', 'Living Room'],
          'floor2': ['Primary Bedroom', 'Sitting Room'], 'bedroom': ['Bedroom'],
-         'harness': ['Living Room', 'Dining Room', 'Office', 'Bedroom']}
+         'harness': ['Living Room', 'Dining Room', 'Office', 'Bedroom'], 'open': ['Living Room']}
 try: FONT = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 15); BOLD = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 16)
 except Exception: FONT = BOLD = ImageFont.load_default()
 
@@ -100,9 +100,10 @@ with sync_playwright() as pw, open(os.path.join(OUT, 'cards.txt'), 'w') as log:
         ctx = b.new_context(viewport={'width': 1360, 'height': 860}, device_scale_factor=2)
         page = ctx.new_page(); errs = []
         page.on('pageerror', lambda e: errs.append(str(e)))
-        if plan == 'harness':
-            rj, oj = open(os.path.join(HDIR, 'rooms.json')).read(), open(os.path.join(HDIR, 'openings.json')).read()
-            ctx.route('**/*', mocked(rj, oj)); img = os.path.join(HDIR, 'plan.png')
+        if plan in ('harness', 'open'):
+            hd = HDIR if plan == 'harness' else os.path.join(HDIR, 'open')
+            rj, oj = open(os.path.join(hd, 'rooms.json')).read(), open(os.path.join(hd, 'openings.json')).read()
+            ctx.route('**/*', mocked(rj, oj)); img = os.path.join(hd, 'plan.png')
         else:
             key = json.load(open(os.path.join(D, 'keys', plan + '.json'))); out = json.load(open(os.path.join(D, 'keys', plan + '.out.json')))
             rj, oj = score.mock(plan, key, out, cv2.imread(os.path.join(D, 'plans', plan + '.jpg')))
