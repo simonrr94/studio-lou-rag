@@ -8,10 +8,7 @@ import numpy as np, cv2
 from playwright.sync_api import sync_playwright
 
 D = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE, OUT = sys.argv[1].rstrip('/'), sys.argv[2]
-PLANS = sys.argv[3:] or ['bedroom', 'studio', 'cabin', 'twostory', 'floor2']
-os.makedirs(OUT, exist_ok=True)
-JSPDF = open('/home/claude/harness/vendor/package/dist/jspdf.umd.min.js').read()
+JSPDF = open('/home/claude/harness/vendor/package/dist/jspdf.umd.min.js').read() if os.path.exists('/home/claude/harness/vendor/package/dist/jspdf.umd.min.js') else ''
 INIT = open('/home/claude/harness/init.js').read() if os.path.exists('/home/claude/harness/init.js') else ''
 # printed overall sizes, as a model reading the dimension lines would report them
 OVERALL = {'studio': (None, 23.0), 'cabin': (20.0, 28.0), 'bedroom': (13 + 10 / 12, 12.0), 'twostory': (None, None), 'floor2': (None, None)}
@@ -47,8 +44,13 @@ def mock(name, key, out, img):
     for o in key.get('openings', []):
         c = (np.array(o['a']) + np.array(o['b'])) / 2
         ops.append({'kind': 'opening', 'type': None, 'x': round(c[0] / W * 100, 2), 'y': round(c[1] / H * 100, 2), 'width_in': None, 'rooms': o.get('rooms', ['', ''])})
+    # printed dimension lines: the value read right, the ends pointed at roughly (2% of the picture)
+    dims = []
+    for dm in key.get('dims', []):
+        e = lambda v, s: round((v + rnd.uniform(-0.02, 0.02) * s) / s * 100, 2)
+        dims.append({'text': dm['text'], 'feet': dm['ft'], 'x1': e(dm['a'][0], W), 'y1': e(dm['a'][1], H), 'x2': e(dm['b'][0], W), 'y2': e(dm['b'][1], H)})
     ow, ol = OVERALL.get(name, (None, None))
-    return json.dumps({'unit': 'ft', 'rooms': rooms}), json.dumps({'openings': ops, 'overall': {'width_ft': ow, 'length_ft': ol}})
+    return json.dumps({'unit': 'ft', 'rooms': rooms}), json.dumps({'openings': ops, 'overall': {'width_ft': ow, 'length_ft': ol}, 'dims': dims})
 
 def poly_mask(poly, shape):
     m = np.zeros(shape, np.uint8)
@@ -120,6 +122,10 @@ FOUND_JS = """() => {
 }"""
 
 def main():
+    global BASE, OUT
+    BASE, OUT = sys.argv[1].rstrip('/'), sys.argv[2]
+    PLANS = sys.argv[3:] or ['bedroom', 'studio', 'cabin', 'twostory', 'floor2']
+    os.makedirs(OUT, exist_ok=True)
     rows = []
     with sync_playwright() as pw:
         b = pw.chromium.launch()
@@ -158,6 +164,7 @@ def main():
             page.wait_for_timeout(1500)
             page.screenshot(path=os.path.join(OUT, name + '-page.png'))
             found = page.evaluate(FOUND_JS)
+            json.dump(found, open(os.path.join(OUT, name + '.found.json'), 'w'))
             r = score(name, key, out, found, img)
             r['errors'] = errs
             rows.append(r)
@@ -170,4 +177,4 @@ def main():
               ('wrong type ' + ', '.join(r['doors_wrongtype'])) if r['doors_wrongtype'] else '', r['windows'], ('ERR ' + r['errors'][0][:80]) if r['errors'] else ''))
     print('OVERALL %d' % round(sum(r['score'] for r in rows) / len(rows)))
 
-main()
+if __name__ == '__main__': main()

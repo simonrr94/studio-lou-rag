@@ -13,7 +13,7 @@ import numpy as np, cv2
 
 D = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(D, 'proto'); os.makedirs(OUT, exist_ok=True)
-PLANS = sys.argv[1:] or ['bedroom', 'studio', 'cabin', 'twostory', 'floor2']
+PLANS = (sys.argv[1:] if __name__ == '__main__' else []) or ['bedroom', 'studio', 'cabin', 'twostory', 'floor2']
 
 def walls_of(g):
     dark = (g < 110).astype(np.uint8)
@@ -85,7 +85,7 @@ def breaks(wall, kmax, vertical):
         out.append({'a': a, 'b': b, 'w': u1 - u0 + 1, 'depth': depth, 'v': vertical})
     return out
 
-def spaces(wall, brks, kmax):
+def spaces(wall, brks, kmax, grow=True):
     H, W = wall.shape
     # small holes in the walls (a corner post drawn as an open square) are closed first
     kc = int(round(kmax * 1.3)) | 1
@@ -107,7 +107,7 @@ def spaces(wall, brks, kmax):
         if stats[i, cv2.CC_STAT_AREA] < (kmax * 3) ** 2: continue
         reg = (lab == i)
         if (reg & outside).sum() > 0.5 * reg.sum(): continue
-        out.append(cv2.dilate(reg.astype(np.uint8), np.ones((5, 5), np.uint8)))
+        out.append(cv2.dilate(reg.astype(np.uint8), np.ones((5, 5), np.uint8)) if grow else reg.astype(np.uint8))
     return out
 
 def main():
@@ -153,4 +153,4 @@ def main():
         print('          rooms ' + ' '.join('%s=%.2f' % (n, v) for n, v, _, m in major))
         if merged: print('          shared spaces: ' + '; '.join(' + '.join(v) for v in merged.values()))
 
-main()
+if __name__ == '__main__': main()
