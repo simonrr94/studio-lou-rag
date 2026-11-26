@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=34"></script>
+  <script src="/static/tools/plan-engine.js?v=35"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -527,7 +527,7 @@
       'You are reading a residential floor plan image. List every door, doorway opening, and window drawn on it.',
       '',
       'Return ONLY a JSON object. No prose, no markdown, no code fences. Use exactly this shape:',
-      '{"openings":[{"kind":"door","type":"swing","x":42.5,"y":61,"width_in":32,"rooms":["Bedroom","Hallway"]}],"overall":{"width_ft":20,"length_ft":28}}',
+      '{"openings":[{"kind":"door","type":"swing","x":42.5,"y":61,"width_in":32,"rooms":["Bedroom","Hallway"]}],"overall":{"width_ft":20,"length_ft":28},"dims":[{"text":"12\'4\"","feet":12.33,"x1":10,"y1":5,"x2":40,"y2":5}]}',
       '',
       'Rules:',
       '- kind is "door" for any door, "opening" for a doorway or gap in a wall with no door drawn, and "window" for a window.',
@@ -536,7 +536,8 @@
       '- width_in is its width in inches if you can tell, otherwise null.',
       '- rooms names the space on each side as the plan labels them, or "outside" for an exterior wall.',
       '- Include every one: closet doors, sliding glass doors, and doors to balconies, decks and porches too. Skip stairs, cabinets and appliances.',
-      '- overall is the size of the whole building from the dimension lines printed around the outside of the plan, in decimal feet: width_ft across the image, length_ft up and down. Use null for any that is not printed.'
+      '- overall is the size of the whole building from the dimension lines printed around the outside of the plan, in decimal feet: width_ft across the image, length_ft up and down. Use null for any that is not printed.',
+      '- dims lists every dimension line printed on the plan (a measurement drawn with a line, arrows or ticks showing what it spans), inside or outside: text is the measurement as printed, feet is the same in decimal feet, and x1,y1 and x2,y2 are the two ends of its line (where the arrows or ticks are), as percentages of the FULL image. Leave out sizes printed under room names. Use [] if there are none.'
     ].join('\n');
 
     var RETRY_SUFFIX = '\n\nIMPORTANT: Your previous reply could not be parsed. Reply with the raw JSON object only, starting with { and ending with }.';
@@ -710,6 +711,15 @@
         return { kind: String(o.kind || 'door').toLowerCase(), type: o.type ? String(o.type).toLowerCase() : null, x: clamp(x, 0, 100), y: clamp(y, 0, 100) };
       }).filter(Boolean);
       out.overall = ov;   // the building's printed overall size, for a scale when no room gives one
+      // printed dimension lines: the value and roughly where the line's two ends are (WALLS finds the line itself)
+      out.dims = (!Array.isArray(obj) && Array.isArray(obj.dims) ? obj.dims : []).map(function (d) {
+        var v = [num(d && d.x1), num(d && d.y1), num(d && d.x2), num(d && d.y2)];
+        if (v.some(function (q) { return q == null; })) return null;
+        if (v.every(function (q) { return q <= 1; })) v = v.map(function (q) { return q * 100; });
+        var feet = num(d.feet);
+        if (!feet && d.text) feet = parseFtIn(String(d.text));
+        return feet ? { text: String(d.text || ''), feet: feet, x1: v[0], y1: v[1], x2: v[2], y2: v[3] } : null;
+      }).filter(Boolean);
       return out;
     }
 
@@ -726,12 +736,15 @@
           return callVision(PROMPT + RETRY_SUFFIX).then(parseResponse);
         });
       var analysis = (state.analysis || Promise.resolve(null)).catch(function () { return null; });
-      return Promise.all([vision, analysis])
+      var hintsP = state.openHints;
+      return Promise.all([vision, analysis, hintsP])
         .then(function (res) {
           var rooms = res[0], an = res[1];
-          state.scale = null;
-          if (an && an.a) {
-            state.walls = { map: an.a, words: an.words };
+          state.scale = null; state.wallsRead = null;
+          if (an && an.a) state.walls = { map: an.a, words: an.words };
+          // Walls first: rooms, scale, doors and windows read from the walls themselves
+          try { wallsFirst(rooms, res[2]); } catch (e) { if (window.console) console.warn('Walls first skipped:', e); state.scale = null; state.wallsRead = null; }
+          if (!state.wallsRead && an && an.a) {
             try {
               var words = an.words.map(function (wd) { return { text: wd.text, x: wd.x, y: wd.y }; });
               state.snapInfo = SNAP.place(rooms, an.a, words);
@@ -746,8 +759,8 @@
           state.selected = -1;
           showScreen('result');
           renderAll();
-          findOpenings();
-          scaleFromOverall();
+          if (state.wallsRead) wallsOpenings();
+          else { findOpenings(); scaleFromOverall(); }
           trackUsage('floor-plan-parser');
         })
         .catch(function (err) {
@@ -826,7 +839,7 @@
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
       state.view = { z: 1, px: 0, py: 0 };
       state.erase = []; state.eraseVer++; state.floorCol = floorColorOf(img); ERASE.mask = ERASE.layer = null;
-      state.openHints = null; state.openingsDone = false; state.shapesDone = false; state.found = null;
+      state.openHints = null; state.openingsDone = false; state.shapesDone = false; state.found = null; state.wallsRead = null;
       state.lights = []; state.lightSel = -1; state.lightCfg = { ceil: 8, rooms: {} };
       state.layout = null;
       UNDO = []; $('undoBtn').disabled = true;
@@ -3914,6 +3927,63 @@
        a note asking the person to check it. Nothing is required: everything found is fixed
        with the usual door tools. Runs once per plan. */
     var OUTDOOR = /porch|balcony|deck|patio|terrace|yard|garden|lanai/i;
+    /* ---------- Measure, walls first (WALLS in the engine) ----------
+       Reads the rooms from the walls themselves: each room the model lists goes to the space its
+       rough box sits in (open plans are split along a wall line carried across), the scale is voted
+       from printed room sizes, dimension lines and the overall size, and every gap in the walls is
+       read as a door, window or opening. If it finds no scale or no room, nothing changes here and
+       the box snapping below runs as before. */
+    function wallsFirst(rooms, hints) {
+      if (typeof WALLS === 'undefined' || !state.img || !rooms.length) return;
+      var G = WALLS.grayOf(state.img);
+      var res = WALLS.measure(G, rooms, hints ? { list: hints, overall: hints.overall, dims: hints.dims } : null);
+      if (!res || !res.ppf || !res.rooms.some(Boolean)) return;
+      state.scale = { ftPerPx: G.w / state.W / res.ppf, source: 'auto', from: 'walls', walls: res.from || [], rough: res.rough };
+      rooms.forEach(function (r, i) {
+        r.modelBox = { x: r.bbox.x, y: r.bbox.y, w: r.bbox.w, h: r.bbox.h };
+        var f = res.rooms[i];
+        if (!f) { r.weak = true; return; }   // the model listed it but no space holds it: its own box, flagged
+        setShape(r, f.poly.map(function (q) { return { x: q[0] / G.w * 100, y: q[1] / G.h * 100 }; }));
+        r.walled = true; r.snapped = true; r.weak = false;
+        if (r.shape) r.traced = true;
+      });
+      state.wallsRead = { w: G.w, h: G.h, ppf: res.ppf, openings: res.openings };
+      useWallsMap(res.wall, G.w, G.h, res.kmax);
+      state.shapesDone = true;   // the outlines are already the walls'
+    }
+    // Furnish, Light and layouts find walls on state.walls.map. Once the plan was measured walls
+    // first, its walls come from WALLS too: the older wall map can miss walls altogether (solid
+    // chimney blocks throw off its thickness test). Copied onto the older map's own grid.
+    function useWallsMap(wall, gw, gh, kmax) {
+      var a = state.walls && state.walls.map;
+      if (!a || !wall) return;
+      var m = new Uint8Array(a.w * a.h), sx = gw / a.w, sy = gh / a.h;
+      for (var y = 0; y < a.h; y++) {
+        var gy = Math.min(gh - 1, Math.floor((y + 0.5) * sy)) * gw;
+        for (var x = 0; x < a.w; x++) m[y * a.w + x] = wall[gy + Math.min(gw - 1, Math.floor((x + 0.5) * sx))];
+      }
+      a.wall = m; a.k = Math.max(6, Math.round(kmax / sx * 0.35)); a.fromWalls = true;
+    }
+    // The doors, windows and openings WALLS read, marked the way OPENINGS' finds are (addFound)
+    var WALL_TYPES = { swing: 'swing', double: 'double', sliding: 'bypass', pocket: 'pocket', bifold: 'bifold', barn: 'barn', opening: 'opening' };
+    function wallsOpenings() {
+      var wr = state.wallsRead;
+      if (!wr || state.openingsDone) return;
+      state.openingsDone = true;
+      var list = wr.openings.map(function (o) {
+        var win = o.kind === 'window', swing = o.kind === 'swing' || o.kind === 'double';
+        // n points into the room it opens into (a swing), or away from the outside
+        var n = swing && o.side ? [o.n[0] * o.side, o.n[1] * o.side] : o.outs && o.outs[0] ? [-o.n[0], -o.n[1]] : o.n;
+        return { kind: win ? 'window' : 'door', type: win ? 'window' : (WALL_TYPES[o.kind] || 'opening'), cx: o.c[0], cy: o.c[1], ux: o.u[0], uy: o.u[1],
+                 nx: n[0], ny: n[1], w: Math.round(o.w / wr.ppf * 12), thick: o.depth / wr.ppf,
+                 hinge: o.kind === 'swing' && o.hingePt ? { x: o.hingePt[0], y: o.hingePt[1] } : null, outside: !!o.exterior };
+      });
+      if (list.length) pushUndo();   // one Undo takes them all off again
+      var made = addFound(list, wr.w / state.W);
+      if (!made.length && UNDO.length) { UNDO.pop(); $('undoBtn').disabled = !UNDO.length; }
+      state.found = { doors: made.filter(function (d) { return !isWin(d); }).length, windows: made.filter(isWin).length };
+      renderAll();
+    }
     function findOpenings() {
       if (state.openingsDone || !state.scale || !state.walls || !state.walls.map || !state.walls.map.ink || !state.rooms.length) return;
       state.openingsDone = true;
@@ -5518,6 +5588,10 @@
           state.fileName = rec.fileName || '';
           // the wall map is read again from the image (it was only there if the plan had one when saved)
           if (rec.hasWalls !== false) { try { state.walls = { map: SNAP.analyze(img), words: rec.words || [] }; } catch (err) { state.walls = null; } }
+          // a plan measured walls first keeps its walls from WALLS (see useWallsMap)
+          if (state.walls && state.scale && state.scale.from === 'walls' && typeof WALLS !== 'undefined') {
+            try { var G = WALLS.grayOf(img), wl = WALLS.wallsOf(G.g, G.w, G.h); if (wl) useWallsMap(wl.wall, G.w, G.h, wl.kmax); } catch (err) {}
+          }
           state.rooms = rec.rooms || []; state.scale = rec.scale || null;
           state.pieces = rec.pieces || []; state.doors = rec.doors || [];
           state.erase = rec.erase || []; state.eraseVer++;
@@ -5776,8 +5850,11 @@
         msg.innerHTML = '<b>Scale set</b> from a ' + esc(fmtFtIn(sc.line.feet)) + ' line.';
         btn.textContent = 'Set it again'; btn.className = 'link-btn';
       } else {
-        msg.innerHTML = '<b>Scale found</b> on the plan.';
-        msg.title = sc.from === 'overall' ? 'From the plan\u2019s overall size, ' + fmtFtIn(sc.overall.w) + ' x ' + fmtFtIn(sc.overall.h) + ', measured on the outside walls. Compare the ruler on the plan with a printed dimension to check it.' : 'From ' + (sc.from === 'area' ? 'the printed square footage of ' : '') + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + '. Compare the ruler on the plan with a printed dimension to check it.';
+        msg.innerHTML = sc.rough ? '<b>Scale estimated</b> from the doors.' : '<b>Scale found</b> on the plan.';
+        var SRC = { 'room sizes': 'the printed room sizes', 'dimension lines': 'the printed dimension lines', 'overall size': 'the plan\u2019s overall size', 'doors (rough)': 'the doors, taken as about 30" wide' };
+        var srcs = (sc.walls || []).map(function (s) { return SRC[s] || s; });
+        msg.title = sc.from === 'walls' ? 'From ' + (srcs.length > 1 ? srcs.slice(0, -1).join(', ') + ' and ' + srcs[srcs.length - 1] : srcs[0] || 'the plan') + ', measured on the walls. ' +
+          (sc.rough ? 'Doors vary, so set the scale from a dimension you know.' : 'Compare the ruler on the plan with a printed dimension to check it.') : sc.from === 'overall' ? 'From the plan\u2019s overall size, ' + fmtFtIn(sc.overall.w) + ' x ' + fmtFtIn(sc.overall.h) + ', measured on the outside walls. Compare the ruler on the plan with a printed dimension to check it.' : 'From ' + (sc.from === 'area' ? 'the printed square footage of ' : '') + (sc.rooms === 1 ? 'one room' : (sc.rooms || 'the') + ' rooms') + '. Compare the ruler on the plan with a printed dimension to check it.';
         btn.textContent = 'Check it'; btn.className = 'link-btn';
       }
     }
@@ -5874,7 +5951,7 @@
       if (ac) return '<div class="box-note">The plan prints ' + fmtArea(ac.printed) + ', so that is used. ' + esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) +
         ' gives ' + fmtArea(ac.dims) + '. The dimension lines may measure outside the walls or only part of the room.</div>';
       var sc = PLAN.shapeConflict(r);
-      if (sc) return '<div class="box-note">The shape you drew measures ' + fmtArea(sc.shape) + ', but the plan prints ' + fmtArea(sc.printed) +
+      if (sc) return '<div class="box-note">' + (r.walled && !r.boxEdited ? 'Its outline, traced from the walls, measures ' : 'The shape you drew measures ') + fmtArea(sc.shape) + ', but the plan prints ' + fmtArea(sc.printed) +
         '. Check the corners or the scale.</div>';
       if (r.weak && !r.boxEdited) return '<div class="box-note">This space couldn\u2019t be placed from the plan. Drag its box into place' +
         (boxMeasured(r) ? ' and its size will follow.' : '.') + '</div>';

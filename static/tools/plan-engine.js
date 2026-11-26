@@ -10,6 +10,8 @@
    RUG    standard rug sizes, which ones fit a room, and spacing lines.
    FURNITURE  the starter catalog and the geometry of placed pieces.
    OPENINGS   finds the doors and windows drawn on the plan (after DOOR).
+   WALLS      Measure, walls first: rooms, scale, doors and windows read
+              from the walls themselves (at the end; the page tries it first).
 
    When this file changes, bump the ?v= number on its <script> tag in
    floor-plan-parser.html so browsers fetch the new copy.
@@ -4218,4 +4220,977 @@ var LAYOUT = (function () {
 
   return { stretches: stretches, openSides: openSides, living: living, seatRug: seatRug, square: square, rotFacing: rotFacing, fits: fits, underWindow: underWindow,
            against: against, wallSpots: wallSpots, beds: beds, desk: desk, bedRug: bedRug, BED_RUGS: BED_RUGS };
+})();
+
+/* =====================================================================
+   WALLS: Measure, walls first (Nov 26; ported from tests/measure/tools
+   proto.py, proto2.py and proto3.py, which score it against the keys)
+     1. Walls: dark ink at least a third of a wall thick, grown back to
+        the wall's edges. Wall thickness is the most common run of ink.
+     2. Breaks: a wall, a gap, a wall, in rows and columns, measured in
+        wall thicknesses so they're found before there's a scale.
+     3. Spaces: every break closed; each enclosed area is a space.
+     4. Names: each room the model lists goes to the space holding most
+        of its rough box. A space holding two or more rooms is cut along
+        a wall carried across, a jamb carried across, or the line midway
+        between the boxes; a space running past its one room's box is cut
+        back; a nook inside one room's box joins it.
+     5. Scale, voted: rooms against printed sizes, dimension lines (the
+        model reads the value, the drawing finds the line), the overall
+        size, and swing doors (rough, last).
+     6. Each break read: swing (hinge, room it opens into), double,
+        window, sliding, pocket, bifold, opening; the model settles what
+        the drawing can't.
+   Works on its own copy of the plan (longest side up to 1200px) and
+   returns everything in that copy's pixels.
+   ===================================================================== */
+var WALLS = (function () {
+  var SIZE = 1200;
+  var hyp = Math.hypot;
+
+  /* ---------- the image ---------- */
+  function grayOf(img) {
+    var s = Math.min(1, SIZE / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+    var w = Math.round((img.naturalWidth || img.width) * s), h = Math.round((img.naturalHeight || img.height) * s);
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var ctx = c.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+    var px = ctx.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
+    for (var i = 0, j = 0; i < g.length; i++, j += 4) g[i] = Math.round(0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2]);
+    return { g: g, w: w, h: h, s: s };
+  }
+
+  /* ---------- binary picture tools (Uint8Array, w x h) ---------- */
+  // Dilate (max) or erode (min) with a kx x ky box, anchored as OpenCV anchors it
+  function morph(src, w, h, kx, ky, isMax) {
+    var tmp = new Uint8Array(w * h), out = new Uint8Array(w * h), P = new Int32Array(w + 1), C = new Int32Array(w);
+    var ax = kx >> 1, ay = ky >> 1, x, y, lo, hi, cnt, r0;
+    for (y = 0; y < h; y++) {   // along each row: a running sum
+      r0 = y * w; P[0] = 0;
+      for (x = 0; x < w; x++) P[x + 1] = P[x] + src[r0 + x];
+      for (x = 0; x < w; x++) {
+        lo = x - ax; hi = lo + kx - 1; if (lo < 0) lo = 0; if (hi > w - 1) hi = w - 1;
+        cnt = P[hi + 1] - P[lo];
+        tmp[r0 + x] = isMax ? (cnt > 0 ? 1 : 0) : (cnt === hi - lo + 1 ? 1 : 0);
+      }
+    }
+    // down the columns: counts per column, slid a row at a time
+    for (y = Math.max(0, -ay); y <= Math.min(h - 1, ky - 1 - ay); y++) { r0 = y * w; for (x = 0; x < w; x++) C[x] += tmp[r0 + x]; }
+    for (y = 0; y < h; y++) {
+      lo = y - ay; hi = lo + ky - 1; if (lo < 0) lo = 0; if (hi > h - 1) hi = h - 1;
+      var n = hi - lo + 1; r0 = y * w;
+      if (isMax) { for (x = 0; x < w; x++) out[r0 + x] = C[x] > 0 ? 1 : 0; }
+      else { for (x = 0; x < w; x++) out[r0 + x] = C[x] === n ? 1 : 0; }
+      var rem = y - ay, add = y - ay + ky;
+      if (rem >= 0 && rem < h) { r0 = rem * w; for (x = 0; x < w; x++) C[x] -= tmp[r0 + x]; }
+      if (add >= 0 && add < h) { r0 = add * w; for (x = 0; x < w; x++) C[x] += tmp[r0 + x]; }
+    }
+    return out;
+  }
+  function dilate(m, w, h, k) { return morph(m, w, h, k, k, true); }
+  function erode(m, w, h, k) { return morph(m, w, h, k, k, false); }
+  function close(m, w, h, k) { return erode(dilate(m, w, h, k), w, h, k); }
+  // A thick line (round ends), value v
+  function line(m, w, h, a, b, th, v) {
+    var r = th / 2, L = hyp(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L * 2)), ri = Math.ceil(r);
+    for (var i = 0; i <= n; i++) {
+      var cx = a[0] + (b[0] - a[0]) * i / n, cy = a[1] + (b[1] - a[1]) * i / n;
+      var x0 = Math.round(cx), y0 = Math.round(cy);
+      for (var dy = -ri; dy <= ri; dy++) for (var dx = -ri; dx <= ri; dx++) {
+        if (dx * dx + dy * dy > r * r + 0.25) continue;
+        var x = x0 + dx, y = y0 + dy;
+        if (x >= 0 && y >= 0 && x < w && y < h) m[y * w + x] = v;
+      }
+    }
+  }
+  // Connected parts (4 or 8 neighbours): labels and each part's area and box
+  function parts(m, w, h, eight) {
+    var lab = new Int32Array(w * h), st = [null], stack = new Int32Array(w * h), n = 0;
+    for (var i = 0; i < w * h; i++) {
+      if (!m[i] || lab[i]) continue;
+      n++; var sp = 0, s = { n: 0, x0: w, y0: h, x1: -1, y1: -1 };
+      stack[sp++] = i; lab[i] = n;
+      while (sp) {
+        var p = stack[--sp], x = p % w, y = (p - x) / w;
+        s.n++; if (x < s.x0) s.x0 = x; if (x > s.x1) s.x1 = x; if (y < s.y0) s.y0 = y; if (y > s.y1) s.y1 = y;
+        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          if (!eight && dx && dy) continue;
+          var xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          var q = yy * w + xx;
+          if (m[q] && !lab[q]) { lab[q] = n; stack[sp++] = q; }
+        }
+      }
+      st.push(s);
+    }
+    return { lab: lab, st: st, n: n };
+  }
+
+  /* ---------- regions: a mask cropped to its own box ---------- */
+  function region(lab, w, id, s) {
+    var rw = s.x1 - s.x0 + 1, rh = s.y1 - s.y0 + 1, m = new Uint8Array(rw * rh);
+    for (var y = 0; y < rh; y++) for (var x = 0; x < rw; x++) if (lab[(y + s.y0) * w + x + s.x0] === id) m[y * rw + x] = 1;
+    return { x0: s.x0, y0: s.y0, w: rw, h: rh, m: m, n: s.n };
+  }
+  function at(R, x, y) {
+    x -= R.x0; y -= R.y0;
+    return x >= 0 && y >= 0 && x < R.w && y < R.h ? R.m[y * R.w + x] : 0;
+  }
+  function toFull(R, W, H) {
+    var m = new Uint8Array(W * H);
+    for (var y = 0; y < R.h; y++) for (var x = 0; x < R.w; x++) if (R.m[y * R.w + x]) m[(y + R.y0) * W + x + R.x0] = 1;
+    return m;
+  }
+  function fromFull(m, W, H) {
+    var s = { n: 0, x0: W, y0: H, x1: -1, y1: -1 };
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) if (m[y * W + x]) {
+      s.n++; if (x < s.x0) s.x0 = x; if (x > s.x1) s.x1 = x; if (y < s.y0) s.y0 = y; if (y > s.y1) s.y1 = y;
+    }
+    if (!s.n) return null;
+    var rw = s.x1 - s.x0 + 1, rh = s.y1 - s.y0 + 1, r = new Uint8Array(rw * rh);
+    for (y = 0; y < rh; y++) for (x = 0; x < rw; x++) r[y * rw + x] = m[(y + s.y0) * W + x + s.x0];
+    return { x0: s.x0, y0: s.y0, w: rw, h: rh, m: r, n: s.n };
+  }
+  // A region's mask with room around it (pad px), for growing and shrinking it on its own
+  function padded(Rs, pad, W, H) {
+    var x0 = W, y0 = H, x1 = 0, y1 = 0;
+    Rs.forEach(function (R) { x0 = Math.min(x0, R.x0); y0 = Math.min(y0, R.y0); x1 = Math.max(x1, R.x0 + R.w); y1 = Math.max(y1, R.y0 + R.h); });
+    x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(W, x1 + pad); y1 = Math.min(H, y1 + pad);
+    var w = x1 - x0, h = y1 - y0, m = new Uint8Array(w * h);
+    Rs.forEach(function (R) { for (var y = 0; y < R.h; y++) for (var x = 0; x < R.w; x++) if (R.m[y * R.w + x]) m[(y + R.y0 - y0) * w + x + R.x0 - x0] = 1; });
+    return { x0: x0, y0: y0, w: w, h: h, m: m };
+  }
+  function crop(C) {   // back to a region trimmed to its own box
+    var s = { n: 0, x0: C.w, y0: C.h, x1: -1, y1: -1 };
+    for (var y = 0; y < C.h; y++) for (var x = 0; x < C.w; x++) if (C.m[y * C.w + x]) {
+      s.n++; if (x < s.x0) s.x0 = x; if (x > s.x1) s.x1 = x; if (y < s.y0) s.y0 = y; if (y > s.y1) s.y1 = y;
+    }
+    if (!s.n) return null;
+    var rw = s.x1 - s.x0 + 1, rh = s.y1 - s.y0 + 1, r = new Uint8Array(rw * rh);
+    for (y = 0; y < rh; y++) for (x = 0; x < rw; x++) r[y * rw + x] = C.m[(y + s.y0) * C.w + x + s.x0];
+    return { x0: s.x0 + C.x0, y0: s.y0 + C.y0, w: rw, h: rh, m: r, n: s.n };
+  }
+
+  // Pixels of R inside a set of boxes [x0, y0, x1, y1) (whole pixels), and the boxes' own area
+  function boxOverlap(R, boxes, W, H) {
+    var bx0 = W, by0 = H, bx1 = 0, by1 = 0;
+    boxes.forEach(function (b) { bx0 = Math.min(bx0, Math.max(0, b[0])); by0 = Math.min(by0, Math.max(0, b[1])); bx1 = Math.max(bx1, Math.min(W, Math.max(0, b[2]))); by1 = Math.max(by1, Math.min(H, Math.max(0, b[3]))); });
+    var inter = 0, area = 0;
+    for (var y = by0; y < by1; y++) for (var x = bx0; x < bx1; x++) {
+      var inb = false;
+      for (var k = 0; k < boxes.length; k++) { var b = boxes[k]; if (x >= b[0] && x < b[2] && y >= b[1] && y < b[3]) { inb = true; break; } }
+      if (!inb) continue;
+      area++; if (R && at(R, x, y)) inter++;
+    }
+    return { inter: inter, area: area };
+  }
+  function iouBoxes(R, boxes, W, H) {
+    var o = boxOverlap(R, boxes, W, H), u = R.n + o.area - o.inter;
+    return u ? o.inter / u : 0;
+  }
+  function overlapBox(R, b) {
+    var c = 0, x0 = Math.max(R.x0, b[0]), y0 = Math.max(R.y0, b[1]), x1 = Math.min(R.x0 + R.w, b[2]), y1 = Math.min(R.y0 + R.h, b[3]);
+    for (var y = Math.max(0, y0); y < y1; y++) for (var x = Math.max(0, x0); x < x1; x++) if (R.m[(y - R.y0) * R.w + x - R.x0]) c++;
+    return c;
+  }
+
+  /* ---------- outlines ---------- */
+  // The outer boundary of a region, as pixel centers (Moore neighbour tracing, 8 neighbours)
+  function contour(R) {
+    var W = R.w + 2, H = R.h + 2, m = new Uint8Array(W * H), x, y, start = -1;
+    for (y = 0; y < R.h; y++) for (x = 0; x < R.w; x++) if (R.m[y * R.w + x]) m[(y + 1) * W + x + 1] = 1;
+    for (var i = 0; i < W * H; i++) if (m[i]) { start = i; break; }
+    if (start < 0) return [];
+    var DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];   // clockwise from east (y down)
+    var pts = [], cx = start % W, cy = (start - cx) / W, dir = 0, guard = 0, firstNext = -1;
+    pts.push([cx, cy]);
+    while (guard++ < 4 * W * H) {
+      var found = false, d0 = (dir + 5) % 8;   // from the pixel just after the one we came from, clockwise
+      for (var k = 0; k < 8; k++) {
+        var d = (d0 + k) % 8, nx = cx + DX[d], ny = cy + DY[d];
+        if (m[ny * W + nx]) { cx = nx; cy = ny; dir = d; found = true; break; }
+      }
+      if (!found) break;
+      var idx = cy * W + cx;
+      if (firstNext < 0) firstNext = idx;
+      else if (pts.length > 1 && idx === firstNext && pts[pts.length - 1][0] + pts[pts.length - 1][1] * W === start) { pts.pop(); break; }
+      pts.push([cx, cy]);
+    }
+    if (pts.length > 1 && pts[pts.length - 1][0] === pts[0][0] && pts[pts.length - 1][1] === pts[0][1]) pts.pop();
+    return pts.map(function (p) { return [p[0] - 1 + R.x0, p[1] - 1 + R.y0]; });
+  }
+  // Douglas-Peucker for a closed outline
+  function simplify(pts, eps) {
+    var n = pts.length;
+    if (n < 4) return pts.slice();
+    var far = 0, fd = -1;
+    for (var i = 1; i < n; i++) { var d = hyp(pts[i][0] - pts[0][0], pts[i][1] - pts[0][1]); if (d > fd) { fd = d; far = i; } }
+    function dp(a, b, out) {
+      var A = pts[a], B = pts[b % n], L = hyp(B[0] - A[0], B[1] - A[1]), best = -1, bi = -1;
+      for (var i = a + 1; i < b; i++) {
+        var P = pts[i % n];
+        var d = L ? Math.abs((B[0] - A[0]) * (A[1] - P[1]) - (A[0] - P[0]) * (B[1] - A[1])) / L : hyp(P[0] - A[0], P[1] - A[1]);
+        if (d > best) { best = d; bi = i; }
+      }
+      if (best > eps) { dp(a, bi, out); dp(bi, b, out); } else out.push(A);
+    }
+    var out = [];
+    dp(0, far, out); dp(far, n, out);
+    return out;
+  }
+  // Square up an outline: sides within 8 degrees of level or plumb are made exactly so, and a side
+  // that steps by less than tol from the one before it (a gap closed in the wall) is folded in
+  function rectify(poly, tol) {
+    var T = Math.tan(8 * Math.PI / 180), E = [], n = poly.length, i;
+    for (i = 0; i < n; i++) {
+      var a = poly[i], b = poly[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = hyp(dx, dy);
+      if (L < 1e-6) continue;
+      var c = Math.abs(dy) <= T * Math.abs(dx) ? 'h' : Math.abs(dx) <= T * Math.abs(dy) ? 'v' : 'd';
+      E.push({ c: c, a: a, b: b, L: L, lv: c === 'h' ? (a[1] + b[1]) / 2 : c === 'v' ? (a[0] + b[0]) / 2 : null });
+    }
+    for (var guard = 0, merged = true; merged && E.length > 3 && guard < 200; guard++) {
+      merged = false;
+      for (i = 0; i < E.length && E.length > 3; i++) {
+        var e = E[i], f = E[(i + 1) % E.length];
+        if (e.c !== 'd' && e.c === f.c && Math.abs(e.lv - f.lv) <= tol) {
+          var m = { c: e.c, a: e.a, b: f.b, L: e.L + f.L, lv: (e.lv * e.L + f.lv * f.L) / (e.L + f.L) };
+          E.splice(i, 1, m); E.splice((i + 1) % E.length, 1); merged = true; break;
+        }
+      }
+    }
+    function meet(e, f) {
+      if (e.c === 'h' && f.c === 'v') return [f.lv, e.lv];
+      if (e.c === 'v' && f.c === 'h') return [e.lv, f.lv];
+      if (e.c === f.c && e.c !== 'd') return null;   // a step: handled below
+      var p1 = e.a, d1 = [e.b[0] - e.a[0], e.b[1] - e.a[1]], p2 = f.a, d2 = [f.b[0] - f.a[0], f.b[1] - f.a[1]];
+      if (e.c === 'h') { p1 = [e.a[0], e.lv]; d1 = [1, 0]; } else if (e.c === 'v') { p1 = [e.lv, e.a[1]]; d1 = [0, 1]; }
+      if (f.c === 'h') { p2 = [f.a[0], f.lv]; d2 = [1, 0]; } else if (f.c === 'v') { p2 = [f.lv, f.a[1]]; d2 = [0, 1]; }
+      var den = d1[0] * d2[1] - d1[1] * d2[0];
+      if (Math.abs(den) < 1e-9) return [(e.b[0] + f.a[0]) / 2, (e.b[1] + f.a[1]) / 2];
+      var t = ((p2[0] - p1[0]) * d2[1] - (p2[1] - p1[1]) * d2[0]) / den;
+      return [p1[0] + d1[0] * t, p1[1] + d1[1] * t];
+    }
+    var out = [];
+    for (i = 0; i < E.length; i++) {
+      var e2 = E[i], f2 = E[(i + 1) % E.length], q = meet(e2, f2);
+      if (q) { out.push(q); continue; }
+      // two level (or plumb) sides at different heights with nothing between: a short step
+      if (e2.c === 'h') { out.push([e2.b[0], e2.lv]); out.push([e2.b[0], f2.lv]); }
+      else { out.push([e2.lv, e2.b[1]]); out.push([f2.lv, e2.b[1]]); }
+    }
+    // the corner list starts at the first side's start
+    out.unshift(out.pop());
+    return out.filter(function (p, k) { var o = out[(k + 1) % out.length]; return hyp(p[0] - o[0], p[1] - o[1]) > 0.5; })
+      .map(function (p) { return [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]; });
+  }
+  function polyArea(p) {
+    var s = 0;
+    for (var i = 0; i < p.length; i++) { var q = p[(i + 1) % p.length]; s += p[i][0] * q[1] - q[0] * p[i][1]; }
+    return s;
+  }
+
+  /* ---------- 1 to 3: walls, breaks, spaces ---------- */
+  function wallsOf(g, w, h) {
+    var dark = new Uint8Array(w * h), i;
+    for (i = 0; i < w * h; i++) dark[i] = g[i] < 110 ? 1 : 0;
+    // wall thickness: the most common run of ink 4px and longer, across rows and columns
+    var cnt = {};
+    function runs(get, n1, n2) {
+      for (var a = 0; a < n1; a++) {
+        var run = 0;
+        for (var b = 0; b <= n2; b++) {
+          var v = b < n2 ? get(a, b) : 0;
+          if (v) run++; else { if (run >= 4) cnt[run] = (cnt[run] || 0) + 1; run = 0; }
+        }
+      }
+    }
+    runs(function (y, x) { return dark[y * w + x]; }, h, w);
+    runs(function (x, y) { return dark[y * w + x]; }, w, h);
+    var kmax = 0, best = -1;
+    Object.keys(cnt).forEach(function (L) { L = +L; if (cnt[L] > best || (cnt[L] === best && L < kmax)) { best = cnt[L]; kmax = L; } });
+    if (!kmax) return null;
+    var k = Math.max(3, Math.round(kmax * 0.35));
+    var core = erode(dark, w, h, k), full = dilate(core, w, h, k);
+    for (i = 0; i < w * h; i++) full[i] &= dark[i];
+    return { wall: full, kmax: kmax };
+  }
+
+  function breaks(wall, W0, H0, kmax, vertical) {
+    var H = vertical ? W0 : H0, W = vertical ? H0 : W0;
+    var get = vertical ? function (v, u) { return wall[u * W0 + v]; } : function (v, u) { return wall[v * W0 + u]; };
+    var lo = Math.max(4, Math.floor(kmax * 1.2)), hi = Math.floor(kmax * 45);
+    var found = [], open = [];
+    for (var v = 0; v < H; v++) {
+      var starts = [], ends = [], prev = 0;
+      for (var u = 0; u <= W; u++) {
+        var c = u < W ? get(v, u) : 0;
+        if (c && !prev) starts.push(u);
+        if (!c && prev) ends.push(u - 1);
+        prev = c;
+      }
+      var nxt = [];
+      for (var i = 0; i < starts.length - 1; i++) {
+        var x1 = ends[i], x2 = starts[i + 1], gap = x2 - x1 - 1;
+        if (gap < lo || gap > hi) continue;
+        var f1 = ends[i] - starts[i] + 1, f2 = ends[i + 1] - starts[i + 1] + 1;
+        if (Math.max(f1, f2) < 2 * kmax && gap > 10 * kmax) continue;
+        var hit = null;
+        for (var j = 0; j < open.length; j++) if (Math.abs(open[j].x1 - x1) <= 2 && Math.abs(open[j].x2 - x2) <= 2) { hit = open[j]; break; }
+        if (hit) { open.splice(open.indexOf(hit), 1); hit.v1 = v; nxt.push(hit); }
+        else nxt.push({ x1: x1, x2: x2, v0: v, v1: v });
+      }
+      open.forEach(function (o) { found.push(o); });
+      open = nxt;
+    }
+    found = found.concat(open);
+    var out = [];
+    found.forEach(function (o) {
+      var depth = o.v1 - o.v0 + 1;
+      if (depth < Math.max(2, kmax * 0.3) || depth > kmax * 2.2) return;
+      var u0 = o.x1 + 1, u1 = o.x2 - 1, vm = (o.v0 + o.v1) >> 1, um = (u0 + u1) >> 1, ok = true;
+      [-1, 1].forEach(function (side) {
+        var vv = side < 0 ? o.v0 - kmax : o.v1 + kmax;
+        if (vv >= 0 && vv < H && get(vv, um)) ok = false;
+      });
+      [o.x1, o.x2].forEach(function (fu) {
+        var above = o.v0 - 2 >= 0 && get(o.v0 - 2, fu), below = o.v1 + 2 < H && get(o.v1 + 2, fu);
+        if (above && below) ok = false;
+      });
+      if (!ok) return;
+      out.push({ a: vertical ? [vm, u0] : [u0, vm], b: vertical ? [vm, u1] : [u1, vm], w: u1 - u0 + 1, depth: depth, v: vertical });
+    });
+    return out;
+  }
+
+  function spaces(wall, W, H, brks, kmax) {
+    var kc = Math.round(kmax * 1.3) | 1;
+    var block = close(wall, W, H, kc), i;
+    brks.forEach(function (b) { line(block, W, H, b.a, b.b, Math.max(2, kmax >> 1), 1); });
+    block = dilate(block, W, H, 5);
+    var free = new Uint8Array(W * H);
+    for (i = 0; i < W * H; i++) free[i] = block[i] ? 0 : 1;
+    var P = parts(free, W, H, false);
+    // the outside: what the picture's edge reaches with every hole up to 2.5 wall thicknesses shut
+    var kb = Math.round(kmax * 2.5) | 1, big = close(block, W, H, kb), outside = new Uint8Array(W * H), stack = [];
+    [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].forEach(function (c) { var q = c[1] * W + c[0]; if (!big[q] && !outside[q]) { outside[q] = 1; stack.push(q); } });
+    while (stack.length) {
+      var p = stack.pop(), x = p % W, y = (p - x) / W;
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
+        var xx = x + d[0], yy = y + d[1];
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) return;
+        var q = yy * W + xx;
+        if (!big[q] && !outside[q]) { outside[q] = 1; stack.push(q); }
+      });
+    }
+    var outCount = new Int32Array(P.n + 1);
+    for (i = 0; i < W * H; i++) if (P.lab[i] && outside[i]) outCount[P.lab[i]]++;
+    var out = [];
+    for (var id = 1; id <= P.n; id++) {
+      var s = P.st[id];
+      if (s.n < (kmax * 3) * (kmax * 3)) continue;
+      if (outCount[id] > 0.5 * s.n) continue;
+      out.push(region(P.lab, W, id, s));
+    }
+    return out;
+  }
+
+  /* ---------- 4. names, splits, trims ---------- */
+  function corners(R) {
+    var c = contour(R), out = [];
+    if (c.length < 4 || Math.abs(polyArea(c)) / 2 < 50) return out;
+    var p = simplify(c, 2.5), n = p.length;
+    if (n < 4) return out;
+    var area = polyArea(p);
+    for (var i = 0; i < n; i++) {
+      var a = p[(i - 1 + n) % n], v = p[i], b = p[(i + 1) % n];
+      var e1 = [v[0] - a[0], v[1] - a[1]], e2 = [b[0] - v[0], b[1] - v[1]];
+      var cr = e1[0] * e2[1] - e1[1] * e2[0];
+      if (cr * area >= 0) continue;
+      var l1 = hyp(e1[0], e1[1]), l2 = hyp(e2[0], e2[1]);
+      if (l1 < 4 || l2 < 4) continue;
+      var dirs = [[e1[0] / l1, e1[1] / l1], [-e2[0] / l2, -e2[1] / l2]].map(function (d) {
+        var ang = ((Math.atan2(d[1], d[0]) * 180 / Math.PI) % 90 + 90) % 90;
+        if (Math.min(ang, 90 - ang) <= 8) d = [Math.round(d[0]), Math.round(d[1])];
+        return d;
+      });
+      out.push({ v: v, dirs: dirs });
+    }
+    return out;
+  }
+  function carry(R, v, d, W, H, enter) {
+    var pts = [], t = 1, outside = 0, maxlen = Math.max(W, H);
+    while (t < maxlen) {
+      var x = Math.round(v[0] + d[0] * t), y = Math.round(v[1] + d[1] * t);
+      if (x < 0 || y < 0 || x >= W || y >= H) return null;
+      if (at(R, x, y)) { pts.push([x, y]); outside = 0; }
+      else if (pts.length) { outside++; if (outside > 2) break; }
+      else if (t > enter) return null;
+      t++;
+    }
+    if (pts.length < 6) return null;
+    return [pts[0], pts[pts.length - 1]];
+  }
+  function cutPieces(R, cut, minArea) {
+    var m = R.m.slice();
+    line(m, R.w, R.h, [cut[0][0] - R.x0, cut[0][1] - R.y0], [cut[1][0] - R.x0, cut[1][1] - R.y0], 3, 0);
+    var P = parts(m, R.w, R.h, false), pcs = [];
+    for (var id = 1; id <= P.n; id++) {
+      var s = P.st[id];
+      if (s.n < minArea) continue;
+      var q = region(P.lab, R.w, id, s); q.x0 += R.x0; q.y0 += R.y0;
+      pcs.push(q);
+    }
+    return pcs.length < 2 ? null : pcs;
+  }
+  function roomsIn(pcs, rs) {
+    var got = pcs.map(function () { return []; });
+    rs.forEach(function (r) {
+      var bi = 0, bv = -1;
+      pcs.forEach(function (p, i) { var o = overlapBox(p, r.bi); if (o > bv) { bv = o; bi = i; } });
+      got[bi].push(r);
+    });
+    return got;
+  }
+  function ratioTerm(pcs, got) {
+    var a = [];
+    for (var i = 0; i < pcs.length; i++) {
+      var rs = got[i];
+      if (!rs.length || rs.some(function (r) { return !r.area_ft; })) return 0;
+      a.push([pcs[i].n, rs.reduce(function (s, r) { return s + r.area_ft; }, 0)]);
+    }
+    if (a.length < 2) return 0;
+    var s = 0;
+    for (i = 0; i < a.length; i++) for (var j = i + 1; j < a.length; j++) s += Math.abs(Math.log((a[i][0] / a[j][0]) / (a[i][1] / a[j][1])));
+    return s;
+  }
+  function candidates(R, rs, brks, kmax, W, H) {
+    var out = [];
+    corners(R).forEach(function (c) { c.dirs.forEach(function (d) { out.push({ v: c.v, d: d, enter: 6, pen: 0 }); }); });
+    brks.forEach(function (br) {
+      var L = Math.max(1e-6, hyp(br.b[0] - br.a[0], br.b[1] - br.a[1])), u = [(br.b[0] - br.a[0]) / L, (br.b[1] - br.a[1]) / L], n = [-u[1], u[0]];
+      [br.a, br.b].forEach(function (p) {
+        var x = Math.floor(p[0]), y = Math.floor(p[1]);
+        if (x < 0 || y < 0 || x >= W || y >= H) return;
+        var near = false;
+        for (var yy = Math.max(0, y - kmax * 2); yy < Math.min(H, y + kmax * 2) && !near; yy++)
+          for (var xx = Math.max(0, x - kmax * 2); xx < Math.min(W, x + kmax * 2); xx++) if (at(R, xx, yy)) { near = true; break; }
+        if (!near) return;
+        out.push({ v: p, d: n, enter: kmax + 6, pen: 0.01 });
+        out.push({ v: p, d: [-n[0], -n[1]], enter: kmax + 6, pen: 0.01 });
+      });
+    });
+    for (var i = 0; i < rs.length; i++) for (var j = i + 1; j < rs.length; j++) {
+      var A = rs[i].box, B = rs[j].box;
+      for (var ax = 0; ax < 2; ax++) {
+        var lo = (A[ax] + A[ax + 2]) < (B[ax] + B[ax + 2]) ? A : B, hi2 = lo === A ? B : A;
+        var m = (lo[ax + 2] + hi2[ax]) / 2, o0 = Math.max(lo[1 - ax], hi2[1 - ax]), o1 = Math.min(lo[3 - ax], hi2[3 - ax]);
+        if (o1 <= o0) continue;
+        var c = ax === 0 ? [m, (o0 + o1) / 2] : [(o0 + o1) / 2, m], d = ax === 0 ? [0, 1] : [1, 0];
+        if (!at(R, Math.floor(c[0]), Math.floor(c[1]))) continue;
+        var e1 = c.slice();
+        while (at(R, Math.floor(e1[0]), Math.floor(e1[1])) && e1[0] > 0 && e1[0] < W - 1 && e1[1] > 0 && e1[1] < H - 1) { e1[0] -= d[0]; e1[1] -= d[1]; }
+        out.push({ v: [e1[0] + d[0], e1[1] + d[1]], d: d, enter: 3, pen: 0.05 });
+      }
+    }
+    return out;
+  }
+  // Widest point of a region, in px (twice the largest distance to its edge)
+  function widest(R) {
+    var w = R.w + 2, h = R.h + 2, D = new Float32Array(w * h), a = 0.955, b = 1.3693, x, y, best = 0;
+    for (y = 0; y < h; y++) for (x = 0; x < w; x++) D[y * w + x] = (x && y && x < w - 1 && y < h - 1 && R.m[(y - 1) * R.w + x - 1]) ? 1e9 : 0;
+    for (y = 1; y < h - 1; y++) for (x = 1; x < w - 1; x++) {
+      var i = y * w + x; if (!D[i]) continue;
+      D[i] = Math.min(D[i], D[i - 1] + a, D[i - w] + a, D[i - w - 1] + b, D[i - w + 1] + b);
+    }
+    for (y = h - 2; y > 0; y--) for (x = w - 2; x > 0; x--) {
+      var k = y * w + x; if (!D[k]) continue;
+      D[k] = Math.min(D[k], D[k + 1] + a, D[k + w] + a, D[k + w + 1] + b, D[k + w - 1] + b);
+      if (D[k] > best) best = D[k];
+    }
+    return best * 2;
+  }
+  function trim(R, r, kmax, brks, W, H) {
+    var out = [];
+    for (var pass = 0; pass < 3; pass++) {
+      var base = iouBoxes(R, [r.bi], W, H), best = null;
+      candidates(R, [r], brks, kmax, W, H).forEach(function (c) {
+        var cut = carry(R, c.v, c.d, W, H, c.enter);
+        if (!cut) return;
+        var pcs = cutPieces(R, cut, (kmax * 2) * (kmax * 2));
+        if (!pcs) return;
+        var keep = 0, kv = -1;
+        pcs.forEach(function (p, i) { var o = overlapBox(p, r.bi); if (o > kv) { kv = o; keep = i; } });
+        var rest = pcs.filter(function (p, i) { return i !== keep; });
+        if (rest.some(function (q) { return overlapBox(q, r.bi) > 0.35 * q.n; })) return;
+        var need = Math.max(3 * kmax, 0.04 * Math.max(W, H));
+        if (rest.some(function (q) { return widest(q) < need; })) return;
+        var gain = iouBoxes(pcs[keep], [r.bi], W, H) - base - c.pen;
+        if (gain >= 0.06 && (!best || gain > best.gain)) best = { gain: gain, keep: pcs[keep], rest: rest };
+      });
+      if (!best) break;
+      R = best.keep; best.rest.forEach(function (q) { out.push({ p: q, r: 'trimmed' }); });
+    }
+    return [{ p: R, r: r }].concat(out);
+  }
+  function split(R, rs, kmax, brks, W, H, depth) {
+    if (rs.length === 1) return trim(R, rs[0], kmax, brks, W, H);
+    if (!rs.length || depth > 6) return [{ p: R, r: rs[0] || null }];
+    var best = null, seen = {}, minArea = (kmax * 2) * (kmax * 2);
+    candidates(R, rs, brks, kmax, W, H).forEach(function (c) {
+      var cut = carry(R, c.v, c.d, W, H, c.enter);
+      if (!cut) return;
+      var key = [Math.floor(cut[0][0] / 3), Math.floor(cut[0][1] / 3), Math.floor(cut[1][0] / 3), Math.floor(cut[1][1] / 3)].join(',');
+      if (seen[key]) return;
+      seen[key] = 1;
+      var pcs = cutPieces(R, cut, minArea);
+      if (!pcs) return;
+      var got = roomsIn(pcs, rs);
+      if (got.some(function (g) { return !g.length; })) return;
+      var L = hyp(cut[1][0] - cut[0][0], cut[1][1] - cut[0][1]), f = 0;
+      pcs.forEach(function (p, i) { f += iouBoxes(p, got[i].map(function (r) { return r.bi; }), W, H) * got[i].length; });
+      f /= rs.length;
+      var score = f - 0.25 * ratioTerm(pcs, got) - 0.002 * L / kmax - c.pen;
+      if (!best || score > best.score) best = { score: score, pcs: pcs, got: got };
+    });
+    if (!best) return [{ p: R, r: rs[0] }].concat(rs.slice(1).map(function (r) { return { p: null, r: r }; }));
+    var out = [];
+    best.pcs.forEach(function (p, i) { out = out.concat(split(p, best.got[i], kmax, brks, W, H, depth + 1)); });
+    return out;
+  }
+  function joinLeftovers(named, rooms, kmax, W, H) {
+    named.forEach(function (x) {
+      if (x.r !== null || !x.p) return;
+      var inside = rooms.map(function (rr) { return { rr: rr, f: overlapBox(x.p, rr.bi) / x.p.n }; });
+      var hits = inside.filter(function (o) { return o.f >= 0.6; });
+      if (hits.length !== 1) return;
+      if (inside.some(function (o) { return o.rr !== hits[0].rr && o.f >= 0.3; })) return;
+      for (var i = 0; i < named.length; i++) {
+        var y = named[i];
+        if (y.r !== hits[0].rr || !y.p) continue;
+        var kr = 2 * kmax + 7, C = padded([y.p, x.p], kr + 2, W, H), Y = padded([y.p], 0, W, H), touch = false, q;
+        var ym = new Uint8Array(C.w * C.h);
+        for (q = 0; q < Y.h; q++) for (var xx = 0; xx < Y.w; xx++) if (Y.m[q * Y.w + xx]) ym[(q + Y.y0 - C.y0) * C.w + xx + Y.x0 - C.x0] = 1;
+        var reach = dilate(ym, C.w, C.h, kr);
+        for (q = 0; q < C.w * C.h; q++) if (reach[q] && C.m[q] && !ym[q]) { touch = true; break; }
+        if (!touch) continue;
+        var k = Math.floor(kmax * 1.5) | 1, cl = close(C.m, C.w, C.h, k);
+        for (q = 0; q < C.w * C.h; q++) cl[q] |= C.m[q];
+        y.p = crop({ x0: C.x0, y0: C.y0, w: C.w, h: C.h, m: cl }); x.p = null;
+        break;
+      }
+    });
+    return named.filter(function (x) { return x.p || x.r; }).map(function (x) { return x.r === 'trimmed' ? { p: x.p, r: null } : x; });
+  }
+
+  /* ---------- 5. scale ---------- */
+  function parseFt(s) {
+    var m = /^\s*(\d+)\s*['’]\s*(?:(\d+(?:\.\d+)?)\s*["”])?/.exec(s || '');
+    return m ? +m[1] + (+m[2] || 0) / 12 : null;
+  }
+  function pinDim(dm, ink, brks, kmax, W, H) {
+    var a = [dm.x1 / 100 * W, dm.y1 / 100 * H], b = [dm.x2 / 100 * W, dm.y2 / 100 * H], L = hyp(b[0] - a[0], b[1] - a[1]);
+    if (L < 10) return null;
+    var dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]), u;
+    if (Math.min(dx, dy) / Math.max(dx, dy) < 0.4) u = dx >= dy ? [1, 0] : [0, 1];
+    else u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+    var nrm = [-u[1], u[0]], c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    var t0 = (a[0] - c[0]) * u[0] + (a[1] - c[1]) * u[1], t1 = (b[0] - c[0]) * u[0] + (b[1] - c[1]) * u[1];
+    var lo = Math.min(t0, t1) - 0.45 * L - 10, hi = Math.max(t0, t1) + 0.45 * L + 10, J = Math.floor(0.03 * Math.max(W, H)) + 4;
+    var ts = []; for (var t = lo; t < hi; t++) ts.push(t);
+    function ink1(t, off) {
+      var x = Math.round(c[0] + u[0] * t + nrm[0] * off), y = Math.round(c[1] + u[1] * t + nrm[1] * off);
+      return x >= 0 && y >= 0 && x < W && y < H ? ink[y * W + x] : 0;
+    }
+    function inkC(t, off) {
+      var x = Math.min(W - 1, Math.max(0, Math.round(c[0] + u[0] * t + nrm[0] * off))), y = Math.min(H - 1, Math.max(0, Math.round(c[1] + u[1] * t + nrm[1] * off)));
+      return ink[y * W + x];
+    }
+    var best = null;
+    for (var off = -J; off <= J; off++) {
+      var st = [], en = [], prev = 0;
+      for (var i = 0; i <= ts.length; i++) {
+        var v = i < ts.length ? ink1(ts[i], off) : 0;
+        if (v && !prev) st.push(i); if (!v && prev) en.push(i); prev = v;
+      }
+      if (!st.length) continue;
+      var runs = [[st[0], en[0], en[0] - st[0]]];
+      for (i = 1; i < st.length; i++) {
+        var R = runs[runs.length - 1];
+        if (st[i] - R[1] <= Math.max(8, 0.34 * L)) { R[1] = en[i]; R[2] += en[i] - st[i]; }
+        else runs.push([st[i], en[i], en[i] - st[i]]);
+      }
+      runs.forEach(function (rn) {
+        var s = rn[0], e = rn[1], span = e - s;
+        if (span < 0.6 * L || span > 1.45 * L || rn[2] < 0.55 * span) return;
+        var side = 0;
+        [-3, 3].forEach(function (so) { var sm = 0; for (var k = s; k < e; k++) sm += inkC(ts[k], off + so); side += sm / (e - s); });
+        if (side > 0.5) return;
+        var pos = Math.abs(off) / J + Math.abs((ts[s] + ts[e - 1]) / 2 - (t0 + t1) / 2) / L;
+        var sc = pos + 0.5 * Math.abs(Math.log(span / L));
+        if (!best || sc < best.sc) best = { sc: sc, span: span,
+          p: [c[0] + u[0] * ts[s] + nrm[0] * off, c[1] + u[1] * ts[s] + nrm[1] * off], q: [c[0] + u[0] * ts[e - 1] + nrm[0] * off, c[1] + u[1] * ts[e - 1] + nrm[1] * off] };
+      });
+    }
+    if (!best) return null;
+    var p = best.p, q = best.q, brk = null;
+    brks.forEach(function (br) {
+      var bl = Math.max(1e-6, hyp(br.b[0] - br.a[0], br.b[1] - br.a[1])), bu = [(br.b[0] - br.a[0]) / bl, (br.b[1] - br.a[1]) / bl];
+      if (Math.abs(bu[0] * u[0] + bu[1] * u[1]) < 0.97) return;
+      var mx = (br.a[0] + br.b[0]) / 2 - (p[0] + q[0]) / 2, my = (br.a[1] + br.b[1]) / 2 - (p[1] + q[1]) / 2, dist = Math.abs(mx * nrm[0] + my * nrm[1]);
+      if (dist > Math.max(6 * kmax, 0.07 * Math.max(W, H))) return;
+      var pr = function (z) { return z[0] * u[0] + z[1] * u[1]; };
+      var i0 = Math.min(pr(br.a), pr(br.b)), i1 = Math.max(pr(br.a), pr(br.b)), j0 = Math.min(pr(p), pr(q)), j1 = Math.max(pr(p), pr(q));
+      var ov = Math.max(0, Math.min(i1, j1) - Math.max(i0, j0)) / (Math.max(i1, j1) - Math.min(i0, j0));
+      if (ov > 0.8 && (!brk || dist < brk.dist)) brk = { dist: dist, len: i1 - i0 + 1 };
+    });
+    return { span: best.span, line: [p, q], brk: brk };
+  }
+  function swingWidths(brks, inkd, W, H) {
+    var out = [];
+    brks.forEach(function (br) {
+      var a = br.a, b = br.b, w = hyp(b[0] - a[0], b[1] - a[1]);
+      if (w < 12) return;
+      var acr = [];
+      for (var i = 0; i < 30; i++) {
+        var t = 0.15 + 0.7 * i / 29, x = a[0] + t * (b[0] - a[0]), y = a[1] + t * (b[1] - a[1]);
+        if (x >= 0 && y >= 0 && x < W && y < H) acr.push(inkd[Math.round(y) * W + Math.round(x)]);
+      }
+      if (acr.length && acr.reduce(function (s, v) { return s + v; }, 0) / acr.length > 0.5) return;
+      var best = 0;
+      [[a, b], [b, a]].forEach(function (hp) {
+        var hinge = hp[0], other = hp[1], u = [(other[0] - hinge[0]) / w, (other[1] - hinge[1]) / w];
+        [-1, 1].forEach(function (sgn) {
+          var n = [-u[1] * sgn, u[0] * sgn], hits = 0, inner = 0, N = 24;
+          for (var k = 3; k < N - 2; k++) {
+            var th = k / N * Math.PI / 2, d = [Math.cos(th) * u[0] + Math.sin(th) * n[0], Math.cos(th) * u[1] + Math.sin(th) * n[1]];
+            for (var rad = 0.82 * w; rad < 1.12 * w; rad += 1) {
+              var x = Math.round(hinge[0] + rad * d[0]), y = Math.round(hinge[1] + rad * d[1]);
+              if (x >= 0 && y >= 0 && x < W && y < H && inkd[y * W + x]) { hits++; break; }
+            }
+            var qx = Math.round(hinge[0] + 0.55 * w * d[0]), qy = Math.round(hinge[1] + 0.55 * w * d[1]);
+            if (qx >= 0 && qy >= 0 && qx < W && qy < H && inkd[qy * W + qx]) inner++;
+          }
+          if (inner <= 0.25 * (N - 5)) best = Math.max(best, hits / (N - 5));
+        });
+      });
+      if (best >= 0.85) out.push(w);
+    });
+    return out;
+  }
+  function outerBox(wall, W, H) {
+    var P = parts(wall, W, H, true);
+    if (!P.n) return null;
+    var big = 0;
+    for (var i = 1; i <= P.n; i++) if (P.st[i].n > big) big = P.st[i].n;
+    var x0 = W, y0 = H, x1 = 0, y1 = 0;
+    for (i = 1; i <= P.n; i++) {
+      var s = P.st[i];
+      if (s.n <= 0.05 * big) continue;
+      x0 = Math.min(x0, s.x0); y0 = Math.min(y0, s.y0); x1 = Math.max(x1, s.x1 + 1); y1 = Math.max(y1, s.y1 + 1);
+    }
+    return [x1 - x0, y1 - y0];
+  }
+  function vote(votes) {
+    if (!votes.length) return null;
+    var best = null;
+    votes.forEach(function (v) {
+      var cl = votes.filter(function (x) { return Math.abs(x.ppf / v.ppf - 1) <= 0.04; }), w = cl.reduce(function (s, x) { return s + x.w; }, 0);
+      if (!best || w > best.w + 1e-9) best = { w: w, cl: cl };
+    });
+    var cl = best.cl, sw = cl.reduce(function (s, x) { return s + x.w; }, 0);
+    var from = [];
+    cl.forEach(function (x) { if (from.indexOf(x.from) < 0) from.push(x.from); });
+    return { ppf: cl.reduce(function (s, x) { return s + x.ppf * x.w; }, 0) / sw, from: from.sort(), n: cl.length };
+  }
+  function scaleOf(named, hints, g, wall, brks, kmax, W, H) {
+    var votes = [];
+    named.forEach(function (x) {
+      var p = x.p, r = x.r;
+      if (!p || !r) return;
+      var fill = p.n / (p.w * p.h);
+      if (r.w_ft && r.l_ft) {
+        [[r.w_ft, r.l_ft], [r.l_ft, r.w_ft]].forEach(function (d) {
+          var a = p.w / d[0], b = p.h / d[1];
+          if (Math.abs(a / b - 1) <= 0.06) votes.push({ ppf: (a + b) / 2, w: 1, from: 'room sizes' });
+        });
+      } else if (r.area_ft && fill > 0.5) votes.push({ ppf: Math.sqrt(p.n / r.area_ft), w: 1, from: 'room sizes' });
+    });
+    // dimension lines
+    var ink = new Uint8Array(W * H), wd = dilate(wall, W, H, 3), pinned = [];
+    for (var i = 0; i < W * H; i++) ink[i] = g[i] < 200 && !wd[i] ? 1 : 0;
+    (hints && hints.dims || []).forEach(function (dm) {
+      var ft = dm.feet || parseFt(dm.text);
+      if (!ft) return;
+      var p = pinDim(dm, ink, brks, kmax, W, H);
+      if (!p) return;
+      pinned.push({ ft: ft, line: p.line, span: p.span });
+      votes.push({ ppf: p.span / ft, w: p.brk && Math.abs(p.brk.len / p.span - 1) <= 0.06 ? 1.5 : 1, from: 'dimension lines' });
+    });
+    // overall size
+    var ov = hints && hints.overall, ob = outerBox(wall, W, H);
+    if (ob && ov) {
+      if (ov.w) votes.push({ ppf: ob[0] / ov.w, w: 1, from: 'overall size' });
+      if (ov.h) votes.push({ ppf: ob[1] / ov.h, w: 1, from: 'overall size' });
+    }
+    var v = vote(votes);
+    if (v && (v.n >= 2 || votes.length === 1)) return { ppf: v.ppf, from: v.from, pinned: pinned, votes: votes };
+    // swing doors: rough, only when nothing else agrees
+    var inkd = new Uint8Array(W * H);
+    for (i = 0; i < W * H; i++) inkd[i] = g[i] < 190 ? 1 : 0;
+    inkd = dilate(inkd, W, H, 3);
+    var sw = swingWidths(brks, inkd, W, H);
+    if (sw.length >= 2) {
+      sw.sort(function (p, q) { return p - q; });
+      var med = sw.length % 2 ? sw[sw.length >> 1] : (sw[sw.length / 2 - 1] + sw[sw.length / 2]) / 2;
+      return { ppf: med / (30 / 12), from: ['doors (rough)'], pinned: pinned, votes: votes, rough: true };
+    }
+    return v ? { ppf: v.ppf, from: v.from, pinned: pinned, votes: votes } : null;
+  }
+
+  /* ---------- 6. reading each break ---------- */
+  function Frame(br) {
+    var a = br.a, b = br.b, w = hyp(b[0] - a[0], b[1] - a[1]), u = [(b[0] - a[0]) / Math.max(1e-6, w), (b[1] - a[1]) / Math.max(1e-6, w)];
+    var F = { a: a, b: b, w: w, u: u, n: [-u[1], u[0]], depth: br.depth };
+    F.pt = function (t, s) { return [a[0] + u[0] * t * w + F.n[0] * s, a[1] + u[1] * t * w + F.n[1] * s]; };
+    return F;
+  }
+  function px(m, W, H, p) {
+    var x = Math.round(p[0]), y = Math.round(p[1]);
+    return x >= 0 && y >= 0 && x < W && y < H ? m[y * W + x] : 0;
+  }
+  function lin(a, b, n) { var o = []; for (var i = 0; i < n; i++) o.push(n === 1 ? a : a + (b - a) * i / (n - 1)); return o; }
+  function mean(a) { return a.length ? a.reduce(function (s, v) { return s + v; }, 0) / a.length : 0; }
+
+  function cutsOf(F, ink, W, H, h, kmax) {
+    var N = Math.floor(F.w);
+    if (N < 4 * kmax) return [];
+    var lines = [];
+    for (var i = 0; i <= N; i++) {
+      var col = [];
+      for (var s = -h; s <= h; s++) col.push(px(ink, W, H, F.pt(i / N, s)));
+      var c = 0;
+      for (var j = 0; j < col.length; j++) if (col[j] && (j === 0 || !col[j - 1])) c++;
+      lines.push(Math.min(2, c) >= 2 ? 1 : 0);
+    }
+    var L0 = Math.max(Math.floor(1.5 * kmax), 10), cut = [];
+    for (i = L0; i < N - L0; i++) {
+      if (lines[i] === lines[i - 1]) continue;
+      var before = mean(lines.slice(Math.max(0, i - L0), i)), after = mean(lines.slice(i, i + L0));
+      if (Math.abs(before - after) > 0.8 && !cut.some(function (c2) { return Math.abs(c2 - i / N) * N < L0; })) cut.push(i / N);
+    }
+    return cut.sort(function (p, q) { return p - q; });
+  }
+  function flank(br, wall, W, H) {
+    var F = Frame(br), runs = [];
+    [[0, -1], [1, 1]].forEach(function (e) {
+      var p0 = F.pt(e[0], 0), k = 2;
+      for (; k < 400; k++) {
+        var x = Math.round(p0[0] + F.u[0] * e[1] * k), y = Math.round(p0[1] + F.u[1] * e[1] * k);
+        if (x < 0 || y < 0 || x >= W || y >= H || !wall[y * W + x]) break;
+      }
+      runs.push(k);
+    });
+    return Math.min(runs[0], runs[1]);
+  }
+  function dedupe(brs, wall, kmax, W, H) {
+    var keep = brs.map(function () { return true; });
+    for (var i = 0; i < brs.length; i++) for (var j = i + 1; j < brs.length; j++) {
+      var A = Frame(brs[i]), B = Frame(brs[j]);
+      if (Math.abs(A.u[0] * B.u[0] + A.u[1] * B.u[1]) < 0.97) continue;
+      var ma = A.pt(0.5, 0), mb = B.pt(0.5, 0);
+      if (Math.abs((mb[0] - ma[0]) * A.n[0] + (mb[1] - ma[1]) * A.n[1]) > 2 * kmax) continue;
+      var pr = function (z) { return z[0] * A.u[0] + z[1] * A.u[1]; };
+      var a0 = Math.min(pr(A.a), pr(A.b)), a1 = Math.max(pr(A.a), pr(A.b)), b0 = Math.min(pr(B.a), pr(B.b)), b1 = Math.max(pr(B.a), pr(B.b));
+      if (Math.max(0, Math.min(a1, b1) - Math.max(a0, b0)) < 0.5 * Math.min(a1 - a0, b1 - b0)) continue;
+      if (flank(brs[i], wall, W, H) >= flank(brs[j], wall, W, H)) keep[j] = false; else keep[i] = false;
+    }
+    return brs.filter(function (b, i) { return keep[i]; });
+  }
+  function arcScore(F, inkd, W, H, ht, side, radius) {
+    var hinge = F.pt(ht, 0), u = ht === 0 ? F.u : [-F.u[0], -F.u[1]], n = [F.n[0] * side, F.n[1] * side], hits = 0, inner = 0, N = 24;
+    for (var k = 3; k < N - 2; k++) {
+      var th = k / N * Math.PI / 2, d = [Math.cos(th) * u[0] + Math.sin(th) * n[0], Math.cos(th) * u[1] + Math.sin(th) * n[1]], ok = false;
+      for (var rad = 0.82 * radius; rad < 1.12 * radius + 1; rad += 1) if (px(inkd, W, H, [hinge[0] + rad * d[0], hinge[1] + rad * d[1]])) { ok = true; break; }
+      if (ok) hits++;
+      if (px(inkd, W, H, [hinge[0] + 0.55 * radius * d[0], hinge[1] + 0.55 * radius * d[1]])) inner++;
+    }
+    return inner > 0.25 * (N - 5) ? 0 : hits / (N - 5);
+  }
+  function leafScore(F, inkd, W, H, ht, side, h) {
+    var u = ht === 0 ? F.u : [-F.u[0], -F.u[1]], n = [F.n[0] * side, F.n[1] * side], h0 = F.pt(ht, 0), hinge = [h0[0] + n[0] * h, h0[1] + n[1] * h], best = 0;
+    for (var ang = 15; ang < 91; ang += 3) {
+      var th = ang * Math.PI / 180, d = [Math.cos(th) * u[0] + Math.sin(th) * n[0], Math.cos(th) * u[1] + Math.sin(th) * n[1]];
+      var hit = mean(lin(0.15 * F.w, 0.9 * F.w, 20).map(function (r) { return px(inkd, W, H, [hinge[0] + d[0] * r, hinge[1] + d[1] * r]); }));
+      if (hit < 0.9) continue;
+      var arc = lin(3, ang - 3, Math.max(4, Math.floor(ang / 4))).map(function (a2) {
+        var t2 = a2 * Math.PI / 180, d2 = [Math.cos(t2) * u[0] + Math.sin(t2) * n[0], Math.cos(t2) * u[1] + Math.sin(t2) * n[1]];
+        for (var rad = 0.85 * F.w; rad < 1.12 * F.w; rad += 1) if (px(inkd, W, H, [hinge[0] + d2[0] * rad, hinge[1] + d2[1] * rad])) return 1;
+        return 0;
+      });
+      if (mean(arc) >= 0.7) best = Math.max(best, hit);
+    }
+    return best;
+  }
+  function offWall(F, ink, W, H, side, h, depth) {
+    var c = 0, n = 0;
+    lin(0.05, 0.95, 30).forEach(function (t) {
+      for (var s = h + 2; s < h + 2 + Math.floor(depth); s++) { n++; c += px(ink, W, H, F.pt(t, s * side)); }
+    });
+    return c / Math.max(1, n);
+  }
+  function readBreak(br, ink, inkd, g, W, H, h, kmax, ppf, inside) {
+    var F = Frame(br), w = F.w, ts = lin(0.12, 0.88, 40), rows = [];
+    for (var s = -h; s <= h; s++) rows.push(mean(ts.map(function (t) { return px(ink, W, H, F.pt(t, s)); })));
+    var nspan = 0, part = 0, jb = 0;
+    rows.forEach(function (v, j) {
+      if (v >= 0.7 && (j === 0 || rows[j - 1] < 0.7)) nspan++;
+      var pin = v >= 0.25 && v < 0.7, pprev = j > 0 && rows[j - 1] >= 0.25 && rows[j - 1] < 0.7;
+      if (pin && !pprev) part++;
+      if (v > rows[jb]) jb = j;
+    });
+    var gl = ts.map(function (t) { var p = F.pt(t, jb - h), x = Math.round(p[0]), y = Math.round(p[1]); return x >= 0 && y >= 0 && x < W && y < H ? g[y * W + x] : 0; });
+    var inked = gl.filter(function (v) { return v < 200; }), dark = inked.length > 0 && mean(inked) < 140;
+    var probe = Math.max(2 * kmax, Math.floor(0.4 * w));
+    var outs = [1, -1].map(function (side) { return !inside(F.pt(0.5, side * (h + probe))); });
+    var r = { w: w, exterior: outs[0] || outs[1], outs: outs, nspan: nspan, part: part, dark: dark };
+    var best = { v: 0, ht: null, side: null };
+    [0, 1].forEach(function (ht) {
+      [1, -1].forEach(function (side) {
+        var sc = arcScore(F, inkd, W, H, ht, side, w), lf = leafScore(F, inkd, W, H, ht, side, h);
+        var v = sc >= 0.85 ? sc : (lf >= 0.9 ? 0.85 : sc * 0.9);
+        if (v > best.v) best = { v: v, ht: ht, side: side };
+      });
+    });
+    r.arc = best.v; r.hinge = best.ht; r.side = best.side;
+    if (nspan >= 2 && !(best.v >= 0.85 && !r.exterior)) { r.kind = r.exterior ? 'window' : 'sliding'; return r; }
+    if (best.v >= 0.85) { r.kind = 'swing'; return r; }
+    for (var sd = 1; sd >= -1; sd -= 2) {
+      if (Math.min(arcScore(F, inkd, W, H, 0, sd, w / 2), arcScore(F, inkd, W, H, 1, sd, w / 2)) >= 0.8) { r.kind = 'double'; r.side = sd; return r; }
+    }
+    var fold = Math.max(offWall(F, ink, W, H, 1, h, 0.35 * w), offWall(F, ink, W, H, -1, h, 0.35 * w));
+    r.fold = fold;
+    if (nspan === 1 || part >= 1) {
+      if (r.exterior && nspan === 1) { r.kind = 'window'; return r; }
+      var inches = ppf ? w / ppf * 12 : null;
+      r.kind = inches && inches <= 40 && part === 0 ? 'pocket' : 'sliding';
+      return r;
+    }
+    r.kind = fold >= 0.04 ? 'bifold' : 'opening';
+    return r;
+  }
+  function settle(found, hints, W, H, ppf) {
+    var reach = ppf ? 4 * ppf : 0.06 * Math.max(W, H), used = {};
+    (hints || []).forEach(function (o) {
+      var c = [o.x / 100 * W, o.y / 100 * H], best = null;
+      found.forEach(function (f, i) {
+        var d = hyp(f.c[0] - c[0], f.c[1] - c[1]);
+        if (d <= reach && !used[i] && (!best || d < best.d)) best = { i: i, d: d };
+      });
+      if (!best) return;
+      used[best.i] = 1;
+      var f = found[best.i], k = f.kind, DOORISH = { bifold: 1, sliding: 1, pocket: 1, barn: 1, double: 1 };
+      var mk = o.kind === 'window' ? 'window' : o.kind === 'opening' ? 'opening' : ({ bypass: 'sliding', slider: 'sliding', french: 'double', folding: 'bifold', single: 'swing', hinged: 'swing' }[o.type] || o.type || 'swing');
+      f.model = mk;
+      if (k === 'opening' && mk === 'window') f.kind = 'window';
+      else if (k === 'opening' && DOORISH[mk]) f.kind = mk;
+      else if ((k === 'sliding' || k === 'pocket') && DOORISH[mk]) f.kind = mk;
+      else if ((k === 'sliding' || k === 'pocket') && mk === 'opening' && !f.dark) f.kind = 'opening';
+      else if (k === 'bifold' && { sliding: 1, pocket: 1, barn: 1, opening: 1, double: 1 }[mk]) f.kind = mk;
+      else if (k === 'swing' && mk === 'double') f.kind = 'double';
+      else if (k === 'swing' && ppf && f.w / ppf * 12 > 42 && (DOORISH[mk] || mk === 'opening')) f.kind = mk;
+      else if (k === 'window' && mk === 'swing' && f.arc >= 0.85) f.kind = 'swing';
+      else if (k === 'double' && { bifold: 1, opening: 1, sliding: 1, pocket: 1, barn: 1 }[mk]) f.kind = mk;
+      else if (k === 'window' && { sliding: 1, bifold: 1, opening: 1 }[mk] && f.exterior && f.nspan < 2) f.kind = mk;
+      else if (k === 'window' && mk === 'sliding' && !f.exterior) f.kind = 'sliding';
+    });
+  }
+  function openings(A, hints) {
+    var g = A.g, W = A.w, H = A.h, wall = A.wall, kmax = A.kmax, ppf = A.ppf, i;
+    var ink = new Uint8Array(W * H), inkd = new Uint8Array(W * H), all = new Uint8Array(W * H);
+    for (i = 0; i < W * H; i++) { ink[i] = g[i] < 200 && !wall[i] ? 1 : 0; inkd[i] = g[i] < 190 ? 1 : 0; }
+    inkd = dilate(inkd, W, H, 3);
+    A.spaces.forEach(function (R) { for (var y = 0; y < R.h; y++) for (var x = 0; x < R.w; x++) if (R.m[y * R.w + x]) all[(y + R.y0) * W + x + R.x0] = 1; });
+    all = dilate(all, W, H, 5);
+    var inside = function (p) { return px(all, W, H, p) === 1; };
+    var brs = [];
+    dedupe(A.breaks, wall, kmax, W, H).forEach(function (br) {
+      var F = Frame(br), h = Math.max(2, Math.floor(br.depth / 2));
+      var outWall = [1, -1].some(function (sg) { return !inside(F.pt(0.5, sg * (h + Math.max(2 * kmax, 0.3 * F.w)))); });
+      var cs = outWall ? cutsOf(F, ink, W, H, h, kmax) : [], edges = [0].concat(cs, [1]);
+      for (var e = 0; e < edges.length - 1; e++) {
+        var t0 = edges[e], t1 = edges[e + 1], pad = 2 / Math.max(1, F.w);
+        var a = F.pt(t0 > 0 ? t0 + pad : t0, 0), b = F.pt(t1 < 1 ? t1 - pad : t1, 0);
+        brs.push({ a: a, b: b, w: hyp(b[0] - a[0], b[1] - a[1]), depth: br.depth, v: br.v });
+      }
+    });
+    var found = [];
+    brs.forEach(function (br) {
+      if (hyp(br.b[0] - br.a[0], br.b[1] - br.a[1]) < Math.max(6, kmax)) return;
+      var h = Math.max(2, Math.floor(br.depth / 2)), r = readBreak(br, ink, inkd, g, W, H, h, kmax, ppf, inside), F = Frame(br);
+      r.a = F.a; r.b = F.b; r.c = F.pt(0.5, 0); r.u = F.u; r.n = F.n; r.depth = br.depth;
+      var roomAt = function (p) {
+        var nm = null;
+        A.named.forEach(function (x) { if (x.p && x.r && at(x.p, Math.floor(p[0]), Math.floor(p[1]))) nm = x.r.name; });
+        return nm;
+      };
+      if (r.kind === 'swing' || r.kind === 'double') {
+        r.into = roomAt(F.pt(0.5, r.side * (h + 0.5 * F.w)));
+        r.hingePt = r.kind === 'swing' ? F.pt(r.hinge, 0) : null;
+      }
+      r.rooms = [1, -1].map(function (sg) { return roomAt(F.pt(0.5, sg * (h + Math.max(2 * kmax, 0.3 * F.w)))); });
+      found.push(r);
+    });
+    settle(found, hints && hints.length ? hints : null, W, H, ppf);
+    if (hints && hints.length) found = found.filter(function (f) { return f.model || f.kind === 'swing' || f.kind === 'window' || ((f.kind === 'sliding' || f.kind === 'pocket') && f.dark); });
+    found.forEach(function (f) { if (f.kind === 'swing' && ppf && f.w / ppf * 12 > 42 && !f.model) f.kind = 'double'; });
+    return found.filter(function (f) { return !(f.rooms[0] && f.rooms[0] === f.rooms[1] && !f.model); });
+  }
+
+  /* ---------- the whole read ---------- */
+  // G: { g, w, h } (grayOf); rooms: the model's rooms ({ name, bbox in percent, width, length,
+  // printedArea, source }); hints: the doors call ({ list, overall: { w, h }, dims }), or null.
+  function measure(G, rooms, hints) {
+    var W = G.w, H = G.h, g = G.g;
+    var wl = wallsOf(g, W, H);
+    if (!wl) return null;
+    var wall = wl.wall, kmax = wl.kmax;
+    var br = breaks(wall, W, H, kmax, false).concat(breaks(wall, W, H, kmax, true));
+    var sp = spaces(wall, W, H, br, kmax);
+    if (!sp.length) return null;
+    var rs = rooms.map(function (r, i) {
+      var b = r.bbox, box = [b.x / 100 * W, b.y / 100 * H, (b.x + b.w) / 100 * W, (b.y + b.h) / 100 * H];
+      var labeled = r.source === 'labeled';
+      var w = labeled ? r.width : null, l = labeled ? r.length : null;
+      var rr = { i: i, name: r.name, box: box, bi: box.map(Math.round), w_ft: w || null, l_ft: l || null,
+                 area_ft: (labeled && r.printedArea) || (w && l ? w * l : null) };
+      var bv = 0, bs = null;
+      sp.forEach(function (S, k) { var o = overlapBox(S, rr.bi); if (o > bv) { bv = o; bs = k; } });
+      rr.space = bs;
+      return rr;
+    });
+    var named = [];
+    sp.forEach(function (S, k) {
+      var inS = rs.filter(function (r) { return r.space === k; });
+      if (!inS.length) { named.push({ p: S, r: null }); return; }
+      named = named.concat(split(S, inS, kmax, br, W, H, 0));
+    });
+    rs.forEach(function (r) { if (r.space === null) named.push({ p: null, r: r }); });
+    named = joinLeftovers(named, rs, kmax, W, H);
+    var sc = scaleOf(named, hints, g, wall, br, kmax, W, H);
+    var A = { g: g, w: W, h: H, wall: wall, kmax: kmax, breaks: br, spaces: sp, named: named, ppf: sc ? sc.ppf : null };
+    var found = openings(A, hints && hints.list);
+    // each room's outline: its piece grown back to the walls' faces, traced and simplified
+    var out = rooms.map(function () { return null; });
+    named.forEach(function (x) {
+      if (!x.p || !x.r) return;
+      var C = padded([x.p], 4, W, H), grown = crop({ x0: C.x0, y0: C.y0, w: C.w, h: C.h, m: dilate(C.m, C.w, C.h, 5) });
+      var poly = rectify(simplify(contour(grown), Math.max(2, 0.8 * kmax)), 0.8 * kmax);
+      if (poly.length >= 3) out[x.r.i] = { poly: poly, area: grown.n };
+    });
+    return { w: W, h: H, kmax: kmax, ppf: sc ? sc.ppf : null, from: sc ? sc.from : null, rough: !!(sc && sc.rough), pinned: sc ? sc.pinned : [],
+             rooms: out, openings: found, breaks: br.length, spaces: sp.length, wall: wall,
+             shared: sp.map(function (S, k) { return rs.filter(function (r) { return r.space === k; }).length; }).filter(function (n) { return n > 1; }).length };
+  }
+
+  return { grayOf: grayOf, measure: measure, wallsOf: wallsOf, breaks: breaks, spaces: spaces, contour: contour, simplify: simplify };
 })();

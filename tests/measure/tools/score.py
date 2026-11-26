@@ -106,14 +106,15 @@ def score(name, key, out, found, img):
     cv2.imwrite(os.path.join(OUT, name + '.png'), vis)
     # one number to watch: rooms, doors and windows found, and scale, each counted the same
     parts = [res['room_avg'], sum(1 for k, f in dh if f) / max(1, len(dh)), sum(1 for k, f in wh if f) / max(1, len(wh)),
-             max(0, 1 - (res['scale'] or 100) / 10)]
+             max(0, 1 - (res['scale'] if res['scale'] is not None else 100) / 10)]
     res['score'] = round(sum(parts) / len(parts) * 100)
     return res
 
+NO_DOORS = False
 FOUND_JS = """() => {
   var f = state.scale && state.scale.ftPerPx, W = state.W, H = state.H;
   function px(p) { return [p.x / f, p.y / f]; }
-  return { ftPerPx: f || null, from: state.scale && state.scale.from,
+  return { ftPerPx: f || null, from: state.scale && state.scale.from, walls: state.scale && state.scale.walls,
     rooms: state.rooms.map(function (r) {
       var poly = r.ftShape && f ? r.ftShape.map(px) : r.bbox ? [[r.bbox.x/100*W, r.bbox.y/100*H], [(r.bbox.x+r.bbox.w)/100*W, r.bbox.y/100*H], [(r.bbox.x+r.bbox.w)/100*W, (r.bbox.y+r.bbox.h)/100*H], [r.bbox.x/100*W, (r.bbox.y+r.bbox.h)/100*H]] : null;
       return { name: r.name, poly: poly }; }),
@@ -123,6 +124,9 @@ FOUND_JS = """() => {
 
 def main():
     global BASE, OUT
+    global NO_DOORS
+    NO_DOORS = '--no-doors-call' in sys.argv
+    sys.argv = [a for a in sys.argv if a != '--no-doors-call']
     BASE, OUT = sys.argv[1].rstrip('/'), sys.argv[2]
     PLANS = sys.argv[3:] or ['bedroom', 'studio', 'cabin', 'twostory', 'floor2']
     os.makedirs(OUT, exist_ok=True)
@@ -143,6 +147,7 @@ def main():
                 u = r.request.url
                 if 'onrender.com/api/vision' in u:
                     body = json.loads(r.request.post_data or '{}')
+                    if 'door, doorway opening' in body.get('prompt', '') and NO_DOORS: return r.fulfill(status=500, body='down')
                     txt = open_js if 'door, doorway opening' in body.get('prompt', '') else rooms_js
                     return r.fulfill(status=200, content_type='application/json', body=json.dumps({'content': [{'text': txt}]}))
                 if 'jspdf' in u: return r.fulfill(status=200, content_type='application/javascript', body=JSPDF)

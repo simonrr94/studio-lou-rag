@@ -1,0 +1,5 @@
+__pycache__/
+vendor/
+plan.png
+rooms.json
+openings.json
