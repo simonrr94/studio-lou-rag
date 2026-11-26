@@ -34,9 +34,11 @@ with sync_playwright() as pw:
         page.evaluate("() => setMode('furnish')")
         for rm in rooms:
             i = page.evaluate("(n) => state.rooms.findIndex(r => r.name === n)", rm)
+            import time; t0 = time.time()
             page.evaluate("(i) => { select(i, false); startLayouts(); }", i)
             page.wait_for_function("() => state.layout && !state.layout.busy", timeout=90000)
-            got = page.evaluate("() => state.layout.list.map(o => o.label).concat(state.layout.why ? ['WHY ' + state.layout.why] : [])")
+            rm = rm + ' (%.1fs)' % (time.time() - t0)
+            got = page.evaluate("() => state.layout.list.map(o => o.label + ' [' + o.note + ']').concat(state.layout.why ? ['WHY ' + state.layout.why] : [])")
             print('%-9s %-16s %s' % (name, rm, ' | '.join(got) or '(none)'))
         if errs: print('          ERR', errs[:2])
         ctx.close()

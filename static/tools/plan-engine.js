@@ -4039,18 +4039,34 @@ var LAYOUT = (function () {
   // The rug under a bed: turned across it (18" to 24" past each side), starting just in front
   // of the nightstands so it sits under the lower part of the bed. The biggest of the usual sizes
   // that leaves 6"+ of floor at the walls and doesn't run under the dresser or desk.
-  var BED_RUGS = { king: ['9x12', '8x10', '6x9'], queen: ['8x10', '6x9'], full: ['8x10', '6x9', '5x8'], twin: ['5x8'] };
+  var BED_RUGS = { king: ['9x12', '8x10', '6x9'], queen: ['8x10', '6x9', '5x8'], full: ['8x10', '6x9', '5x8'], twin: ['5x8'] };
   function bedRug(poly, bed, st, avoid) {
     var list = BED_RUGS[bed.spec.id] || [], start = (FURNITURE.get('nightstand').d + 4) / 12 + GAP;
     var rot = Math.round(bed.rot + 90) % 180;
-    for (var i = 0; i < list.length; i++) {
-      var s = RUG.get(list[i]), along = s.w, off = start + along / 2;
-      // Always centered on the bed; if this size doesn't fit there, the next size down
-      var c = { x: st.a.x + st.u.x * bed.t + st.n.x * off, y: st.a.y + st.u.y * bed.t + st.n.y * off };
-      if (RUG.clearanceAt(poly, s, rot, c.x, c.y) < RUG.TIGHT - 1e-6) continue;
-      var shape = RUG.outline(s, rot, c.x, c.y);
-      if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) continue;
-      return { size: s.id, rot: rot, cx: c.x, cy: c.y };
+    function tryAt(s, slide, along) {
+      // across the bed (the usual way), or along it in a narrow room: under the lower half, out past the foot
+      var r2 = along ? Math.round(bed.rot) % 180 : rot, off = along ? bed.spec.d / 12 + GAP : start + s.w / 2, t = bed.t + slide;
+      var c = { x: st.a.x + st.u.x * t + st.n.x * off, y: st.a.y + st.u.y * t + st.n.y * off };
+      if (RUG.clearanceAt(poly, s, r2, c.x, c.y) < RUG.TIGHT - 1e-6) return null;
+      var shape = RUG.outline(s, r2, c.x, c.y);
+      if ((avoid || []).some(function (pl) { return GEO.polyDist(shape, pl) <= 1e-6; })) return null;
+      return { size: s.id, rot: r2, cx: c.x, cy: c.y };
+    }
+    // Centered on the bed; if no size fits there, the next size down
+    for (var i = 0; i < list.length; i++) { var s = RUG.get(list[i]); if (!s) continue; var got = tryAt(s, 0); if (got) return got; }
+    // A bed set against a wall (a corner): the rug slides out from the wall, still under at least
+    // two thirds of the bed's width
+    for (i = 0; i < list.length; i++) {
+      var s2 = RUG.get(list[i]);
+      if (!s2) continue;
+      var room = Math.max(0, (s2.h - bed.spec.w / 12 * 2 / 3) / 2);
+      for (var d = 0.25; d <= room + 1e-6; d += 0.25) for (var sg = -1; sg <= 1; sg += 2) { var g2 = tryAt(s2, sg * d); if (g2) return g2; }
+    }
+    // A room too narrow for any rug across the bed: one turned along it, a little slid out from a wall
+    for (i = list.length - 1; i >= 0; i--) {
+      var s3 = RUG.get(list[i]);
+      if (!s3 || s3.w * 12 < bed.spec.w) continue;
+      for (var d3 = 0; d3 <= Math.max(0, (s3.w - bed.spec.w / 12) / 2) + 1e-6; d3 += 0.25) for (var sg3 = -1; sg3 <= 1; sg3 += 2) { var g3 = tryAt(s3, sg3 * d3, true); if (g3) return g3; }
     }
     return null;
   }
@@ -4438,24 +4454,43 @@ var WALLS = (function () {
     dp(0, far, out); dp(far, n, out);
     return out;
   }
-  // Square up an outline: sides within 8 degrees of level or plumb are made exactly so, and a side
-  // that steps by less than tol from the one before it (a gap closed in the wall) is folded in
+  // Square up an outline: sides within 8 degrees of level or plumb are made exactly so; two level (or
+  // plumb) sides less than tol apart, next to each other or with only a short side between them (a
+  // closed doorway, a jamb), become one; other short sides between a level and a plumb one go.
   function rectify(poly, tol) {
     var T = Math.tan(8 * Math.PI / 180), E = [], n = poly.length, i;
-    for (i = 0; i < n; i++) {
-      var a = poly[i], b = poly[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], L = hyp(dx, dy);
-      if (L < 1e-6) continue;
+    function mk(a, b) {
+      var dx = b[0] - a[0], dy = b[1] - a[1], L = hyp(dx, dy);
       var c = Math.abs(dy) <= T * Math.abs(dx) ? 'h' : Math.abs(dx) <= T * Math.abs(dy) ? 'v' : 'd';
-      E.push({ c: c, a: a, b: b, L: L, lv: c === 'h' ? (a[1] + b[1]) / 2 : c === 'v' ? (a[0] + b[0]) / 2 : null });
+      var lv = c === 'h' ? (a[1] + b[1]) / 2 : c === 'v' ? (a[0] + b[0]) / 2 : null;
+      return { c: c, a: a, b: b, L: L, lv: lv, parts: lv == null ? [] : [[lv, L]] };
     }
-    for (var guard = 0, merged = true; merged && E.length > 3 && guard < 200; guard++) {
-      merged = false;
-      for (i = 0; i < E.length && E.length > 3; i++) {
-        var e = E[i], f = E[(i + 1) % E.length];
+    // Two sides of one kind as one, at the level most of its length runs at (the wall's face, not
+    // the bulge where a window or doorway was closed off)
+    function join(e, f) {
+      var parts = e.parts.concat(f.parts), best = null;
+      parts.forEach(function (q) {
+        var tot = 0, sum = 0;
+        parts.forEach(function (o) { if (Math.abs(o[0] - q[0]) <= 1.5) { tot += o[1]; sum += o[0] * o[1]; } });
+        if (!best || tot > best.tot) best = { tot: tot, lv: sum / tot };
+      });
+      return { c: e.c, a: e.a, b: f.b, L: e.L + f.L, lv: best.lv, parts: parts };
+    }
+    for (i = 0; i < n; i++) { var ed = mk(poly[i], poly[(i + 1) % n]); if (ed.L > 1e-6) E.push(ed); }
+    for (var guard = 0, changed = true; changed && E.length > 4 && guard < 400; guard++) {
+      changed = false;
+      for (i = 0; i < E.length && E.length > 4; i++) {
+        var N = E.length, e = E[i], f = E[(i + 1) % N], g = E[(i + 2) % N];
         if (e.c !== 'd' && e.c === f.c && Math.abs(e.lv - f.lv) <= tol) {
-          var m = { c: e.c, a: e.a, b: f.b, L: e.L + f.L, lv: (e.lv * e.L + f.lv * f.L) / (e.L + f.L) };
-          E.splice(i, 1, m); E.splice((i + 1) % E.length, 1); merged = true; break;
+          E.splice(i, 1, join(e, f)); E.splice((i + 1) % E.length, 1); changed = true; break;
         }
+        if (f.L < tol && e.c !== 'd' && e.c === g.c && Math.abs(e.lv - g.lv) <= tol) {
+          var m = join(e, g); m.L += f.L;   // the short side between them doesn't count toward the level
+          var idx = [(i + 1) % N, (i + 2) % N].sort(function (x, y) { return y - x; });
+          E[i] = m; idx.forEach(function (k) { E.splice(k, 1); }); changed = true; break;
+        }
+        if (f.L < tol && e.c !== 'd' && g.c !== 'd' && e.c !== g.c) { E.splice((i + 1) % N, 1); changed = true; break; }
+        if (f.L < tol && f.c === 'd' && (e.c !== 'd' || g.c !== 'd')) { E.splice((i + 1) % N, 1); changed = true; break; }
       }
     }
     function meet(e, f) {
@@ -4474,11 +4509,11 @@ var WALLS = (function () {
     for (i = 0; i < E.length; i++) {
       var e2 = E[i], f2 = E[(i + 1) % E.length], q = meet(e2, f2);
       if (q) { out.push(q); continue; }
-      // two level (or plumb) sides at different heights with nothing between: a short step
-      if (e2.c === 'h') { out.push([e2.b[0], e2.lv]); out.push([e2.b[0], f2.lv]); }
-      else { out.push([e2.lv, e2.b[1]]); out.push([f2.lv, e2.b[1]]); }
+      // two level (or plumb) sides at different heights with nothing between: a step
+      var mid = e2.c === 'h' ? (e2.b[0] + f2.a[0]) / 2 : (e2.b[1] + f2.a[1]) / 2;
+      if (e2.c === 'h') { out.push([mid, e2.lv]); out.push([mid, f2.lv]); }
+      else { out.push([e2.lv, mid]); out.push([f2.lv, mid]); }
     }
-    // the corner list starts at the first side's start
     out.unshift(out.pop());
     return out.filter(function (p, k) { var o = out[(k + 1) % out.length]; return hyp(p[0] - o[0], p[1] - o[1]) > 0.5; })
       .map(function (p) { return [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]; });
@@ -4513,6 +4548,20 @@ var WALLS = (function () {
     var core = erode(dark, w, h, k), full = dilate(core, w, h, k);
     for (i = 0; i < w * h; i++) full[i] &= dark[i];
     return { wall: full, kmax: kmax };
+  }
+  // The walls furniture is checked against: nubs on a wall's face (the solid triangles plans print at
+  // the ends of a room's measurement) dropped, so a bed set against the wall doesn't seem to run into
+  // one. What a thicker opening takes off, in short pieces; thin walls are long, so they stay.
+  function cleanWalls(full, w, h, kmax) {
+    var ko = Math.max(3, Math.round(kmax * 0.7)), opened = dilate(erode(full, w, h, ko), w, h, ko), off = new Uint8Array(w * h), out = full.slice(), i;
+    for (i = 0; i < w * h; i++) off[i] = full[i] && !opened[i] ? 1 : 0;
+    var P = parts(off, w, h, true);
+    for (var id = 1; id <= P.n; id++) {
+      var s = P.st[id];
+      if (Math.max(s.x1 - s.x0, s.y1 - s.y0) + 1 > 2 * kmax) P.st[id] = null;
+    }
+    for (i = 0; i < w * h; i++) if (P.lab[i] && P.st[P.lab[i]]) out[i] = 0;
+    return out;
   }
 
   function breaks(wall, W0, H0, kmax, vertical) {
@@ -4782,6 +4831,75 @@ var WALLS = (function () {
     return named.filter(function (x) { return x.p || x.r; }).map(function (x) { return x.r === 'trimmed' ? { p: x.p, r: null } : x; });
   }
 
+  // Once there's a scale: floor left over in an open plan (cut away from a room because the model's
+  // box didn't reach it) joins the room next to it whose printed size it completes, across the cut
+  // only (never through a wall or a closed doorway)
+  function dimsOff(p, r, ppf) {   // how far a piece's overall size is from the printed width and length, in feet
+    var a = p.w / ppf, b = p.h / ppf;
+    return Math.min(Math.abs(a - r.w_ft) + Math.abs(b - r.l_ft), Math.abs(a - r.l_ft) + Math.abs(b - r.w_ft));
+  }
+  function segDist(p, a, b) {
+    var dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy, t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0;
+    return hyp(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+  }
+  // Once there's a scale: floor no room claimed (cut away from a room because the model's box didn't
+  // reach it, or a nook behind a gap in a wall) joins the room next to it whose printed size it
+  // completes. Across a cut line, or across a gap that isn't a door or window; never through a wall.
+  // Floor open (across a cut) to just one room that prints no size joins it as well.
+  function joinByArea(named, ppf, W, H, found, kmax) {
+    var p2 = ppf * ppf, far = Math.round(0.75 * kmax) + 5;
+    // a door or window counts as a wall here when the model listed it too (or there's no list): one the
+    // drawing alone suggests (an arc nearby that belongs to something else) doesn't hold floor apart
+    var listed = (found || []).some(function (f) { return f.model; });
+    var doors = (found || []).filter(function (f) { return f.kind !== 'opening' && (f.model || !listed); });
+    for (var pass = 0; pass < 8; pass++) {
+      var best = null;
+      named.forEach(function (x) {
+        if (x.r || !x.p) return;
+        var C = padded([x.p], far + 2, W, H), near = dilate(C.m, C.w, C.h, 9), reach = dilate(C.m, C.w, C.h, 2 * far + 1);
+        var open = [];
+        named.forEach(function (y) {
+          if (!y.r || !y.p) return;
+          var cut = 0, gx = 0, gy = 0, gn = 0;
+          for (var yy = 0; yy < y.p.h; yy++) for (var xx = 0; xx < y.p.w; xx++) {
+            if (!y.p.m[yy * y.p.w + xx]) continue;
+            var cx = xx + y.p.x0 - C.x0, cy = yy + y.p.y0 - C.y0;
+            if (cx < 0 || cy < 0 || cx >= C.w || cy >= C.h) continue;
+            var q = cy * C.w + cx;
+            if (near[q]) cut = 1;
+            if (reach[q]) { gx += xx + y.p.x0; gy += yy + y.p.y0; gn++; }
+          }
+          if (!cut && !gn) return;
+          // across a gap: not where a door or window was read
+          if (!cut && doors.some(function (d) { return segDist([gx / gn, gy / gn], d.a, d.b) < kmax + 4; })) return;
+          if (cut) open.push(y);
+          if (!(y.r.pa || (y.r.w_ft && y.r.l_ft))) return;
+          var gain;
+          if (y.r.pa) {   // the plan prints its square footage: get closer to it
+            var A = y.r.pa, a = y.p.n / p2, b = (y.p.n + x.p.n) / p2;
+            if (a >= A || Math.abs(b - A) >= 0.8 * Math.abs(a - A)) return;
+            gain = (Math.abs(a - A) - Math.abs(b - A)) / A;
+          } else {        // it prints width and length: its overall size gets closer to them
+            var e0 = dimsOff(y.p, y.r, ppf), x0 = Math.min(y.p.x0, x.p.x0), y0 = Math.min(y.p.y0, x.p.y0);
+            var e1 = dimsOff({ w: Math.max(y.p.x0 + y.p.w, x.p.x0 + x.p.w) - x0, h: Math.max(y.p.y0 + y.p.h, x.p.y0 + x.p.h) - y0 }, y.r, ppf);
+            if (e1 >= 0.8 * e0) return;
+            gain = (e0 - e1) / (y.r.w_ft + y.r.l_ft);
+          }
+          if (!best || gain > best.gain) best = { gain: gain, x: x, y: y, gap: !cut };
+        });
+        if (!best && open.length === 1 && !(open[0].r.pa || (open[0].r.w_ft && open[0].r.l_ft))) best = { gain: 0, x: x, y: open[0] };
+      });
+      if (!best) break;
+      // joined: across a gap, the wall's closing line between them is filled in too
+      var k = best.gap ? (2 * far + 1) | 1 : 5;
+      var C2 = padded([best.y.p, best.x.p], k + 2, W, H), cl = close(C2.m, C2.w, C2.h, k);
+      for (var q2 = 0; q2 < cl.length; q2++) cl[q2] |= C2.m[q2];
+      best.y.p = crop({ x0: C2.x0, y0: C2.y0, w: C2.w, h: C2.h, m: cl }); best.x.p = null;
+      named = named.filter(function (z) { return z.p || z.r; });
+    }
+    return named;
+  }
+
   /* ---------- 5. scale ---------- */
   function parseFt(s) {
     var m = /^\s*(\d+)\s*['’]\s*(?:(\d+(?:\.\d+)?)\s*["”])?/.exec(s || '');
@@ -5016,6 +5134,36 @@ var WALLS = (function () {
     }
     return inner > 0.25 * (N - 5) ? 0 : hits / (N - 5);
   }
+  // A quarter arc pivoting at a point along the gap (t), sweeping toward one end (dir +1 or -1)
+  function arcAt(F, inkd, W, H, t, dir, side, radius) {
+    var hinge = F.pt(t, 0), u = [F.u[0] * dir, F.u[1] * dir], n = [F.n[0] * side, F.n[1] * side], hits = 0, inner = 0, N = 16;
+    for (var k = 2; k < N - 1; k++) {
+      var th = k / N * Math.PI / 2, d = [Math.cos(th) * u[0] + Math.sin(th) * n[0], Math.cos(th) * u[1] + Math.sin(th) * n[1]], ok = false;
+      for (var rad = 0.8 * radius; rad < 1.15 * radius + 1; rad += 1) if (px(inkd, W, H, [hinge[0] + rad * d[0], hinge[1] + rad * d[1]])) { ok = true; break; }
+      if (ok) hits++;
+      if (px(inkd, W, H, [hinge[0] + 0.5 * radius * d[0], hinge[1] + 0.5 * radius * d[1]])) inner++;
+    }
+    return inner > 0.3 * (N - 3) ? 0 : hits / (N - 3);
+  }
+  // Bifold leaves: quarter arcs a leaf wide, pivoting where leaves meet, one per leaf (three to six
+  // leaves), or two meeting in the middle for a pair of leaves
+  function bifoldSide(F, inkd, W, H, h) {
+    if (F.w < 24) return 0;
+    for (var side = 1; side >= -1; side -= 2) {
+      if (Math.min(arcAt(F, inkd, W, H, 0.5, -1, side, F.w / 2), arcAt(F, inkd, W, H, 0.5, 1, side, F.w / 2)) >= 0.7) return side;
+      for (var n = 3; n <= 6; n++) {
+        if (F.w / n < 2 * h + 4) break;   // a leaf's arc has to reach clear of the wall
+        var hits = 0;
+        for (var j = 0; j <= n; j++) for (var dir = -1; dir <= 1; dir += 2) {
+          var t2 = j / n + dir / n;
+          if (t2 < -0.01 || t2 > 1.01) continue;
+          if (arcAt(F, inkd, W, H, j / n, dir, side, F.w / n) >= 0.7) hits++;
+        }
+        if (hits >= Math.ceil(0.75 * n)) return side;
+      }
+    }
+    return 0;
+  }
   function leafScore(F, inkd, W, H, ht, side, h) {
     var u = ht === 0 ? F.u : [-F.u[0], -F.u[1]], n = [F.n[0] * side, F.n[1] * side], h0 = F.pt(ht, 0), hinge = [h0[0] + n[0] * h, h0[1] + n[1] * h], best = 0;
     for (var ang = 15; ang < 91; ang += 3) {
@@ -5053,6 +5201,7 @@ var WALLS = (function () {
     var probe = Math.max(2 * kmax, Math.floor(0.4 * w));
     var outs = [1, -1].map(function (side) { return !inside(F.pt(0.5, side * (h + probe))); });
     var r = { w: w, exterior: outs[0] || outs[1], outs: outs, nspan: nspan, part: part, dark: dark };
+
     var best = { v: 0, ht: null, side: null };
     [0, 1].forEach(function (ht) {
       [1, -1].forEach(function (side) {
@@ -5062,6 +5211,12 @@ var WALLS = (function () {
       });
     });
     r.arc = best.v; r.hinge = best.ht; r.side = best.side;
+    var wideIn = ppf ? w / ppf * 12 : 0, oneDoor = !(wideIn > 42);
+    // a swing door (one leaf: no wider than 42"), then bifold leaves, whose frame lines look like
+    // glass and whose arcs can look like a wide swing
+    if (best.v >= 0.85 && oneDoor && !(nspan >= 2 && r.exterior)) { r.kind = 'swing'; return r; }
+    var bf = nspan >= 2 && r.exterior ? 0 : bifoldSide(F, inkd, W, H, h);
+    if (bf) { r.kind = 'bifold'; r.side = bf; return r; }
     if (nspan >= 2 && !(best.v >= 0.85 && !r.exterior)) { r.kind = r.exterior ? 'window' : 'sliding'; return r; }
     if (best.v >= 0.85) { r.kind = 'swing'; return r; }
     for (var sd = 1; sd >= -1; sd -= 2) {
@@ -5162,7 +5317,7 @@ var WALLS = (function () {
       var labeled = r.source === 'labeled';
       var w = labeled ? r.width : null, l = labeled ? r.length : null;
       var rr = { i: i, name: r.name, box: box, bi: box.map(Math.round), w_ft: w || null, l_ft: l || null,
-                 area_ft: (labeled && r.printedArea) || (w && l ? w * l : null) };
+                 area_ft: (labeled && r.printedArea) || (w && l ? w * l : null), pa: (labeled && r.printedArea) || null };
       var bv = 0, bs = null;
       sp.forEach(function (S, k) { var o = overlapBox(S, rr.bi); if (o > bv) { bv = o; bs = k; } });
       rr.space = bs;
@@ -5179,18 +5334,23 @@ var WALLS = (function () {
     var sc = scaleOf(named, hints, g, wall, br, kmax, W, H);
     var A = { g: g, w: W, h: H, wall: wall, kmax: kmax, breaks: br, spaces: sp, named: named, ppf: sc ? sc.ppf : null };
     var found = openings(A, hints && hints.list);
+    if (sc) {
+      var n0 = named.length;
+      A.named = named = joinByArea(named, sc.ppf, W, H, found, kmax);
+      if (named.length !== n0) found = openings(A, hints && hints.list);   // rooms on each side may have changed
+    }
     // each room's outline: its piece grown back to the walls' faces, traced and simplified
     var out = rooms.map(function () { return null; });
     named.forEach(function (x) {
       if (!x.p || !x.r) return;
       var C = padded([x.p], 4, W, H), grown = crop({ x0: C.x0, y0: C.y0, w: C.w, h: C.h, m: dilate(C.m, C.w, C.h, 5) });
-      var poly = rectify(simplify(contour(grown), Math.max(2, 0.8 * kmax)), 0.8 * kmax);
+      var poly = rectify(simplify(contour(grown), Math.max(2, 0.35 * kmax)), 0.8 * kmax);
       if (poly.length >= 3) out[x.r.i] = { poly: poly, area: grown.n };
     });
     return { w: W, h: H, kmax: kmax, ppf: sc ? sc.ppf : null, from: sc ? sc.from : null, rough: !!(sc && sc.rough), pinned: sc ? sc.pinned : [],
-             rooms: out, openings: found, breaks: br.length, spaces: sp.length, wall: wall,
+             rooms: out, openings: found, breaks: br.length, spaces: sp.length, wall: cleanWalls(wall, W, H, kmax),
              shared: sp.map(function (S, k) { return rs.filter(function (r) { return r.space === k; }).length; }).filter(function (n) { return n > 1; }).length };
   }
 
-  return { grayOf: grayOf, measure: measure, wallsOf: wallsOf, breaks: breaks, spaces: spaces, contour: contour, simplify: simplify };
+  return { grayOf: grayOf, measure: measure, wallsOf: wallsOf, cleanWalls: cleanWalls, breaks: breaks, spaces: spaces, contour: contour, simplify: simplify };
 })();

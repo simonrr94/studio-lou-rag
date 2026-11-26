@@ -4,7 +4,13 @@ Needs node; the engine's WALLS section is cut out of plan-engine.js into a scrat
 import json, os, sys, subprocess, re
 import numpy as np, cv2
 sys.argv, _args = sys.argv[:1], sys.argv[1:]
+import score as _score, random as _random
 from score import mock, poly_mask
+SEED = os.environ.get('SEED')
+if SEED:
+    class _R(_random.Random):
+        def __init__(self, x=None): super().__init__(str(x) + SEED)
+    _score.random = type('m', (), {'Random': _R})
 D = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP = '/tmp/jsparity'; os.makedirs(TMP, exist_ok=True)
 PLANS = _args or ['bedroom', 'studio', 'cabin', 'twostory', 'floor2']
@@ -39,7 +45,7 @@ def run(name):
     img = cv2.imread(os.path.join(D, 'plans', name + '.jpg')); g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY); H, W = g.shape
     rj, oj = mock(name, key, out, img)
     mr, mo = json.loads(rj)['rooms'], json.loads(oj)
-    hints = {'list': mo['openings'], 'overall': {'w': mo['overall']['width_ft'], 'h': mo['overall']['length_ft']}, 'dims': mo.get('dims', [])}
+    hints = {'list': [] if os.environ.get('NOLIST') else mo['openings'], 'overall': {'w': mo['overall']['width_ft'], 'h': mo['overall']['length_ft']}, 'dims': mo.get('dims', [])}
     base = os.path.join(TMP, name)
     json.dump({'w': W, 'h': H, 'rooms': [page_room(r) for r in mr], 'hints': hints}, open(base + '.json', 'w'))
     g.tofile(base + '.gray')

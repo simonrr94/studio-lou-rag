@@ -13,6 +13,22 @@ INIT = open('/home/claude/harness/init.js').read() if os.path.exists('/home/clau
 # printed overall sizes, as a model reading the dimension lines would report them
 OVERALL = {'studio': (None, 23.0), 'cabin': (20.0, 28.0), 'bedroom': (13 + 10 / 12, 12.0), 'twostory': (None, None), 'floor2': (None, None)}
 
+def core_rect(poly, H, W):
+    """The largest axis-aligned rectangle inside a room's outline."""
+    m = np.zeros((H, W), np.uint8); cv2.fillPoly(m, [np.array(poly, np.int32)], 1)
+    hgt = np.zeros(W, int); best = (0, 0, 0, 0, 0)
+    for y in range(H):
+        hgt = np.where(m[y] > 0, hgt + 1, 0)
+        st = []
+        for x in range(W + 1):
+            hh = hgt[x] if x < W else 0
+            s = x
+            while st and st[-1][1] >= hh:
+                s0, h0 = st.pop()
+                if h0 * (x - s0) > best[0]: best = (h0 * (x - s0), s0, y - h0 + 1, x, y + 1)
+                s = s0
+            st.append((s, hh))
+    return best[1], best[2], best[3], best[4]
 def mock(name, key, out, img):
     H, W = img.shape[:2]
     rnd = random.Random(name)   # the same nudges every run
@@ -20,8 +36,11 @@ def mock(name, key, out, img):
     for r in out['rooms']:
         if r.get('minor') or any(k.get('minor') and k['name'] == r['name'] for k in key['rooms']): continue
         p = np.array(r['poly'], float); x0, y0 = p.min(0); x1, y1 = p.max(0)
+        if os.environ.get('CORE'):   # CORE=1: the box drawn round the room's main rectangle only (bump-outs and legs left out)
+            x0, y0, x1, y1 = core_rect(r['poly'], H, W)
         j = lambda v, s: v + rnd.uniform(-s, s)
-        bx0, by0, bx1, by1 = j(x0, 0.03 * W), j(y0, 0.03 * H), j(x1, 0.03 * W), j(y1, 0.03 * H)
+        J = 0.03 * float(os.environ.get('JITTER', 1))   # JITTER=2: boxes twice as rough (the real model's can be)
+        bx0, by0, bx1, by1 = j(x0, J * W), j(y0, J * H), j(x1, J * W), j(y1, J * H)
         kr = [k for k in key['rooms'] if k['name'] == r['name']][0]
         pr = kr.get('printed') or ''
         wft = lft = None

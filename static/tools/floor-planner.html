@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=35"></script>
+  <script src="/static/tools/plan-engine.js?v=37"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -4711,6 +4711,83 @@
       };
       return R;
     }
+    /* ---------- Filling the room out ----------
+       Once a layout passes, the floor it leaves is put to use: a bench at the foot of the bed, a reading
+       chair with a side table against a wall away from the bed or the seating group (two in a big
+       living room), and a desk in a big bedroom. Each one only goes in if the quick checks stay as
+       they were (nothing new in burgundy or tight, the way to each side of the bed clear), and the
+       whole set has to pass the full check; otherwise the layout is offered as it was. */
+    function polyOf(p) { return GEO.place(FURNITURE.outline(p.spec), p.cx, p.cy, p.rot, 1 / 12); }
+    function moreFits(r, c, adds, bed) {
+      var pcs = c.pcs.concat(adds.map(function (p) { return layPiece(p); })), q = layoutQuick(r, pcs);
+      if (q.close || q.tight > c.qTight) return null;
+      if (bed && !bedApproach(r, bed, c.places.slice(1).concat(adds).map(polyOf))) return null;
+      return pcs;
+    }
+    function readingNook(r, c, sts, bed, away) {
+      var ch = FURNITURE.get('armchair'), sd = FURNITURE.get('side'), wIn = ch.w + 3 + sd.w;
+      var mid = c.places.reduce(function (s, p) { return { x: s.x + p.cx / c.places.length, y: s.y + p.cy / c.places.length }; }, { x: 0, y: 0 });
+      var spots = LAYOUT.wallSpots(sts, wIn).map(function (sp) {
+        var st = sts[sp.st], w = { x: st.a.x + st.u.x * sp.t, y: st.a.y + st.u.y * sp.t }, h = wIn / 24;
+        var corner = Math.min(sp.t - h - st.t0, st.t1 - sp.t - h) < 0.6 ? 2 : 0;
+        var far = Math.hypot(w.x - mid.x, w.y - mid.y);
+        if (away && away.some(function (a) { return Math.hypot(w.x - a.x, w.y - a.y) < 6; })) far = -1;
+        return { sp: sp, st: st, score: far + corner };
+      }).filter(function (o) { return o.score > 4; }).sort(function (a, b) { return b.score - a.score; }).slice(0, 24);
+      for (var i = 0; i < spots.length; i++) {
+        var o = spots[i];
+        for (var sg = -1; sg <= 1; sg += 2) {
+          var chair = LAYOUT.against(ch, o.st, o.sp.t - sg * (sd.w + 3) / 24), table = LAYOUT.against(sd, o.st, o.sp.t + sg * (ch.w + 3) / 24);
+          if (moreFits(r, c, [chair, table], bed)) return { places: [chair, table], at: { x: chair.cx, y: chair.cy } };
+        }
+      }
+      return null;
+    }
+    // The pieces that can still go in, in order; each set tried on top of the ones before it
+    function filled(r, c, sts, kind) {
+      var adds = [], names = [], base = { pcs: c.pcs, places: c.places, qTight: (layoutQuick(r, c.pcs) || {}).tight || 0 };
+      function take(places, name) {
+        var pcs = moreFits(r, cur(), places, kind === 'bed' ? c.places[0] : null);
+        if (!pcs) return false;
+        adds = adds.concat(places); names.push(name); return true;
+      }
+      function cur() { return { pcs: base.pcs.concat(adds.map(function (p) { return layPiece(p); })), places: base.places.concat(adds), qTight: base.qTight }; }
+      var area = PLAN.polyArea(r.ftShape);
+      if (kind === 'bed') {
+        var bed = c.places[0], f = GEO.turn({ x: 0, y: 1 }, bed.rot), bn = FURNITURE.get('bench');
+        if (bed.spec.id !== 'twin') {
+          var off = bed.spec.d / 24 + 2 / 12 + bn.d / 24;
+          take([{ spec: bn, cx: bed.cx + f.x * off, cy: bed.cy + f.y * off, rot: bed.rot }], 'a bench at the foot of the bed');
+        }
+        var nook = readingNook(r, cur(), sts, bed);
+        if (nook) take(nook.places, 'a reading chair');
+        if (!c.desk && area >= 180) {
+          var kd = FURNITURE.get('desk');
+          LAYOUT.wallSpots(sts, kd.w).some(function (sp) { return take(LAYOUT.desk(sts[sp.st], sp.t), 'a desk'); });
+        }
+      } else {
+        var n1 = readingNook(r, cur(), sts, null);
+        if (n1 && take(n1.places, 'a reading chair') && area >= 260) {
+          var n2 = readingNook(r, cur(), sts, null, [n1.at]);
+          if (n2 && take(n2.places, 'a second reading chair')) names.splice(names.length - 2, 2, 'two reading chairs');
+        }
+      }
+      if (!adds.length) return null;
+      var out = {};
+      for (var k in c) if (k !== 'full' && k !== 'option' && k !== 'local') out[k] = c[k];
+      out.pcs = base.pcs.concat(adds.map(function (p) { return layPiece(p); }));
+      out.places = base.places.concat(adds);
+      out.extras = names; out.nAdded = adds.length;
+      return out;
+    }
+    // A chosen layout, filled out if the fuller version still passes the full check
+    function fillOut(r, c, sts, kind, run) {
+      if (c.filledTried) return c.filledTo || c;
+      c.filledTried = true;
+      var f = filled(r, c, sts, kind);
+      if (f && run.full(f) && f.full.tight <= c.full.tight) { c.filledTo = f; return f; }
+      return c;
+    }
     function layoutsFor(r, done) {
       var poly = r.ftShape;
       LAY.landRoom = null;
@@ -4819,7 +4896,11 @@
       function finish(more) {
         if (!out.a) return done({ why: layoutWhy(r, sts) });
         var list = [];
-        ['a', 'b', 'c'].forEach(function (k) { if (out[k]) list.push(out[k].option || (out[k].option = layoutOption(r, out[k], k))); });
+        ['a', 'b', 'c'].forEach(function (k) {
+          if (!out[k]) return;
+          var c = fillOut(r, out[k], sts, 'bed', run);
+          list.push(c.option || (c.option = layoutOption(r, c, k)));
+        });
         done({ list: list, tried: run.tried, more: !!more });
       }
     }
@@ -4854,7 +4935,7 @@
       })();
       function finish(more) {
         if (!out.length) { if (!more) done({ why: livingWhy(r) }); return; }
-        done({ list: out.map(function (c) { return c.option || (c.option = livingOption(r, c)); }), tried: run.tried, more: !!more });
+        done({ list: out.map(function (c0) { var c = fillOut(r, c0, sts, 'seat', run); return c.option || (c.option = livingOption(r, c)); }), tried: run.tried, more: !!more });
       }
     }
     function livingWhy(r) {
@@ -4867,7 +4948,9 @@
     }
     function livingOption(r, c) {
       var avoid = c.media ? [GEO.place(FURNITURE.outline(c.media.spec), c.media.cx, c.media.cy, c.media.rot, 1 / 12)] : [];
-      var rug = LAYOUT.seatRug(r.ftShape, c, avoid), seat = c.seat.spec.id === 'loveseat' ? 'Loveseat' : 'Sofa';
+      // the rug goes under the seating group only (a reading chair across the room isn't on it)
+      var group = c.extras ? { places: c.places.slice(0, c.places.length - (c.nAdded || 0)), coffee: c.coffee, seat: c.seat } : c;
+      var rug = LAYOUT.seatRug(r.ftShape, group, avoid), seat = c.seat.spec.id === 'loveseat' ? 'Loveseat' : 'Sofa';
       var label = c.kind === 'tv' ? seat + ' facing the TV, ' + fmtFtIn(Math.round(c.dist * 2) / 2) + ' away'
         : c.kind === 'talk' ? 'Conversation layout, no TV'
         : 'Sectional in the corner' + (c.media ? ', facing the TV' : '');
@@ -4879,6 +4962,7 @@
       }
       if (c.sideTables === 'one') parts.push('a side table');
       else if (c.sideTables) parts.push('side tables');
+      (c.extras || []).forEach(function (x) { parts.push(x); });
       if (rug) parts.push((/^(8|11|18)'/.test(RUG.get(rug.size).label) ? 'an ' : 'a ') + RUG.get(rug.size).label + ' rug');
       var notes = ['With ' + (parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0]) + '.'];
       if (c.media) notes.push('Sized for a ' + c.media.tv + '" TV.');
@@ -4899,7 +4983,7 @@
     function layoutOption(r, c, which) {
       var bed = c.places[0], size = BED_WORD[c.g.size] + ' bed', rugAvoid = [];
       c.places.forEach(function (p) {
-        if (p.spec.role === 'dresser' || p.spec.role === 'desk') rugAvoid.push(GEO.place(FURNITURE.outline(p.spec), p.cx, p.cy, p.rot, 1 / 12));
+        if (p.spec.role === 'dresser' || p.spec.role === 'desk' || p.spec.role === 'seat' || p.spec.role === 'side') rugAvoid.push(GEO.place(FURNITURE.outline(p.spec), p.cx, p.cy, p.rot, 1 / 12));
       });
       var rug = LAYOUT.bedRug(r.ftShape, bed, c.st, rugAvoid);
       var s = c.sides.slice().sort(function (p, q) { return p - q; }), sideText;
@@ -4915,6 +4999,7 @@
       if (ns) parts.push(ns === 2 ? 'two nightstands' : 'a nightstand');
       if (c.dresser) parts.push('a dresser');
       if (c.desk) parts.push('a desk');
+      (c.extras || []).forEach(function (x) { parts.push(x); });
       if (rug) parts.push((/^(8|11|18)'/.test(RUG.get(rug.size).label) ? 'an ' : 'a ') + RUG.get(rug.size).label + ' rug');
       var what = parts.length ? parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0] : '';
       var notes = [];
@@ -5590,7 +5675,7 @@
           if (rec.hasWalls !== false) { try { state.walls = { map: SNAP.analyze(img), words: rec.words || [] }; } catch (err) { state.walls = null; } }
           // a plan measured walls first keeps its walls from WALLS (see useWallsMap)
           if (state.walls && state.scale && state.scale.from === 'walls' && typeof WALLS !== 'undefined') {
-            try { var G = WALLS.grayOf(img), wl = WALLS.wallsOf(G.g, G.w, G.h); if (wl) useWallsMap(wl.wall, G.w, G.h, wl.kmax); } catch (err) {}
+            try { var G = WALLS.grayOf(img), wl = WALLS.wallsOf(G.g, G.w, G.h); if (wl) useWallsMap(WALLS.cleanWalls(wl.wall, G.w, G.h, wl.kmax), G.w, G.h, wl.kmax); } catch (err) {}
           }
           state.rooms = rec.rooms || []; state.scale = rec.scale || null;
           state.pieces = rec.pieces || []; state.doors = rec.doors || [];
