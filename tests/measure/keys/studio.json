@@ -1,0 +1,10 @@
+{"ppf": 24.96,
+ "doors": [{"type": "swing", "a": [127, 572], "b": [199, 572], "into": "Entrance", "hinge": "b"},
+           {"type": "swing", "a": [427, 504], "b": [427, 563], "into": "Bedroom", "hinge": "b"},
+           {"type": "sliding", "a": [135, 459], "b": [208, 459], "into": null}],
+ "windows": [{"a": [250, 46], "b": [340, 46]}, {"a": [752, 458], "b": [752, 548]}],
+ "openings": [],
+ "splits": [{"a": [241, 47], "b": [241, 227], "rooms": ["Kitchen", "Living Room"]}, {"a": [241, 368], "b": [421, 368], "rooms": ["Entrance", "Living Room"]}],
+ "rooms": [{"name": "Kitchen", "seed": [160, 140], "printed": "46 sq ft"}, {"name": "Living Room", "seed": [500, 200], "printed": "208 sq ft"},
+           {"name": "Bath", "seed": [150, 330], "printed": "53 sq ft"}, {"name": "Entrance", "seed": [300, 520], "printed": "87 sq ft"},
+           {"name": "Bedroom", "seed": [580, 470], "printed": "101 sq ft"}]}

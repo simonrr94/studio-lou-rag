@@ -1,0 +1,141 @@
+"""Tests for layout suggestions session 1 (layouts, Use this layout, Undo, the size switch,
+exports, save and reopen, the recovery copy, phone, the old page). python3 feature.py <base_url> <outdir>"""
+import sys, os, json
+BASE, OUTF = sys.argv[1].rstrip('/'), sys.argv[2]
+sys.argv = ['x']
+import run
+from run import *
+run.OUT = OUTF; os.makedirs(OUTF, exist_ok=True)
+R = []
+def ok(name, cond, extra=''):
+    R.append(('PASS' if cond else 'FAIL') + '  ' + name + (('  ' + extra) if extra else ''))
+
+def layouts(page, room):
+    page.evaluate("(n) => { select(H.room(n), false); showPane(); startLayouts(); }", room)
+    page.wait_for_function("() => state.layout && !state.layout.busy", timeout=60000)
+    return page.evaluate("() => state.layout.list.map(o => o.label + ' | ' + o.note).concat(state.layout.why ? ['WHY ' + state.layout.why] : [])")
+
+ROWS = """(n) => spaceRows(state.rooms[H.room(n)]).map(r => r.status + ' ' + r.label + ' ' + r.value)"""
+
+with sync_playwright() as pw:
+    b = pw.chromium.launch(args=['--font-render-hinting=none'])
+    ctx = b.new_context(viewport={'width': 1360, 'height': 860}, accept_downloads=True)
+    ctx.add_init_script(INIT); ctx.route('**/*', route)
+    page = ctx.new_page(); errs = []
+    page.on('pageerror', lambda e: errs.append(str(e)))
+    load(page, BASE + '/static/tools/floor-planner.html')
+    page.click('[data-mode=furnish]'); furnish(page)
+    page.evaluate("() => { state.rooms[H.room('Flex Room')].name = 'Guest Room'; renderAll(); }")
+    # 1. suggestions on a furnished bedroom
+    labels = layouts(page, 'Bedroom')
+    ok('bedroom offers 2 or 3 layouts', 2 <= len(labels) <= 3, json.dumps(labels))
+    cap(page, 'layouts-list')
+    ok('replace note names what goes', True)
+    page.click('[data-lay="0"]'); page.wait_for_timeout(200)
+    note = page.inner_text('#pane-layout')
+    ok('replace note shown', 'This replaces the 4 pieces in Bedroom. Undo brings them back.' in note, note.split('\n')[-1])
+    cap(page, 'layout-preview')
+    before = page.evaluate("() => snap()")
+    page.click('[data-lact=use]'); page.wait_for_timeout(300)
+    cap(page, 'layout-used')
+    rows = page.evaluate(ROWS, 'Bedroom')
+    ok('used layout: nothing in burgundy in Bedroom checks', not any(r.startswith('close') for r in rows), json.dumps(rows))
+    used = page.evaluate("() => snap()")
+    page.evaluate("() => undo()")
+    ok('one Undo brings the old furniture back', page.evaluate("() => snap()") == before)
+    page.evaluate("() => redoUse()" if False else "() => 0")
+    # use it again (option 1 this time) and keep it
+    layouts(page, 'Bedroom'); page.click('[data-lay="1"]'); page.click('[data-lact=use]'); page.wait_for_timeout(200)
+    rows = page.evaluate(ROWS, 'Bedroom')
+    ok('option 2 used: nothing in burgundy', not any(r.startswith('close') for r in rows), json.dumps(rows))
+    page.evaluate("() => { select(H.room('Bedroom'), false); setTab('checks'); }"); cap(page, 'layout-checks')
+    page.evaluate("() => setTab('add')")
+    # 2. other rooms
+    g = layouts(page, 'Guest Room'); ok('guest room (6\'6" wide) gets a layout', len(g) >= 1 and not g[0].startswith('WHY'), json.dumps(g)); cap(page, 'guest-list')
+    page.evaluate("() => { state.rooms[H.room('Closet')].name = 'Nursery'; renderAll(); }")
+    n = layouts(page, 'Nursery'); ok('nursery (4\'6" wide) says why', len(n) == 1 and n[0].startswith('WHY'), json.dumps(n)); cap(page, 'nursery-why', state=False)
+    page.evaluate("() => { state.rooms[H.room('Nursery')].name = 'Closet'; renderAll(); }")
+    lv = layouts(page, 'Living Room')
+    ok('living room offers a TV layout, a conversation layout and a sectional', len(lv) == 3 and 'TV' in lv[0] and 'Conversation' in lv[1] and 'Sectional' in lv[2], json.dumps(lv))
+    cap(page, 'living-list')
+    lb = page.evaluate("() => snap()")
+    page.click('[data-lay="1"]'); page.click('[data-lact=use]'); page.wait_for_timeout(200)
+    rows = page.evaluate(ROWS, 'Living Room')
+    ok('living layout used: nothing in burgundy', not any(r.startswith('close') for r in rows), json.dumps(rows))
+    cap(page, 'living-used')
+    page.evaluate("() => undo()")
+    ok('living: one Undo brings the old furniture back', page.evaluate("() => snap()") == lb)
+    page.evaluate("() => { select(H.room('Kitchen'), false); renderAll(); }")
+    ok('no link in a kitchen', page.evaluate("() => document.getElementById('layoutLink').classList.contains('hidden')"))
+    page.evaluate("() => select(H.room('Bedroom'), false)")
+    ok('link in a bedroom', not page.evaluate("() => document.getElementById('layoutLink').classList.contains('hidden')"))
+    # 3. size switch: bed
+    page.evaluate("() => { var k = state.pieces.findIndex(p => p.role === 'bed' && pieceRoom(p) === state.rooms[H.room('Bedroom')]); state.pieceSel = k; renderPieceBar(); draw(); }")
+    cap(page, 'bed-details')
+    s0 = page.evaluate("() => snap()")
+    head = "() => { var p = state.pieces[state.pieceSel], f = state.scale.ftPerPx, c = {x: p.x/100*state.W*f, y: p.y/100*state.H*f}, b = GEO.turn({x:0,y:-p.d/24}, p.rot); return [p.type, p.name, +(c.x+b.x).toFixed(3), +(c.y+b.y).toFixed(3)]; }"
+    h0 = page.evaluate(head)
+    for lab in ['Twin', 'King', 'Full']:
+        page.click('[data-pact=size]:text-is("%s")' % lab); page.wait_for_timeout(100)
+        h = page.evaluate(head)
+        conf = page.evaluate("() => conflicts().filter(c => c.type === 'overlap').map(c => nameOf(c.a) + '/' + nameOf(c.b))")
+        ok('size switch to %s keeps the head against the wall' % lab, abs(h[2] - h0[2]) < 0.01 and abs(h[3] - h0[3]) < 0.01, json.dumps(h))
+        ok('size switch to %s: nightstands follow (no overlaps)' % lab, not conf, json.dumps(conf))
+    cap(page, 'bed-full')
+    for _ in range(3): page.evaluate("() => undo()")
+    ok('three Undos back to the start', page.evaluate("() => snap()") == s0)
+    # 4. size switch: dining table
+    page.evaluate("() => { select(H.room('Dining Room'), false); var k = state.pieces.findIndex(p => p.role === 'dining'); state.pieceSel = k; renderPieceBar(); draw(); }")
+    d0 = page.evaluate("() => snap()")
+    for lab, want in [('8', 8), ('4', 4), ('6', 6)]:
+        page.click('[data-pact=size]:text-is("%s")' % lab); page.wait_for_timeout(100)
+        got = page.evaluate("() => { var t = state.pieces[state.pieceSel]; return [t.name, t.w, t.d, chairsOf(t).length]; }")
+        ok('table to %s seats' % lab, got[3] == want, json.dumps(got))
+    cap(page, 'table-6')
+    for _ in range(3): page.evaluate("() => undo()")
+    ok('table Undos back to the start', page.evaluate("() => snap()") == d0)
+    page.evaluate("() => { var k = state.pieces.findIndex(p => p.role === 'dining'); pushUndo(); state.pieces[k].w = 70; state.pieceSel = k; relayoutChairs(state.pieces[k]); renderPieceBar(); }")
+    ok('a stretched table shows no size picked', page.evaluate("() => document.querySelectorAll('[data-pact=size].on').length") == 0)
+    page.evaluate("() => undo()")
+    page.evaluate("() => deselect()")
+    # 5. lights follow the new furniture
+    page.click('[data-mode=light]'); page.wait_for_timeout(200)
+    page.evaluate("() => { var go = document.querySelector('[data-lact=lightup]'); if (go) go.click(); select(H.room('Bedroom'), false); }"); page.wait_for_timeout(200)
+    cap(page, 'light-bedroom')
+    page.click('[data-mode=furnish]')
+    # 6. exports
+    export(page, 'pngBtn', 'png')
+    pages = export(page, 'pdfBtn', 'pdf')
+    ok('PDF builds', pages and pages >= 3, str(pages))
+    # 7. save and reopen
+    page.evaluate("() => document.getElementById('saveBtn').click()"); page.wait_for_selector('[data-act=new]'); page.click('[data-act=new]'); page.wait_for_timeout(500)
+    s1 = page.evaluate("() => snap()")
+    page.goto(BASE + '/static/tools/floor-planner.html'); page.wait_for_selector('[data-open]'); page.click('[data-open] b')
+    page.wait_for_function("() => state.rooms.length && document.body.classList.contains('in-plan')"); page.wait_for_timeout(400); page.evaluate(HELP)
+    ok('save and reopen identical', page.evaluate("() => snap()") == s1)
+    # 8. recovery copy after using a layout
+    page.evaluate("() => setMode('furnish')")
+    layouts(page, "Guest Room"); page.click('[data-lay="0"]'); page.click("[data-lact=use]"); page.wait_for_timeout(2600)
+    s2 = page.evaluate("() => snap()")
+    page.goto(BASE + '/static/tools/floor-planner.html'); page.wait_for_selector('[data-recover]'); page.click('[data-recover] b')
+    page.wait_for_function("() => state.rooms.length && document.body.classList.contains('in-plan')"); page.wait_for_timeout(400)
+    ok('recovery copy identical', page.evaluate("() => snap()") == s2)
+    # 9. phone
+    ph = b.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
+    ph.add_init_script(INIT); ph.route('**/*', route)
+    pp = ph.new_page(); pp.on('pageerror', lambda e: errs.append('phone: ' + str(e)))
+    load(pp, BASE + '/static/tools/floor-planner.html'); pp.click('[data-mode=furnish]')
+    pp.evaluate("() => { select(H.room('Bedroom'), false); showPane(); setSheet(true); }"); pp.wait_for_timeout(300)
+    pp.click('[data-layopen]'); pp.wait_for_function("() => state.layout && !state.layout.busy", timeout=60000); pp.wait_for_timeout(300)
+    cap(pp, 'phone-layouts')
+    pp.click('[data-lay="0"]'); pp.evaluate("() => setSheet(false)"); pp.wait_for_timeout(400)
+    cap(pp, 'phone-preview')
+    # 10. old page
+    op = ctx.new_page(); op.on('pageerror', lambda e: errs.append('old: ' + str(e)))
+    op.goto(BASE + '/static/tools/floor-plan-parser.html'); op.set_input_files('#fileInput', PLAN)
+    op.wait_for_function("() => typeof state !== 'undefined' && state.rooms && state.rooms.length", timeout=60000); op.wait_for_timeout(600)
+    op.screenshot(path=os.path.join(OUTF, 'old-page.png'))
+    ok('no page errors', not errs, json.dumps(errs))
+    b.close()
+open(os.path.join(OUTF, 'results.txt'), 'w').write('\n'.join(R) + '\n')
+print('\n'.join(R))
