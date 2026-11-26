@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=33"></script>
+  <script src="/static/tools/plan-engine.js?v=34"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -4644,11 +4644,12 @@
           Math.abs((o.b.x - st.a.x) * st.n.x + (o.b.y - st.a.y) * st.n.y) < 0.75; });
         var sides = base.lines.filter(function (l) { return l.piece === 0 && l.rule === 'bed'; }).map(function (l) { return l.against ? 0 : l.inch; });
         var minSide = sides.length ? Math.min.apply(null, sides) : 0;
-        // only a twin set into a corner on purpose has a side against the wall
+        // only a bed set into a corner on purpose has a side against the wall
         if (!g.corner && sides.some(function (v) { return v === 0; })) return;
         // Centered on its wall comes first: every foot off the middle costs as much as a tight spot.
-        // A twin set into a corner on purpose (a narrow room) is judged as a corner, not as off center.
-        var gScore = base.tight * 10 + g.offCenter * 10 + (g.corner ? 8 : 0) + ((g.corner ? 1 : 2) - g.nightstands) * 4 + (g.window ? 3 : 0) + (facing ? 1 : 0) + (doorWall ? 2 : 0) - Math.min(minSide, 36) / 36;
+        // A bed set into a corner on purpose (a narrow room) is judged as a corner, not as off center;
+        // under a window, the corner that keeps it nearest the window's middle wins.
+        var gScore = base.tight * 10 + g.offCenter * 10 + (g.corner ? 8 + g.winOff * 2 : 0) + ((g.corner ? 1 : 2) - g.nightstands) * 4 + (g.window ? 3 : 0) + (facing ? 1 : 0) + (doorWall ? 2 : 0) - Math.min(minSide, 36) / 36;
         // the dresser: on whichever wall leaves it the most floor in front, with nothing in burgundy
         var best = null;
         var near = g.pieces.map(function (p) { return GEO.place(FURNITURE.outline(p.spec), p.cx, p.cy, p.rot, 1 / 12); });

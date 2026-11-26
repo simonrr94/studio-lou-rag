@@ -3963,6 +3963,12 @@ var LAYOUT = (function () {
     return out;
   }
 
+  // How far a piece under a window sits off the window's middle (feet; 0 when it isn't under one)
+  function winOff(st, t, wIn) {
+    var h = wIn / 24, best = null;
+    st.windows.forEach(function (w) { if (t + h > w[0] && t - h < w[1]) { var d = Math.abs(t - (w[0] + w[1]) / 2); if (best == null || d < best) best = d; } });
+    return best || 0;
+  }
   function fits(st, t, wIn) { var h = wIn / 24; return t - h >= st.t0 - 1e-6 && t + h <= st.t1 + 1e-6; }
   function underWindow(st, t, wIn) { var h = wIn / 24; return st.windows.some(function (w) { return t + h > w[0] + 0.05 && t - h < w[1] - 0.05; }); }
   function against(spec, st, t, out) {
@@ -3989,7 +3995,7 @@ var LAYOUT = (function () {
   // A bed with its head to each stretch, centered: on the wall, or on the stretch when a door or
   // opening takes part of the wall. Nightstands come in pairs, the same on both sides: 24" ones, or
   // 18" ones where those don't fit, or none. A twin can also go into a corner, one side against the
-  // wall (a narrow room), with one nightstand on its open side.
+  // wall (a narrow room), with one nightstand on its open side; so can a full or a queen.
   var SMALL_NS = { w: 18, d: 16 };
   function beds(sts, sizes) {
     var ns = FURNITURE.get('nightstand'), out = [];
@@ -4006,10 +4012,12 @@ var LAYOUT = (function () {
             if (spots.every(function (nt) { return fits(st, nt, nsk.w); })) { spots.forEach(function (nt) { pcs.push(against(nsk, st, nt)); }); break; }
           }
           out.push({ size: spec.id, st: i, edge: st.edge, t: t, pieces: pcs, nightstands: pcs.length - 1, corner: !!corner,
-                     window: underWindow(st, t, spec.w), offCenter: corner ? 0 : Math.abs(t - st.L / 2) });
+                     window: underWindow(st, t, spec.w), offCenter: corner ? 0 : Math.abs(t - st.L / 2), winOff: winOff(st, t, spec.w) });
         }
         uniq([st.L / 2, (st.t0 + st.t1) / 2]).forEach(function (t) { add(t, false); });
-        if (spec.w < 48) {
+        // A twin, full or queen can also go into a corner, one side against the wall: in a narrow room
+        // one usable side beats two tight ones, and leaves floor for storage (a king stays centered)
+        if (spec.w < 70) {
           if (st.t0 < 0.1) add(st.t0 + spec.w / 24 + GAP, true);
           if (st.t1 > st.L - 0.1) add(st.t1 - spec.w / 24 - GAP, true);
         }
