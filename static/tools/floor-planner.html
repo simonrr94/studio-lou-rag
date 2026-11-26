@@ -789,6 +789,7 @@
     // A fresh plan image: canvas size, the copy sent to the model, and an empty plan
     function loadImageState(img) {
       // Display canvas
+      state.imgData = null; state.imgKey = 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       var s = Math.min(1, MAX_CANVAS / Math.max(img.naturalWidth, img.naturalHeight));
       state.W = Math.round(img.naturalWidth * s);
       state.H = Math.round(img.naturalHeight * s);
@@ -4801,8 +4802,8 @@
        eraser strokes, and the words the wall reader found. The wall map is read again
        from the image on opening. Saving again updates the same plan. */
     var SAVE_LIMIT = 5;
-    var SAVES = (function () {
-      var DB = 'studiolou-floorplanner', STORE = 'plans', dbp = null;
+    function planStore(DB, STORE) {
+      var dbp = null;
       function db() {
         if (!dbp) dbp = new Promise(function (res, rej) {
           if (!window.indexedDB) { rej(new Error('nostore')); return; }
@@ -4829,7 +4830,8 @@
         put: function (rec) { return run('readwrite', function (st) { return st.put(rec); }); },
         remove: function (id) { return run('readwrite', function (st) { return st['delete'](id); }); }
       };
-    })();
+    }
+    var SAVES = planStore('studiolou-floorplanner', 'plans');
     function unsavedWork() { return !!(state.img && state.dirty && (UNDO.length || state.pieces.length)); }
     function updateSaveBtn() {
       var b = $('saveBtn'); if (!b) return;
@@ -4849,11 +4851,17 @@
       return 'Floor plan, ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     }
     // The plan as stored: everything needed to put it back the way it was
-    function planRecord(id, name) {
+    // The plan image as stored, made once per plan (it never changes) and reused by every save
+    function planImage() {
+      if (state.imgData) return state.imgData;
       var c = document.createElement('canvas'); c.width = state.W; c.height = state.H;
       var x = c.getContext('2d'); x.fillStyle = '#ffffff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(state.img, 0, 0, state.W, state.H);
       var image = c.toDataURL('image/png');
       if (image.length > 3500000) image = c.toDataURL('image/jpeg', 0.92);   // photos keep well as JPEG
+      return (state.imgData = image);
+    }
+    function planRecord(id, name, noImage) {
+      var image = noImage ? null : planImage();
       // a small picture of the plan as it looks now, furniture and all
       draw(true);
       var t = document.createElement('canvas'), tw = 360, th = Math.round(360 * state.H / state.W);
@@ -4917,6 +4925,7 @@
       go.then(function () {
         state.savedId = id; state.planName = rec.name; state.dirty = false;
         updateSaveBtn(); closeSave();
+        forgetRecovery(false);
       }, function (err) {
         var quota = err && /quota/i.test(err.name + ' ' + err.message);
         renderSave(state.saveList, quota ? 'Your browser is out of room for saved plans. Delete one from the start screen and try again.' : 'This plan couldn’t be saved. Try again.');
@@ -4948,6 +4957,12 @@
       showStatus('loading', 'Opening your plan...', '');
       SAVES.get(id).then(function (rec) {
         if (!rec) throw new Error('missing');
+        openRecord(rec, null);
+      }).catch(function () { showStatus('error', 'This saved plan couldn’t be opened.', 'Try another, or upload the plan again.', false); });
+    }
+    // Put a stored plan back on screen. `rescue` is set for the recovery copy: its image is passed in,
+    // it reopens with unsaved changes, and Save goes back to the saved plan it came from (if that's still kept).
+    function openRecord(rec, rescue) {
         var img = new Image();
         img.onload = function () {
           loadImageState(img);
@@ -4964,14 +4979,89 @@
           var ids = [0];
           state.rooms.concat(state.pieces, state.doors, state.lights).forEach(function (o) { if (typeof o.id === 'number') ids.push(o.id); });
           state.nextId = Math.max.apply(null, ids) + 1;
-          state.savedId = rec.id; state.planName = rec.name; state.dirty = false;
+          state.imgData = rec.image;
+          if (rescue) {
+            state.imgKey = rescue.imgKey; REC.imgKey = rescue.imgKey;
+            state.savedId = rescue.savedId; state.planName = rec.planName || ''; state.dirty = true;
+          } else {
+            state.savedId = rec.id; state.planName = rec.name; state.dirty = false;
+          }
           showScreen('result');
           if ((rec.mode === 'furnish' || rec.mode === 'light') && state.scale) setMode(rec.mode);
           renderAll(); renderPieceBar(); renderDoorBar(); updateSaveBtn();
         };
         img.onerror = function () { showStatus('error', 'This saved plan couldn’t be opened.', 'Its picture may have been damaged. Try another, or upload the plan again.', false); };
         img.src = rec.image;
-      }).catch(function () { showStatus('error', 'This saved plan couldn’t be opened.', 'Try another, or upload the plan again.', false); });
+    }
+
+    /* ---------- Recovery copy ----------
+       Whatever plan is open, with changes not yet saved, is kept in its own browser database
+       (studiolou-floorplanner-recovery): a work record (everything Save keeps, without the image,
+       plus which saved plan it came from) and an image record written once per plan. A check every
+       second writes the work once it has held still for a second and nothing is being dragged, and
+       straight away when the page is hidden (phones close background tabs without warning). Saving
+       the plan or starting a new one clears it. If the page closed first, the start screen offers
+       "Pick up where you left off". Saved plans only change when Save is pressed. */
+    var RECOVERY = planStore('studiolou-floorplanner-recovery', 'work');
+    var REC = { last: null, seen: null, busy: false, imgKey: null };
+    function recoveryKey() {
+      return snap() + '|' + state.mode + '|' + state.planName + '|' + (state.savedId || '') + '|' + (state.lightMap ? 1 : 0);
+    }
+    function recoveryTick(now) {
+      if (!state.img || !state.rooms.length || !state.dirty || !state.imgKey || REC.busy || state.drag) return;
+      if (!document.body.classList.contains('in-plan')) return;   // only a plan on screen
+      var key = recoveryKey();
+      if (key === REC.last) return;
+      if (!now && key !== REC.seen) { REC.seen = key; return; }   // still changing: wait until it holds still
+      writeRecovery(key);
+    }
+    function writeRecovery(key) {
+      var rec;
+      try { rec = planRecord('work', defaultName(), true); } catch (err) { return; }
+      rec.imgKey = state.imgKey; rec.savedId = state.savedId || null; rec.planName = state.planName || '';
+      REC.busy = true;
+      var first = REC.imgKey === state.imgKey ? Promise.resolve() :
+        RECOVERY.put({ id: 'image', imgKey: state.imgKey, image: planImage() }).then(function () { REC.imgKey = state.imgKey; });
+      first.then(function () { return RECOVERY.put(rec); })
+        .then(function () { REC.last = key; }, function () { /* best effort: the next change tries again */ })
+        .then(function () { REC.busy = false; });
+    }
+    // Saved: the copy has nothing left to rescue. New plan or Discard: the image goes too.
+    function forgetRecovery(all) {
+      REC.last = REC.seen = null;
+      RECOVERY.remove('work').catch(function () {});
+      if (all) { REC.imgKey = null; RECOVERY.remove('image').catch(function () {}); }
+    }
+    function openRecovery() {
+      showStatus('loading', 'Opening your plan...', '');
+      Promise.all([RECOVERY.get('work'), RECOVERY.get('image')]).then(function (got) {
+        var w = got[0], im = got[1];
+        if (!w || !im || im.imgKey !== w.imgKey) throw new Error('missing');
+        var finish = function (savedId) { w.image = im.image; openRecord(w, { imgKey: w.imgKey, savedId: savedId }); };
+        if (!w.savedId) return finish(null);
+        return SAVES.get(w.savedId).then(function (s) { finish(s ? w.savedId : null); }, function () { finish(null); });
+      }).catch(function () { showStatus('error', 'Your unsaved plan couldn’t be opened.', 'Try a saved plan, or upload the plan again.', false); });
+    }
+    function renderRecovery() {
+      Promise.all([RECOVERY.get('work'), RECOVERY.get('image')]).then(function (got) {
+        var w = got[0], ok = w && got[1] && got[1].imgKey === w.imgKey;
+        $('recoverWrap').classList.toggle('hidden', !ok);
+        if (!ok) return;
+        $('recoverList').innerHTML = '<div class="saved-card" role="button" tabindex="0" data-recover="1"><img src="' + w.thumb + '" alt="">' +
+          '<b>' + esc(w.name) + '</b><small>Unsaved changes, ' + savedWhen(w.savedAt) + '</small>' +
+          '<button class="saved-del" data-discard="1" aria-label="Discard these changes">Discard</button></div>';
+        tellParent();
+      }, function () { $('recoverWrap').classList.add('hidden'); });
+    }
+    function onRecoverClick(e) {
+      var del = e.target.closest('[data-discard]');
+      if (del) {
+        e.stopPropagation();
+        if (!del.classList.contains('sure')) { del.classList.add('sure'); del.textContent = 'Discard?'; return; }   // a second tap confirms
+        forgetRecovery(true); $('recoverWrap').classList.add('hidden'); tellParent();
+        return;
+      }
+      if (e.target.closest('[data-recover]')) openRecovery();
     }
 
     /* ---------- Keys and gestures ----------
@@ -5741,7 +5831,7 @@
       var s = document.querySelectorAll('.screen');
       for (var i = 0; i < s.length; i++) s[i].classList.toggle('active', s[i].id === 'screen-' + id);
       document.body.classList.toggle('in-plan', id === 'result');   // the phone layout locks the page to the screen
-      if (id === 'upload') renderSavedList();
+      if (id === 'upload') { renderSavedList(); renderRecovery(); }
       tellParent();
     }
 
@@ -5817,7 +5907,8 @@
 
     function reset() {
       if (unsavedWork() && !confirm('Start a new plan? Changes to this one since you last saved will be lost.')) return;
-      state.img = null; state.savedId = null; state.dirty = false; state.planName = ''; state.rooms = []; state.selected = -1; state.sendB64 = '';
+      forgetRecovery(true);
+      state.img = null; state.imgData = null; state.imgKey = null; state.savedId = null; state.dirty = false; state.planName = ''; state.rooms = []; state.selected = -1; state.sendB64 = '';
       state.walls = null; state.scale = null; state.snapInfo = null; state.rugCheck = null;
       state.pieces = []; state.pieceSel = -1; state.extra = []; state.doors = []; state.doorSel = -1;
       state.openHints = null; state.openingsDone = false; state.shapesDone = false; state.found = null;
@@ -6001,8 +6092,13 @@
       $('saveVeil').addEventListener('click', function (e) { if (e.target === this) closeSave(); });
       $('saveBody').addEventListener('click', onSaveClick);
       $('savedList').addEventListener('click', onSavedListClick);
+      $('recoverList').addEventListener('click', onRecoverClick);
+      $('recoverList').addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-recover]')) { e.preventDefault(); openRecovery(); } });
+      setInterval(function () { recoveryTick(false); }, 1000);
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') recoveryTick(true); });
+      window.addEventListener('pagehide', function () { recoveryTick(true); });
       window.addEventListener('beforeunload', function (e) { if (unsavedWork()) { e.preventDefault(); e.returnValue = ''; } });
-      renderSavedList();
+      renderSavedList(); renderRecovery();
       $('keysBtn').addEventListener('click', function () { openKeys(); });
       $('keysClose').addEventListener('click', closeKeys);
       $('keysVeil').addEventListener('click', function (e) { if (e.target === this) closeKeys(); });
@@ -6077,6 +6173,11 @@
         <p class="big">Drop your floor plan here</p>
         <p class="small">Architectural drawings and listing plans read best. Phone photos work too if the plan is flat and well lit. PNG, JPG, or WEBP.</p>
         <span class="btn-primary">Choose a file</span>
+      </div>
+      <div class="saved hidden" id="recoverWrap">
+        <p class="eyebrow">Pick up where you left off</p>
+        <div class="saved-grid" id="recoverList"></div>
+        <p class="saved-note">Your last plan, kept because the page closed before it was saved. Changes to another plan replace it.</p>
       </div>
       <div class="saved hidden" id="savedWrap">
         <p class="eyebrow">Your saved plans</p>
