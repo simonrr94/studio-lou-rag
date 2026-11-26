@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=40"></script>
+  <script src="/static/tools/plan-engine.js?v=41"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -3728,7 +3728,7 @@
         else if (r.type === 'talk') { label = 'Conversation: the ' + A + ' and the ' + B; value = fmtFtIn(r.ft) + ' apart'; }
         else if (r.type === 'tv') { var pc = state.pieces[r.a]; label = 'TV viewing distance (' + Math.round(pc.tv) + '" screen)'; value = fmtFtIn(r.ft) + ' from the ' + B; }
         else { label = 'Walkway between the ' + A + ' and ' + (B ? 'the ' + B : 'the wall'); value = inchText(r.inch); }
-        return { label: label, value: value, status: r.status, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0]), r.near) };
+        return { label: label, value: value, status: r.status, kind: r.type, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0]), r.near) };
       });
       var pcs = piecesFt(), probs = [];
       Object.keys(sq).forEach(function (i) { if (inRoom(+i)) rows.unshift({ label: sq[i].label, value: sq[i].value, status: sq[i].status, word: 'Too narrow' }); });
@@ -4729,6 +4729,7 @@
           var rows = layoutFull(r, c.pcs);
           R.tried++;
           c.full = tally(rows);
+          c.tightKinds = rows.filter(function (rw) { return rw.status === 'tight'; }).map(function (rw) { return rw.kind || 'other'; });
           // narrow spots on the way in: the ones that are there whatever goes in the room (in burgundy
           // or tight) don't count
           if ((c.full.close || c.full.tight) && rows.some(function (rw) { return rw.status !== 'ok' && rw.pinchKey; })) {
@@ -4873,7 +4874,7 @@
         }
       } else if (kind === 'dining') {
         // a console table along a wall, lined up with the table (a sideboard for serving)
-        var cn = FURNITURE.get('console'), tb = c.places[0], rugF = LAYOUT.tableRug(r.ftShape, tb, []);
+        var cn = FURNITURE.get('sideboard'), cn2 = FURNITURE.get('console'), tb = c.places[0], rugF = LAYOUT.tableRug(r.ftShape, tb, []);
         var rugPl = rugF ? RUG.outline(RUG.get(rugF.size), rugF.rot, rugF.cx, rugF.cy) : null;
         rugAt = rugF;
         LAYOUT.wallSpots(sts, cn.w).filter(function (sp) {
@@ -4882,8 +4883,10 @@
           var st = sts[sp.st], tp = (tb.cx - st.a.x) * st.u.x + (tb.cy - st.a.y) * st.u.y;
           return { sp: sp, st: st, sc: Math.abs(sp.t - tp) + (sp.window ? 2 : 0) };
         }).sort(function (a, b) { return a.sc - b.sc; }).slice(0, 40).some(function (o) {
-          return take([LAYOUT.against(cn, o.st, o.sp.t)], 'a console table along the wall');
-        });
+          return take([LAYOUT.against(cn, o.st, o.sp.t)], 'a sideboard along the wall');
+        }) || LAYOUT.wallSpots(sts, cn2.w).filter(function (sp) {
+          return !rugPl || GEO.polyDist(polyOf(LAYOUT.against(cn2, sts[sp.st], sp.t)), rugPl) > 1e-6;
+        }).slice(0, 40).some(function (sp) { return take([LAYOUT.against(cn2, sts[sp.st], sp.t)], 'a console table along the wall'); });
       } else if (kind === 'office') {
         // bookcases: either side of the desk, or a pair on another wall, or one where it fits
         if (!c.books) {
@@ -4983,7 +4986,7 @@
           // Bigger wherever the wall has room (Lauren, Nov 26): under a window, about the window's width
           // but never under 60" when 60" fits; on a plain wall, the widest that fits
           if (win) { var ww = Math.max((win[1] - win[0]) * 12, 60); sp.align = Math.abs(sp.t - (win[0] + win[1]) / 2) * 10 + Math.abs(ds.w - ww) / 12 * 1.2 + (ds.w > ww + 24 ? 2 : 0); }
-          else sp.align = Math.min(Math.abs(sp.t - st.L / 2), Math.abs(sp.t - (st.t0 + st.t1) / 2)) * 10 + (72 - ds.w) / 12 * 2;
+          else sp.align = Math.min(Math.abs(sp.t - st.L / 2), Math.abs(sp.t - (st.t0 + st.t1) / 2)) * 10 + (72 - ds.w) / 12 * 3;
           sp.spec = ds; sp.place = LAYOUT.against(ds, st, sp.t); sp.pc = layPiece(sp.place);
           sp.poly = GEO.place(FURNITURE.outline(ds), sp.place.cx, sp.place.cy, sp.place.rot, 1 / 12);
           if (!layoutQuick(r, [sp.pc]).close) dSpots.push(sp);
@@ -5075,7 +5078,9 @@
       }
       // The biggest bed with good walkways (nothing tight); if no size has that, the biggest that passes
       var sizes = BED_ORDER.filter(function (id) { return bySize(id).length; }), si = 0, roomy = true;
-      var easy = function (c) { return !c.full.tight; };
+      // nothing tight, or only the room in front of the dresser's drawers (a proportional dresser on
+      // a short wall is worth 30" to 35" there)
+      var easy = function (c) { return !c.full.tight || (c.full.tight === 1 && (c.tightKinds || []).every(function (k) { return k === 'drawers'; })); };
       (function findA() {
         if (si >= sizes.length) {
           if (!roomy) return finish();
@@ -5141,7 +5146,7 @@
         c.score = q.tight * 3 + c.offCenter * 10 + (c.kind === 'tv' && !c.chairs ? 4 : 0) + (c.kind !== 'L' ? (!c.sideTables ? 3 : c.sideTables === 'one' ? 1.5 : 0) : 0) +
           (c.media && byWindow(c.media) ? 4 : 0) + (c.floating ? 1 : 0) + (c.seat.spec.id === 'loveseat' ? 1.5 : 0) +
           (c.kind === 'L' && !c.media ? 1 : 0) + (c.dist ? Math.abs(c.dist - 7.5) * 0.3 : 0) + (c.media && c.media.angled ? 0.5 : 0) +
-          (c.consoleGap != null && c.consoleGap < 30 / 12 ? 1 : 0) + (c.square ? 0.5 : 0) + (c.noCoffee ? 4 : 0);
+          (c.consoleGap != null && c.consoleGap < 30 / 12 ? 1 : 0) + (c.square ? 0.5 : 0) + (c.noCoffee ? 4 : 0) - (c.kind === 'talk' && facesWindow(c.seat) ? 1 : 0);
         // a floating seat must leave a way into the group: one end open 30"+, best the end nearer the door
         var ends = groupEnds(r, c);
         if (c.floating && !ends.open) return;
@@ -5264,6 +5269,12 @@
       return { label: label, note: notes.join(' '), places: c.places, rug: rug };
     }
     function layPieces(places) { return places.map(function (p) { return layPiece(p); }); }
+    // A seat looking out a window (a window ahead of it, within 4 ft either side of its line of sight):
+    // with no TV, the view is the focal point
+    function facesWindow(seat) {
+      var f = GEO.turn({ x: 0, y: 1 }, seat.rot), rt = GEO.turn({ x: 1, y: 0 }, seat.rot);
+      return windowSpots().some(function (w) { var a = (w.x - seat.cx) * f.x + (w.y - seat.cy) * f.y, b = (w.x - seat.cx) * rt.x + (w.y - seat.cy) * rt.y; return a > 3 && Math.abs(b) < 4; });
+    }
     // The ends of the seating row (the seat and its side tables): how much floor there is past each
     // end, out along the seat, to the nearest wall or piece. open: which end has 30"+ (1 or -1 by the
     // seat's right, 2 for both, 0 for neither). cost: a little when the only open end faces away from
@@ -5422,7 +5433,10 @@
        person at a desk facing into the room sees the door; at a wall desk, a door behind them costs a
        little. Then bookcases where they fit, a reading chair in a room of 90 sq ft or more, and a rug
        under the desk and the chair (rolled back a foot). */
-    function officeLayouts(r, sts, done) {
+    function officeLayouts(r, sts0, done) {
+      // a desk stands flat against an angled wall too (the floating desk stays square)
+      var opensO = state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); return { a: g.jambs[0], b: g.jambs[1], window: isWin(d) }; });
+      var sts = LAYOUT.stretches(r.ftShape, opensO, wallTestFt(), true);
       var dk = FURNITURE.get('desk'), ch = FURNITURE.get('deskchair'), bk = FURNITURE.get('bookcase'), cands = [], G = 0.5 / 12;
       var doorsFt = realDoors().map(doorFt).filter(function (d) { return GEO.edgeDist({ x: d.cx, y: d.cy }, r.ftShape) <= 1; });
       function at(st, t, out) { return { x: st.a.x + st.u.x * t + st.n.x * out, y: st.a.y + st.u.y * t + st.n.y * out }; }
@@ -5452,7 +5466,7 @@
         });
         // facing into the room: the desk out from this wall, the chair between them, with a pair of
         // bookcases on the wall behind (or without, for a shallow room)
-        centers(st, dk.w).forEach(function (t) {
+        if (!st.angled) centers(st, dk.w).forEach(function (t) {
           [2, 0].forEach(function (books) {
             var back = books ? bk.d / 12 + G : 0, places = [];
             if (books) {
@@ -5486,7 +5500,7 @@
       })();
       function finish(more) {
         if (!out.length) { if (!more) done({ why: officeWhy(r) }); return; }
-        done({ list: out.map(function (c0) { var c = fillOut(r, c0, sts, 'office', run); return c.option || (c.option = officeOption(r, c)); }), tried: run.tried, more: !!more });
+        done({ list: out.map(function (c0) { var c = fillOut(r, c0, sts0, 'office', run); return c.option || (c.option = officeOption(r, c)); }), tried: run.tried, more: !!more });
       }
     }
     function officeWhy(r) {
@@ -5514,7 +5528,7 @@
     }
     function officeOption(r, c) {
       var rug = officeRug(r, c);
-      var label = c.kind === 'room' ? 'Desk facing into the room' : c.kind === 'window' ? 'Desk facing the window' : 'Desk on the ' + WALL_WORD(c.st.n) + ' wall';
+      var label = c.kind === 'room' ? 'Desk facing into the room' : c.kind === 'window' ? 'Desk facing the window' : c.st.angled ? 'Desk on the angled wall' : 'Desk on the ' + WALL_WORD(c.st.n) + ' wall';
       var parts = ['a desk chair'];
       if (c.books) parts.push('two bookcases behind it');
       (c.extras || []).forEach(function (x) { parts.push(x); });
@@ -5605,7 +5619,8 @@
       if (what) notes.push('With ' + what + '.');
       if (which === 'c' && sideText) notes.push(sideText.charAt(0).toUpperCase() + sideText.slice(1) + '.');
       if (c.g.window) notes.push('Headboard under the window.');
-      if (c.full && c.full.tight) notes.push(c.full.tight === 1 ? 'One spot is tight.' : c.full.tight + ' spots are tight.');
+      if (c.full && c.full.tight === 1 && (c.tightKinds || []).join() === 'drawers') notes.push('A little under 36" in front of the dresser\u2019s drawers, which still works.');
+      else if (c.full && c.full.tight) notes.push(c.full.tight === 1 ? 'One spot is tight.' : c.full.tight + ' spots are tight.');
       return { label: label, note: notes.join(' '), places: c.places, rug: rug };
     }
     function startLayouts() {
@@ -5692,7 +5707,12 @@
       if (!b) return false;
       if (b.hasAttribute('data-layopen')) { startLayouts(); return true; }
       if (b.hasAttribute('data-lyback')) { closeLayouts(); return true; }
-      if (b.hasAttribute('data-lay')) { var k = +b.getAttribute('data-lay'); state.layout.pick = state.layout.pick === k ? -1 : k; renderLayouts(); draw(); return true; }
+      if (b.hasAttribute('data-lay')) {
+        var k = +b.getAttribute('data-lay'); state.layout.pick = state.layout.pick === k ? -1 : k; renderLayouts(); draw();
+        // on a phone the open sheet covers the plan: lower it to show the preview (pull it up to use it)
+        if (state.layout.pick > -1 && phoneSheet()) setSheet(false);
+        return true;
+      }
       if (b.getAttribute('data-lact') === 'use') { useLayout(); return true; }
       return false;
     }

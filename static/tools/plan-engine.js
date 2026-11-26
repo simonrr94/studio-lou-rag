@@ -1016,7 +1016,8 @@ var FURNITURE = (function () {
       { id: 'dining4', name: 'Table for 4', w: 60, d: 36, h: 30, kind: 'table', role: 'dining', chairs: [2, 0] },
       { id: 'dining6', name: 'Table for 6', w: 72, d: 38, h: 30, kind: 'table', role: 'dining', chairs: [2, 1] },
       { id: 'dining8', name: 'Table for 8', w: 96, d: 40, h: 30, kind: 'table', role: 'dining', chairs: [3, 1] },
-      { id: 'chair', name: 'Dining chair', w: 20, d: 22, h: 36, kind: 'seat', role: 'chair' }
+      { id: 'chair', name: 'Dining chair', w: 20, d: 22, h: 36, kind: 'seat', role: 'chair' },
+      { id: 'sideboard', name: 'Sideboard', w: 66, d: 18, h: 34, kind: 'table', role: 'dresser' }
     ] },
     { group: 'Office', items: [
       { id: 'desk', name: 'Desk', w: 60, d: 30, h: 30, kind: 'table', role: 'desk' },
@@ -1773,7 +1774,7 @@ var FURNART = (function () {
   var BY_ID = {
     sofa: seat, loveseat: seat, armchair: seat, sectional: sectional,
     coffee: coffee, coffeeR: roundCoffee, ottoman: ottoman, side: side, sideR: roundSide, media: media, console: consoleTable,
-    twin: bed, full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser,
+    twin: bed, full: bed, queen: bed, king: bed, nightstand: nightstand, dresser: dresser, sideboard: dresser,
     chair: diningChair, desk: desk, deskchair: deskChair, bookcase: bookcase,
     bench: bench, counter: counter, sink: sink, range: range, fridge: fridge, pantry: pantry, island: island, islandP: island, stool: stool, vanity: vanity, vanity2: vanity,
     plant: fiddle, palm: palm, plantS: snake, tree: olive, lamp: floorLamp, pouf: ottoman
@@ -3380,7 +3381,7 @@ var LIGHT = (function () {
   function status(fc, tgt) { return fc < tgt * 0.85 ? 'dim' : fc > tgt * 1.6 ? 'bright' : 'ok'; }
 
   // Pieces drawn with a lamp on them (and the floor lamp)
-  var LAMPS = { nightstand: 1, dresser: 1, side: 1, sideR: 1, console: 1, desk: 1, lamp: 1 };
+  var LAMPS = { nightstand: 1, dresser: 1, sideboard: 1, side: 1, sideR: 1, console: 1, desk: 1, lamp: 1 };
   function isLamp(pc) { return !!(pc && LAMPS[pc.type] && !pc.noLamp); }
   function hasLampSpot(type) { return !!LAMPS[type] && type !== 'lamp'; }   // pieces drawn with a table lamp on them
   function lampSpot(pc) {
@@ -3388,7 +3389,7 @@ var LIGHT = (function () {
     var w = pc.w, d = pc.d, r;
     switch (pc.type) {
       case 'nightstand': r = Math.min(w, d) * 0.3; return { x: -w / 2 + r + Math.min(2.5, w * 0.08), y: -d / 2 + r + Math.min(2, d * 0.08), r: r };
-      case 'dresser': r = Math.min(d * 0.32, 7); return { x: -w / 2 + r + 2.5, y: -d / 2 + r + 1.5, r: r };
+      case 'dresser': case 'sideboard': r = Math.min(d * 0.32, 7); return { x: -w / 2 + r + 2.5, y: -d / 2 + r + 1.5, r: r };
       case 'side': case 'sideR': return { x: 0, y: 0, r: Math.min(w, d) * 0.3 };
       case 'console': r = Math.min(d * 0.4, 6.5); return { x: -w / 2 + r + 2.5, y: 0, r: r };
       case 'desk': r = Math.min(d * 0.2, 6); return { x: -w / 2 + r + 2.5, y: -d / 2 + r + 2, r: r };
@@ -4053,14 +4054,23 @@ var LAYOUT = (function () {
     opts = opts || {};
     var list = BED_RUGS[bed.spec.id] || [], rot = Math.round(bed.rot + 90) % 180, ns = opts.ns != null ? opts.ns : FURNITURE.get('nightstand').d;
     var tiers = [[9, 18], [6, 18], [12, 18], [9, 12], [6, 12]];
-    for (var ti = 0; ti < tiers.length; ti++) for (var i = 0; i < list.length; i++) {
+    // Slid sideways for a bed set into a corner: a side against the wall needs no rug past it, the
+    // rug still under at least two thirds of the bed's width
+    var hw = bed.spec.w / 24, mid = bed.spec.d / 24 + GAP;
+    var walled = [-1, 1].map(function (sg) { var p = { x: st.a.x + st.u.x * (bed.t + sg * (hw + 0.25)) + st.n.x * mid, y: st.a.y + st.u.y * (bed.t + sg * (hw + 0.25)) + st.n.y * mid }; return GEO.edgeDist(p, poly) < 0.75; });
+    var slides = [0];
+    if (walled[0] || walled[1]) for (var sl = 0.25; sl <= 3.01; sl += 0.25) slides.push(sl, -sl);
+    for (var ti = 0; ti < tiers.length; ti++) for (var i = 0; i < list.length; i++) for (var si = 0; si < slides.length; si++) {
       var s = RUG.get(list[i]);
       if (!s) continue;
-      var across = Math.max(s.w, s.h), along = Math.min(s.w, s.h), start = (ns + tiers[ti][0]) / 12 + GAP;
-      if (across * 12 < bed.spec.w + 36) continue;   // 18" past each side
+      var across = Math.max(s.w, s.h), along = Math.min(s.w, s.h), start = (ns + tiers[ti][0]) / 12 + GAP, sv = slides[si];
+      // past each side of the bed: 18", unless that side is against the wall
+      var over = [-1, 1].map(function (sg) { return across / 2 + sg * sv - hw; });
+      if ([0, 1].some(function (k) { return !walled[k] && over[k] < 1.5 - 1e-6; })) continue;
+      if (bed.spec.w / 12 - Math.max(0, -over[0]) - Math.max(0, -over[1]) < bed.spec.w / 12 * 2 / 3 - 1e-6) continue;
       if (start + along < (bed.spec.d + (opts.foot || 0) + tiers[ti][1]) / 12 + GAP) continue;   // past the foot (or the bench)
       if (start > bed.spec.d / 12 / 3 + GAP + 1e-6) continue;   // under the lower two thirds at least
-      var off = start + along / 2, c = { x: st.a.x + st.u.x * bed.t + st.n.x * off, y: st.a.y + st.u.y * bed.t + st.n.y * off };
+      var off = start + along / 2, c = { x: st.a.x + st.u.x * (bed.t + sv) + st.n.x * off, y: st.a.y + st.u.y * (bed.t + sv) + st.n.y * off };
       // rot turns the rug so its long side (h) runs across the bed
       if (RUG.clearanceAt(poly, s, rot, c.x, c.y) < RUG.TIGHT - 1e-6) continue;
       var shape = RUG.outline(s, rot, c.x, c.y);
