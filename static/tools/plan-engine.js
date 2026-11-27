@@ -4770,7 +4770,133 @@ var WALLS = (function () {
     var k = Math.max(3, Math.round(kmax * 0.35));
     var core = erode(dark, w, h, k), full = dilate(core, w, h, k);
     for (i = 0; i < w * h; i++) full[i] &= dark[i];
-    return { wall: full, kmax: kmax };
+    var thin = thinWalls(dark, full, w, h, kmax);
+    return { wall: full, kmax: kmax, thin: thin };
+  }
+  /* Thin walls: some plans draw the walls inside the building with a much thinner pen than the
+     outside walls, too thin for the pass above (which takes off anything under about a third of the
+     usual thickness). Here: straight, level or plumb strokes of solid ink 2px or thicker (thinner than
+     that pass keeps), at least 3 wall thicknesses long, that meet a wall at both ends (or another thin
+     wall that does, or carry on past a doorway), or at one end when they're too long for a door leaf. Each is drawn into the wall map at the usual thickness, centered on the
+     stroke, so everything after this treats it as a wall. Dimension lines, furniture and door leaves are
+     single-pixel or gray, so they're left alone; glass and sliding panels in a wall's own line, and strokes
+     with more ink right beside them (glass, hatching), are left out too (inLine, crowded). Returns the strokes added: [axis, from, to (across), lo, hi (along)]. */
+  function thinWalls(dark, full, w, h, kmax) {
+    var near = dilate(full, w, h, 3), i, x, y;
+    var rest = new Uint8Array(w * h);
+    for (i = 0; i < w * h; i++) rest[i] = dark[i] && !full[i] ? 1 : 0;
+    var minLen = Math.max(12, kmax * 3), segs = [];
+    // strokes along one axis: runs of rest ink minLen or longer, stacked 2 or more rows deep (and
+    // thinner than k), with each row's run covering most of the stroke
+    function scan(horiz) {
+      var A = horiz ? h : w, B = horiz ? w : h, get = horiz ? function (a, b) { return rest[a * w + b]; } : function (a, b) { return rest[b * w + a]; };
+      var rowsRuns = [];
+      for (var a = 0; a < A; a++) {
+        var rr = [], st = -1;
+        for (var b = 0; b <= B; b++) {
+          var v = b < B && get(a, b);
+          if (v && st < 0) st = b;
+          if (!v && st >= 0) { if (b - st >= minLen) rr.push([st, b - 1]); st = -1; }
+        }
+        rowsRuns.push(rr);
+      }
+      var used = rowsRuns.map(function (rr) { return rr.map(function () { return false; }); });
+      for (var a2 = 0; a2 < A; a2++) rowsRuns[a2].forEach(function (r0, j) {
+        if (used[a2][j]) return;
+        // stack the rows below whose runs overlap this one by most of its length
+        var lo = r0[0], hi = r0[1], n = 1; used[a2][j] = true;
+        for (var a3 = a2 + 1; a3 < A; a3++) {
+          var hit = -1;
+          rowsRuns[a3].forEach(function (r1, j1) { if (!used[a3][j1] && Math.min(r1[1], hi) - Math.max(r1[0], lo) > 0.8 * Math.min(hi - lo, r1[1] - r1[0])) hit = j1; });
+          if (hit < 0) break;
+          used[a3][hit] = true; lo = Math.max(lo, rowsRuns[a3][hit][0]); hi = Math.min(hi, rowsRuns[a3][hit][1]); n++;
+        }
+        if (n >= 2 && n < Math.max(3, Math.round(kmax * 0.35)) + 1 && hi - lo >= minLen) segs.push({ horiz: horiz, a0: a2, a1: a2 + n - 1, lo: lo, hi: hi });
+      });
+    }
+    scan(true); scan(false);
+    // ends: touching a wall (within 3px), or a stroke already kept; repeated until nothing changes
+    var keep = segs.map(function () { return false; });
+    function endPts(s2) {
+      var m = (s2.a0 + s2.a1) / 2;
+      return s2.horiz ? [[s2.lo - 2, m], [s2.hi + 2, m]] : [[m, s2.lo - 2], [m, s2.hi + 2]];
+    }
+    function touches(p, s2) {   // p within 3px of stroke s2
+      var m = (s2.a0 + s2.a1) / 2;
+      return s2.horiz ? p[0] >= s2.lo - 3 && p[0] <= s2.hi + 3 && Math.abs(p[1] - m) <= (s2.a1 - s2.a0) / 2 + 3
+                      : p[1] >= s2.lo - 3 && p[1] <= s2.hi + 3 && Math.abs(p[0] - m) <= (s2.a1 - s2.a0) / 2 + 3;
+    }
+    // past a doorway: the same line picks up again within a door's width (9 wall thicknesses): another
+    // stroke on it, or a wall running on along it (not one crossing it, like the far wall of a closet a
+    // door leaf points at)
+    function across(s2, dir, j) {
+      var m = Math.round((s2.a0 + s2.a1) / 2), from = dir > 0 ? s2.hi + 3 : s2.lo - 3, K = Math.round(kmax * 9);
+      var wallAt = function (v) { var x2 = s2.horiz ? v : m, y2 = s2.horiz ? m : v; return x2 >= 0 && y2 >= 0 && x2 < w && y2 < h && full[y2 * w + x2]; };
+      for (var d = 0; d <= K; d++) {
+        var v = from + dir * d;
+        if (segs.some(function (o, jo) { return jo !== j && o.horiz === s2.horiz && m >= o.a0 - 2 && m <= o.a1 + 2 && v >= o.lo - 2 && v <= o.hi + 2; })) return true;
+        if (wallAt(v)) {
+          for (var d2 = 1; d2 <= kmax * 2; d2++) if (!wallAt(v + dir * d2)) return false;
+          return true;
+        }
+      }
+      return false;
+    }
+    var changed = true;
+    while (changed) {
+      changed = false;
+      segs.forEach(function (s2, j) {
+        if (keep[j]) return;
+        var met = endPts(s2).filter(function (p, e) {
+          var px = Math.round(p[0]), py = Math.round(p[1]);
+          if (px >= 0 && py >= 0 && px < w && py < h && near[py * w + px]) return true;
+          if (segs.some(function (o, jo) { return keep[jo] && jo !== j && touches(p, o); })) return true;
+          return across(s2, e ? 1 : -1, j);
+        }).length;
+        // met at both ends; or at one, when it's too long to be a door leaf (a stub wall, 9 wall thicknesses: about 4'6")
+        var ok = met === 2 || (met === 1 && s2.hi - s2.lo >= kmax * 9);
+        if (ok) { keep[j] = true; changed = true; }
+      });
+    }
+    // a stroke carrying on a wall's line at both ends fills a gap in that wall: glass across a
+    // window, or sliding panels across a doorway. A partition meets walls end on instead (past its end
+    // there's a wall's thickness, then floor again)
+    function inLine(s2) {
+      var m = Math.round((s2.a0 + s2.a1) / 2), d = Math.round(kmax * 2.5);
+      return [s2.lo - d, s2.hi + d].every(function (v) {
+        var x2 = s2.horiz ? v : m, y2 = s2.horiz ? m : v;
+        return x2 >= 0 && y2 >= 0 && x2 < w && y2 < h && full[y2 * w + x2];
+      });
+    }
+    // a partition has open floor on both sides; glass comes as two or three lines a few inches apart,
+    // and hatching, text and fixtures have ink beside them too
+    function crowded(s2) {
+      var hits = 0, n = 0, K = Math.round(kmax);
+      for (var t = s2.lo; t <= s2.hi; t += 4) {
+        n++;
+        var side = [-1, 1].some(function (sg) {
+          for (var d = 1; d <= K; d++) {
+            var c = sg < 0 ? s2.a0 - d : s2.a1 + d, x2 = s2.horiz ? t : c, y2 = s2.horiz ? c : t;
+            if (x2 < 0 || y2 < 0 || x2 >= w || y2 >= h) return false;
+            if (dark[y2 * w + x2] && !full[y2 * w + x2]) return true;
+          }
+          return false;
+        });
+        if (side) hits++;
+      }
+      return n && hits / n > 0.5;
+    }
+    var n2 = [];
+    segs.forEach(function (s2, j) {
+      if (!keep[j] || inLine(s2) || crowded(s2)) return;
+      n2.push([s2.horiz ? 'h' : 'v', s2.a0, s2.a1, s2.lo, s2.hi]);
+      var m = (s2.a0 + s2.a1) / 2, t = kmax, a = s2.horiz ? [s2.lo, m] : [m, s2.lo], b = s2.horiz ? [s2.hi, m] : [m, s2.hi];
+      // drawn square-ended at the wall thickness, centered on the stroke
+      var x0 = Math.round(Math.min(a[0], b[0]) - (s2.horiz ? 0 : t / 2)), x1 = Math.round(Math.max(a[0], b[0]) + (s2.horiz ? 0 : t / 2));
+      var y0 = Math.round(Math.min(a[1], b[1]) - (s2.horiz ? t / 2 : 0)), y1 = Math.round(Math.max(a[1], b[1]) + (s2.horiz ? t / 2 : 0));
+      for (y = Math.max(0, y0); y <= Math.min(h - 1, y1); y++) for (x = Math.max(0, x0); x <= Math.min(w - 1, x1); x++) full[y * w + x] = 1;
+    });
+    return n2;
   }
   // The walls furniture is checked against: nubs on a wall's face (the solid triangles plans print at
   // the ends of a room's measurement) dropped, so a bed set against the wall doesn't seem to run into
@@ -5524,6 +5650,25 @@ var WALLS = (function () {
     return found.filter(function (f) { return !(f.rooms[0] && f.rooms[0] === f.rooms[1] && !f.model); });
   }
 
+  /* ---------- rooms the model didn't list ----------
+     Enclosed floor no listed room took (closets, a linen cupboard, a nook) becomes a room of its own
+     when it's room-sized: 4 sq ft to 300, at least 15" across (a wardrobe), and filling half its box or more.
+     Named Closet up to 50 sq ft, otherwise Room; measure() keeps it only if a door or an opening
+     leads into it. Each gets a placeholder name (key) the doors read uses for its sides. */
+  function unlisted(named, n, ppf) {
+    var out = [];
+    named.forEach(function (x) {
+      if (!x.p || x.r) return;
+      var a = x.p.n / (ppf * ppf), wf = x.p.w / ppf, hf = x.p.h / ppf;
+      if (a < 4 || a > 300 || Math.min(wf, hf) < 1.25 || x.p.n / (x.p.w * x.p.h) < 0.5) return;
+      var rr = { i: n + out.length, name: '\u0001extra' + out.length, label: a <= 50 ? 'Closet' : 'Room', extra: true,
+                 box: [x.p.x0, x.p.y0, x.p.x0 + x.p.w, x.p.y0 + x.p.h] };
+      rr.bi = rr.box.map(Math.round);
+      x.r = rr; out.push(rr);
+    });
+    return out;
+  }
+
   /* ---------- the whole read ---------- */
   // G: { g, w, h } (grayOf); rooms: the model's rooms ({ name, bbox in percent, width, length,
   // printedArea, source }); hints: the doors call ({ list, overall: { w, h }, dims }), or null.
@@ -5557,21 +5702,47 @@ var WALLS = (function () {
     var sc = scaleOf(named, hints, g, wall, br, kmax, W, H);
     var A = { g: g, w: W, h: H, wall: wall, kmax: kmax, breaks: br, spaces: sp, named: named, ppf: sc ? sc.ppf : null };
     var found = openings(A, hints && hints.list);
+    var extra = [];
     if (sc) {
       var n0 = named.length;
       A.named = named = joinByArea(named, sc.ppf, W, H, found, kmax);
       if (named.length !== n0) found = openings(A, hints && hints.list);   // rooms on each side may have changed
+      extra = unlisted(named, rooms.length, sc.ppf);
+      if (extra.length) {
+        found = openings(A, hints && hints.list);
+        // kept only when a door or an opening leads into it (a closet); a shut-in space is a shaft or a chase
+        // (a shallow wardrobe's wide doors read their sides too far out, so the floor just past each face counts too)
+        var into = function (rr) {
+          var x = named.filter(function (y) { return y.r === rr; })[0];
+          return found.some(function (f) {
+            if (f.kind === 'window') return false;
+            if (f.rooms.indexOf(rr.name) > -1) return true;
+            var h = Math.max(2, Math.floor(f.depth / 2));
+            return x && [1, -1].some(function (sg) { return [3, 6].some(function (d) {
+              return [0.25, 0.5, 0.75].some(function (t) { var p = [f.a[0] + (f.b[0] - f.a[0]) * t + f.n[0] * sg * (h + d), f.a[1] + (f.b[1] - f.a[1]) * t + f.n[1] * sg * (h + d)]; return at(x.p, Math.floor(p[0]), Math.floor(p[1])); });
+            }); });
+          });
+        };
+        var lone = extra.filter(function (rr) { return !into(rr); });
+        if (lone.length) {
+          named.forEach(function (x) { if (x.r && lone.indexOf(x.r) > -1) x.r = null; });
+          extra = extra.filter(function (rr) { return lone.indexOf(rr) < 0; });
+          found = openings(A, hints && hints.list);
+        }
+      }
     }
     // each room's outline: its piece grown back to the walls' faces, traced and simplified
-    var out = rooms.map(function () { return null; });
+    var out = rooms.map(function () { return null; }).concat(extra.map(function () { return null; }));
     named.forEach(function (x) {
       if (!x.p || !x.r) return;
       var C = padded([x.p], 4, W, H), grown = crop({ x0: C.x0, y0: C.y0, w: C.w, h: C.h, m: dilate(C.m, C.w, C.h, 5) });
       var poly = rectify(simplify(contour(grown), Math.max(2, 0.35 * kmax)), 0.8 * kmax);
       if (poly.length >= 3) out[x.r.i] = { poly: poly, area: grown.n };
     });
-    return { w: W, h: H, kmax: kmax, ppf: sc ? sc.ppf : null, from: sc ? sc.from : null, rough: !!(sc && sc.rough), pinned: sc ? sc.pinned : [],
-             rooms: out, openings: found, breaks: br.length, spaces: sp.length, wall: cleanWalls(wall, W, H, kmax),
+    return { w: W, h: H, kmax: kmax, thin: wl.thin, ppf: sc ? sc.ppf : null, from: sc ? sc.from : null, rough: !!(sc && sc.rough), pinned: sc ? sc.pinned : [],
+             rooms: out.slice(0, rooms.length), openings: found, breaks: br.length, spaces: sp.length, wall: cleanWalls(wall, W, H, kmax),
+             // rooms the model didn't list (closets, mostly): { name, poly, sqft }; a door or opening leads into each
+             extra: extra.map(function (rr) { var o = out[rr.i]; return o ? { name: rr.label, poly: o.poly, sqft: o.area / (sc.ppf * sc.ppf), key: rr.name } : null; }).filter(Boolean),
              shared: sp.map(function (S, k) { return rs.filter(function (r) { return r.space === k; }).length; }).filter(function (n) { return n > 1; }).length };
   }
 

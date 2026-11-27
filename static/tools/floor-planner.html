@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=44"></script>
+  <script src="/static/tools/plan-engine.js?v=45"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -4008,6 +4008,18 @@
         r.walled = true; r.snapped = true; r.weak = false;
         if (r.shape) r.traced = true;
       });
+      // rooms the model didn't list (closets, mostly), found on the walls with a door or opening into each.
+      // Named Closet (or Room), numbered when there are several or the plan already has one by that name
+      var ex = res.extra || [];
+      ex.forEach(function (x) {
+        var kin = ex.filter(function (y) { return y.name === x.name; }), have = rooms.filter(function (r) { return !r.found && (r.name === x.name || r.name.indexOf(x.name + ' ') === 0); }).length;
+        var nm = kin.length === 1 && !have ? x.name : x.name + ' ' + (have + kin.indexOf(x) + 1);
+        var r = { id: state.nextId++, name: nm, label: '', width: null, length: null, printedArea: null, source: 'measured', found: true };
+        setShape(r, x.poly.map(function (q) { return { x: q[0] / G.w * 100, y: q[1] / G.h * 100 }; }));
+        r.walled = true; r.snapped = true; r.weak = false;
+        if (r.shape) r.traced = true;
+        rooms.push(r);
+      });
       state.wallsRead = { w: G.w, h: G.h, ppf: res.ppf, openings: res.openings };
       // kitchen counters and islands, pinned down on the drawing: kept on the room they stand in, in
       // percent of the image like room shapes (r.fixtures: { kind, wall, rough, poly })
@@ -6806,6 +6818,7 @@
     function badgeFor(r) {
       if (r.source === 'labeled') return '<span class="badge labeled">From plan</span>';
       if (r.source === 'edited') return '<span class="badge edited">Edited</span>';
+      if (r.source === 'measured') return '<span class="badge labeled">Measured</span>';
       return '<span class="badge estimated">Estimated</span>';
     }
 
@@ -6855,6 +6868,9 @@
     // A shape (traced or drawn) that comes to the printed area explains why the dimensions don't
     function shapeMatches(r) { return !!(r.shape && r.printedArea && r.shapeArea && Math.abs(r.shapeArea / r.printedArea - 1) <= 0.10); }
     function noteFor(r) {
+      // a room the plan reader didn't list, found on the walls with a door into it
+      if (r.found && !r.dimsEdited && !r.boxEdited) return '<div class="box-note fine">Found on the plan without a name, so it\u2019s called ' + esc(r.name) +
+        '. Its size is measured from its walls. Rename it if it\u2019s something else, or remove it.</div>';
       if (shapeMatches(r)) return '<div class="box-note fine">' + (r.traced
         ? 'Not a rectangle, so its outline was traced from the walls to match the printed ' + fmtArea(r.printedArea) + '. Drag a corner if it\u2019s off.'
         : 'Its shape matches the printed ' + fmtArea(r.printedArea) + '.') + '</div>';
@@ -7033,7 +7049,7 @@
         doc.text(fmtFtIn(r.width) || '-', cols[1], y + 13);
         doc.text(fmtFtIn(r.length) || '-', cols[2], y + 13);
         doc.text(area(r) ? Math.round(area(r)).toLocaleString() : '-', cols[3], y + 13);
-        var src = r.source === 'labeled' ? 'From plan' : r.source === 'edited' ? 'Edited' : 'Estimated';
+        var src = r.source === 'labeled' ? 'From plan' : r.source === 'edited' ? 'Edited' : r.source === 'measured' ? 'Measured' : 'Estimated';
         if (r.source === 'estimated') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
         doc.text(src, cols[4], y + 13, { align: 'right' });
         y += 20;

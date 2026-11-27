@@ -106,6 +106,25 @@ def score(name, key, out, found, img):
         ious.append((r['name'], round(inter / uni, 3) if uni else 0))
     res['rooms'] = ious
     res['room_avg'] = round(sum(v for _, v in ious) / max(1, len(ious)), 3)
+    # rooms the model doesn't list (minor in the key: closets and the like): the page should still find
+    # them on its own, as rooms of their own. Each is matched to the best page room the model didn't name.
+    listed = set(r['name'].lower() for r in out['rooms'] if not r.get('minor'))
+    extra = [f for f in found['rooms'] if f['name'].lower() not in listed and f.get('poly')]
+    un, used = [], set()
+    for r in out['rooms']:
+        if not r.get('minor'): continue
+        km = poly_mask(r['poly'], (H, W)); best = (0, None)
+        for i, f in enumerate(extra):
+            if i in used: continue
+            fm = poly_mask(f['poly'], (H, W)); u = (km | fm).sum()
+            v = (km & fm).sum() / u if u else 0
+            if v > best[0]: best = (v, i)
+        if best[1] is not None and best[0] >= 0.3: used.add(best[1])
+        un.append((r['name'], round(best[0], 2) if best[0] >= 0.3 else 0.0))
+        cv2.polylines(vis, [np.array(r['poly'], np.int32)], True, (0, 160, 160), 1)
+    for f in extra: cv2.polylines(vis, [np.array(f['poly'], np.int32)], True, (200, 0, 120), 2)
+    res['unlisted'] = un
+    res['unlisted_extra'] = [f['name'] for i, f in enumerate(extra) if i not in used]
     # doors and windows: matched by position (within 18" or half the width), then type
     def match(keys, founds, tol_ft=1.5):
         used, hits = set(), []
@@ -208,6 +227,9 @@ def main():
         print('%-9s score %3d | scale off %s%% | rooms %.2f %s' % (r['plan'], r['score'], r['scale'], r['room_avg'], ' '.join('%s=%.2f' % x for x in r['rooms'])))
         print('          doors %s %s %s | windows %s %s' % (r['doors'], ('missed ' + ', '.join(r['doors_missed'])) if r['doors_missed'] else '',
               ('wrong type ' + ', '.join(r['doors_wrongtype'])) if r['doors_wrongtype'] else '', r['windows'], ('ERR ' + r['errors'][0][:80]) if r['errors'] else ''))
+        if r.get('unlisted') or r.get('unlisted_extra'):
+            print('          unlisted rooms found %d/%d %s | extra rooms %d %s' % (sum(1 for _, v in r['unlisted'] if v), len(r['unlisted']),
+                  ' '.join('%s=%.2f' % x for x in r['unlisted']), len(r['unlisted_extra']), ', '.join(r['unlisted_extra'])))
     print('OVERALL %d' % round(sum(r['score'] for r in rows) / len(rows)))
 
 if __name__ == '__main__': main()

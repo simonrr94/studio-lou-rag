@@ -9,7 +9,7 @@ PPF = 20          # pixels per foot
 WALL = 10         # 6" walls
 PAD = 60          # margin round the plan
 
-def build(rooms, doors, windows, openings, open_sides, outdir, fixtures=()):
+def build(rooms, doors, windows, openings, open_sides, outdir, fixtures=(), inner=None):
     W = int(max(r[1] + r[3] for r in rooms) * PPF + 2 * PAD)
     H = int(max(r[2] + r[4] for r in rooms) * PPF + 2 * PAD)
     im = Image.new('RGB', (W, H), 'white'); d = ImageDraw.Draw(im)
@@ -18,11 +18,18 @@ def build(rooms, doors, windows, openings, open_sides, outdir, fixtures=()):
         for (p, q) in open_sides:
             if (abs(p[0] - a[0]) < 1e-6 and abs(q[0] - b[0]) < 1e-6 and abs(p[1] - a[1]) < 1e-6 and abs(q[1] - b[1]) < 1e-6): return False
         return True
-    # walls: every room edge, centered on the room's outline, except open sides
+    # walls: every room edge, centered on the room's outline, except open sides. inner (px): a thinner
+    # pen for walls inside the building (some plans draw partitions as thin lines)
+    bx0 = min(r[1] for r in rooms); by0 = min(r[2] for r in rooms); bx1 = max(r[1] + r[3] for r in rooms); by1 = max(r[2] + r[4] for r in rooms)
+    def outer(a, b): return (a[0] == b[0] and a[0] in (bx0, bx1)) or (a[1] == b[1] and a[1] in (by0, by1))
     for name, x, y, w, h, *_ in rooms:
         for a, b in [((x, y), (x + w, y)), ((x + w, y), (x + w, y + h)), ((x, y + h), (x + w, y + h)), ((x, y), (x, y + h))]:
             if not seg_drawn(a, b): continue
-            d.rectangle([X(min(a[0], b[0])) - WALL / 2, X(min(a[1], b[1])) - WALL / 2, X(max(a[0], b[0])) + WALL / 2, X(max(a[1], b[1])) + WALL / 2], fill='#222222')
+            if inner is None:
+                d.rectangle([X(min(a[0], b[0])) - WALL / 2, X(min(a[1], b[1])) - WALL / 2, X(max(a[0], b[0])) + WALL / 2, X(max(a[1], b[1])) + WALL / 2], fill='#222222')
+            else:
+                t = WALL if outer(a, b) else inner
+                d.rectangle([X(min(a[0], b[0])) - t / 2, X(min(a[1], b[1])) - t / 2, X(max(a[0], b[0])) + t / 2 - 1, X(max(a[1], b[1])) + t / 2 - 1], fill='#222222')
     def cut(a, b):   # clear a gap across the wall between points a and b (feet, along a wall line)
         x0, y0, x1, y1 = X(min(a[0], b[0])), X(min(a[1], b[1])), X(max(a[0], b[0])), X(max(a[1], b[1]))
         if abs(a[1] - b[1]) < 1e-6: d.rectangle([x0 + 1, y0 - WALL / 2 - 1, x1 - 1, y1 + WALL / 2 + 1], fill='white')
@@ -102,3 +109,7 @@ windows3 = [((3, 0), (9, 0)), ((14, 0), (19, 0)), ((0, 4), (0, 10)), ((5, 29), (
 openings3 = [((4, 15), (16, 15), ['Kitchen/Dining', 'Living Room'])]
 fixtures3 = [('counter', 12, w2, 24 - w2, w2 + 25 / 12), ('counter', 24 - w2 - 25 / 12, w2 + 25 / 12, 24 - w2, 8), ('island', 14.5, 5.5, 19.5, 8.5)]
 build(rooms3, doors3, windows3, openings3, [], os.path.join(HERE, 'kd'), fixtures3)
+
+# The great room drawn with thin partitions: 6" outside walls, inside walls a 2" pen (3 px), under a
+# third of the outside walls' thickness (tests/harness/thin/)
+build(rooms2, doors2, windows2, openings2, [((26, 0), (26, 18))], os.path.join(HERE, 'thin'), inner=3)
