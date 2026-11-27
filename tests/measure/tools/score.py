@@ -68,8 +68,17 @@ def mock(name, key, out, img):
     for dm in key.get('dims', []):
         e = lambda v, s: round((v + rnd.uniform(-0.02, 0.02) * s) / s * 100, 2)
         dims.append({'text': dm['text'], 'feet': dm['ft'], 'x1': e(dm['a'][0], W), 'y1': e(dm['a'][1], H), 'x2': e(dm['b'][0], W), 'y2': e(dm['b'][1], H)})
+    # counters and islands: a rough box round each (each side off by up to 1.5% of the picture, 3% with JITTER=2);
+    # their own random numbers, so the rest of the reply is the same as before they were added
+    fr, fx = random.Random(name + 'fixtures'), []
+    J2 = 0.015 * float(os.environ.get('JITTER', 1))
+    for f in key.get('fixtures', []):
+        x0, y0, x1, y1 = f['rect']
+        x0, x1 = x0 + fr.uniform(-J2, J2) * W, x1 + fr.uniform(-J2, J2) * W
+        y0, y1 = y0 + fr.uniform(-J2, J2) * H, y1 + fr.uniform(-J2, J2) * H
+        fx.append({'kind': f['kind'], 'x': round(x0 / W * 100, 2), 'y': round(y0 / H * 100, 2), 'w': round((x1 - x0) / W * 100, 2), 'h': round((y1 - y0) / H * 100, 2)})
     ow, ol = OVERALL.get(name, (None, None))
-    return json.dumps({'unit': 'ft', 'rooms': rooms}), json.dumps({'openings': ops, 'overall': {'width_ft': ow, 'length_ft': ol}, 'dims': dims})
+    return json.dumps({'unit': 'ft', 'rooms': rooms}), json.dumps({'openings': ops, 'overall': {'width_ft': ow, 'length_ft': ol}, 'dims': dims, 'fixtures': fx})
 
 def poly_mask(poly, shape):
     m = np.zeros(shape, np.uint8)

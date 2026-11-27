@@ -1,5 +1,6 @@
 """A second drawn test plan: a great room (a living room open along its whole side to the kitchen,
-no dining room), for dining zones and their rugs. python3 make_open.py writes tests/harness/open/: plan.png (20 px per foot, 6" walls), rooms.json (the stand-in model's rooms reply) and
+no dining room), for dining zones and their rugs, and a kitchen/dining room with counters and an island.
+python3 make_open.py writes tests/harness/open/ and tests/harness/kd/: plan.png (20 px per foot, 6" walls), rooms.json (the stand-in model's rooms reply) and
 openings.json (its doors and windows reply, with the plan's overall size)."""
 import json, math, os
 from PIL import Image, ImageDraw
@@ -8,7 +9,7 @@ PPF = 20          # pixels per foot
 WALL = 10         # 6" walls
 PAD = 60          # margin round the plan
 
-def build(rooms, doors, windows, openings, open_sides, outdir):
+def build(rooms, doors, windows, openings, open_sides, outdir, fixtures=()):
     W = int(max(r[1] + r[3] for r in rooms) * PPF + 2 * PAD)
     H = int(max(r[2] + r[4] for r in rooms) * PPF + 2 * PAD)
     im = Image.new('RGB', (W, H), 'white'); d = ImageDraw.Draw(im)
@@ -52,6 +53,12 @@ def build(rooms, doors, windows, openings, open_sides, outdir):
             for off in (-WALL / 2, 0, WALL / 2): d.line([X(a[0]) + off, X(a[1]), X(b[0]) + off, X(b[1])], fill='#333333', width=1)
         c = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
         ops.append({'kind': 'window', 'type': None, 'x': X(c[0]) / W * 100, 'y': X(c[1]) / H * 100, 'width_in': None, 'rooms': ['', 'outside']})
+    fx = []
+    for kind, x0, y0, x1, y1 in fixtures:   # counters and islands: thin-line boxes, a sink on the long ones
+        d.rectangle([X(x0), X(y0), X(x1), X(y1)], outline='#555555', width=2)
+        if kind == 'island' or max(x1 - x0, y1 - y0) > 6:
+            cx, cy = X((x0 + x1) / 2), X((y0 + y1) / 2); d.rounded_rectangle([cx - 14, cy - 9, cx + 14, cy + 9], 4, outline='#777777', width=1)
+        fx.append({'kind': kind, 'x': round(X(x0) / W * 100, 2), 'y': round(X(y0) / H * 100, 2), 'w': round((x1 - x0) * PPF / W * 100, 2), 'h': round((y1 - y0) * PPF / H * 100, 2)})
     for name, x, y, w, h, *_ in rooms:   # printed names and sizes, for the eye (OCR is off in the harness)
         d.text((X(x + w / 2) - 30, X(y + h / 2) - 8), name.upper(), fill='#222222')
         d.text((X(x + w / 2) - 30, X(y + h / 2) + 6), "%d' x %d'" % (round(w), round(h)) if w == round(w) and h == round(h) else '', fill='#222222')
@@ -68,7 +75,7 @@ def build(rooms, doors, windows, openings, open_sides, outdir):
     ow = max(r[1] + r[3] for r in rooms) - min(r[1] for r in rooms); ol = max(r[2] + r[4] for r in rooms) - min(r[2] for r in rooms)
     json.dump({'unit': 'ft', 'rooms': rj}, open(os.path.join(outdir, 'rooms.json'), 'w'), indent=1)
     for o in ops: o['x'] = round(o['x'], 2); o['y'] = round(o['y'], 2)
-    json.dump({'openings': ops, 'overall': {'width_ft': ow, 'length_ft': ol}, 'dims': []}, open(os.path.join(outdir, 'openings.json'), 'w'), indent=1)
+    json.dump({'openings': ops, 'overall': {'width_ft': ow, 'length_ft': ol}, 'dims': [], 'fixtures': fx}, open(os.path.join(outdir, 'openings.json'), 'w'), indent=1)
     print(outdir, W, H, len(ops), 'openings')
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -85,3 +92,13 @@ doors2 = [((0, 7), D, 3, R, ['Living Room', 'outside']), ((5, 18), R, 2.75, D, [
 windows2 = [((4, 0), (10, 0)), ((14, 0), (21, 0)), ((29, 0), (34, 0)), ((0, 22), (0, 27)), ((4, 30), (10, 30)), ((37, 6), (37, 11))]
 openings2 = [((14, 27), (14, 29.5), ['Bedroom', 'Hall'])]
 build(rooms2, doors2, windows2, openings2, [((26, 0), (26, 18))], os.path.join(HERE, 'open'))
+
+# A kitchen/dining room: an L of counters along the top and right walls (25" deep, from the wall's
+# face), an island, and open floor at the left end for a table; a living room beside it.
+w2 = 0.25   # half a wall, in feet: counters start at the wall's face
+rooms3 = [('Kitchen/Dining', 0, 0, 24, 15), ('Living Room', 0, 15, 24, 14), ('Bath', 24, 15, 8, 7), ('Bedroom', 24, 0, 12, 15)]
+doors3 = [((0, 18), D, 3, R, ['Living Room', 'outside']), ((25, 15), R, 2.5, D, ['Bath', 'Living Room']), ((24, 10), D, 2.75, R, ['Bedroom', 'Kitchen/Dining'])]
+windows3 = [((3, 0), (9, 0)), ((14, 0), (19, 0)), ((0, 4), (0, 10)), ((5, 29), (11, 29)), ((36, 4), (36, 10))]
+openings3 = [((4, 15), (16, 15), ['Kitchen/Dining', 'Living Room'])]
+fixtures3 = [('counter', 12, w2, 24 - w2, w2 + 25 / 12), ('counter', 24 - w2 - 25 / 12, w2 + 25 / 12, 24 - w2, 8), ('island', 14.5, 5.5, 19.5, 8.5)]
+build(rooms3, doors3, windows3, openings3, [], os.path.join(HERE, 'kd'), fixtures3)

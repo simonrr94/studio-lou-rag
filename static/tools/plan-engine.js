@@ -5577,3 +5577,138 @@ var WALLS = (function () {
 
   return { grayOf: grayOf, measure: measure, wallsOf: wallsOf, cleanWalls: cleanWalls, breaks: breaks, spaces: spaces, contour: contour, simplify: simplify };
 })();
+
+/* ---------- KITCHEN: counters and islands (Nov 27) ----------
+   The model points (a rough box for each counter run and island, in percent of the image); the
+   drawing pins each down, the way doors are found.
+   A counter: the wall behind it is the long side of the box with wall ink nearest (the walls map);
+   from that wall's face, lines drawn parallel to it 12" to 38" out are scored by how much of the run
+   they cover, and the best near 24" (20" to 30" first) is the front. The run is every stretch of that
+   line inside the model's box, end to end. An island: from 18" outside each side of its box, the first line in toward the middle
+   that covers half that side or more; the four make its outline.
+   Anything the drawing can't confirm keeps the model's box, marked rough.
+   find(G, read, hints): G is the gray picture WALLS measured ({ g, w, h }), read is WALLS.measure's
+   result (its wall map and ppf), hints the model's list. Returns [{ kind, poly: [[x, y]...] in px of G,
+   wall: 'N'|'S'|'E'|'W' for counters, rough }]. */
+var KITCHEN = (function () {
+  var INK = 215;   // thin lines: anything darker than this
+  function find(G, read, hints) {
+    if (!G || !read || !read.ppf || !read.wall || !hints || !hints.length) return [];
+    var W = G.w, H = G.h, g = G.g, ppf = read.ppf, inch = ppf / 12;
+    // the walls, with windows filled in (a counter often runs under one)
+    var wall = read.wall.slice();
+    (read.openings || []).forEach(function (o) {
+      if (o.kind !== 'window' || !o.a || !o.b) return;
+      var hd = Math.max(2, (o.depth || 6) / 2), n = o.n || [0, 0];
+      var L = Math.hypot(o.b[0] - o.a[0], o.b[1] - o.a[1]);
+      for (var t = 0; t <= L; t++) for (var d = -hd; d <= hd; d++) {
+        var x = Math.round(o.a[0] + (o.b[0] - o.a[0]) * t / Math.max(1, L) + n[0] * d), y = Math.round(o.a[1] + (o.b[1] - o.a[1]) * t / Math.max(1, L) + n[1] * d);
+        if (x >= 0 && y >= 0 && x < W && y < H) wall[y * W + x] = 1;
+      }
+    });
+    var ink = function (x, y) {
+      x = Math.round(x); y = Math.round(y);
+      for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+        var xx = x + dx, yy = y + dy;
+        if (xx >= 0 && yy >= 0 && xx < W && yy < H && g[yy * W + xx] < INK && !wall[yy * W + xx]) return true;
+      }
+      return false;
+    };
+    var isWall = function (x, y) { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < W && y < H && wall[y * W + x]; };
+    var out = [];
+    hints.forEach(function (h) {
+      var B = { x0: h.x / 100 * W, y0: h.y / 100 * H, x1: (h.x + h.w) / 100 * W, y1: (h.y + h.h) / 100 * H };
+      var got = h.kind === 'island' ? island(B) : counter(B);
+      if (got) { got.kind = h.kind === 'island' ? 'island' : 'counter'; out.push(got); }
+      else out.push({ kind: h.kind === 'island' ? 'island' : 'counter', rough: true, poly: [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]] });
+    });
+    return out;
+
+    // A line parallel to an axis: coverage of positions t0..t1 at the fixed coordinate v
+    function cover(horiz, v, t0, t1) {
+      var n = 0, k = 0;
+      for (var t = t0; t <= t1; t += 1) { n++; if (horiz ? ink(t, v) : ink(v, t)) k++; }
+      return n ? k / n : 0;
+    }
+    function counter(B) {
+      var horizF = (B.x1 - B.x0) >= (B.y1 - B.y0), best = null;
+      // a squarish box could run either way
+      var ways = Math.max(B.x1 - B.x0, B.y1 - B.y0) / Math.max(1, Math.min(B.x1 - B.x0, B.y1 - B.y0)) < 1.6 ? [horizF, !horizF] : [horizF];
+      ways.forEach(function (horiz) {
+        var a0 = horiz ? B.x0 : B.y0, a1 = horiz ? B.x1 : B.y1, mid = horiz ? (B.y0 + B.y1) / 2 : (B.x0 + B.x1) / 2;
+        var reach = Math.max(18 * inch, (horiz ? B.y1 - B.y0 : B.x1 - B.x0));
+        [-1, 1].forEach(function (dir) {
+          // the wall face on this side: the first wall pixel out from the middle line, at a few spots along the run
+          var faces = [];
+          for (var k = 1; k <= 9; k++) {
+            var t = a0 + (a1 - a0) * k / 10;
+            for (var s = 0; s <= reach + 18 * inch; s++) {
+              var v = mid + dir * s;
+              if (horiz ? isWall(t, v) : isWall(v, t)) { faces.push(v); break; }
+            }
+          }
+          if (faces.length < 5) return;
+          faces.sort(function (p, q) { return p - q; });
+          var face = faces[Math.floor(faces.length / 2)] - dir;   // the last floor pixel before the wall
+          // the front: lines 12" to 38" out from the face
+          var c0 = Math.max(0, Math.round(Math.min(a0, a1) - 6 * inch)), c1 = Math.round(Math.max(a0, a1) + 6 * inch);
+          c1 = Math.min(c1, (horiz ? W : H) - 1);
+          var prof = [];
+          for (var d = Math.round(12 * inch); d <= Math.round(38 * inch); d++) prof.push({ d: d, c: cover(horiz, face - dir * d, Math.round(a0), Math.round(a1)) });
+          var peaks = prof.filter(function (p, i) { return p.c >= 0.45 && (!prof[i - 1] || prof[i - 1].c <= p.c) && (!prof[i + 1] || prof[i + 1].c < p.c); });
+          if (!peaks.length) return;
+          var near = peaks.filter(function (p) { return p.d >= 20 * inch && p.d <= 30 * inch; });
+          var pick = (near.length ? near : peaks).reduce(function (m, p) {
+            var sc = p.c - Math.abs(p.d / inch - 24) / 24;
+            return !m || sc > m.sc ? { d: p.d, c: p.c, sc: sc } : m;
+          }, null);
+          // the run: the stretches of that line (gaps under 3" bridged, so a dimension line beside the end isn't joined on)
+          var fv = face - dir * pick.d, runs = [], cur = null, gap = 0;
+          for (var t2 = c0; t2 <= c1; t2++) {
+            var on = horiz ? ink(t2, fv) : ink(fv, t2);
+            if (on) { if (!cur) cur = { s: t2, e: t2 }; else cur.e = t2; gap = 0; }
+            else if (cur && ++gap > 3 * inch) { runs.push(cur); cur = null; gap = 0; }
+          }
+          if (cur) runs.push(cur);
+          // every stretch of the front inside the model's box is one run (a fridge or a range set deeper
+          // breaks the line)
+          var inBox = runs.filter(function (r) { return Math.min(r.e, a1) - Math.max(r.s, a0) > 0; });
+          if (!inBox.length) return;
+          var run = { s: Math.min.apply(null, inBox.map(function (r) { return r.s; })), e: Math.max.apply(null, inBox.map(function (r) { return r.e; })) };
+          // never into a wall at either end
+          var halfway = face - dir * pick.d / 2, inWall = function (t) { return horiz ? isWall(t, halfway) : isWall(halfway, t); };
+          while (run.e > run.s && inWall(run.e)) run.e--;
+          while (run.s < run.e && inWall(run.s)) run.s++;
+          if (run.e - run.s < 18 * inch) return;
+          // nearer wall wins; then the stronger front line
+          var gapToBox = Math.abs(face - (dir < 0 ? (horiz ? B.y0 : B.x0) : (horiz ? B.y1 : B.x1)));
+          var score = gapToBox / inch - pick.c * 20;
+          if (best && best.score <= score) return;
+          var f0 = face + dir * 0, f1 = fv, p;
+          if (horiz) p = [[run.s, Math.min(f0, f1)], [run.e, Math.min(f0, f1)], [run.e, Math.max(f0, f1)], [run.s, Math.max(f0, f1)]];
+          else p = [[Math.min(f0, f1), run.s], [Math.max(f0, f1), run.s], [Math.max(f0, f1), run.e], [Math.min(f0, f1), run.e]];
+          best = { score: score, poly: p, wall: horiz ? (dir < 0 ? 'N' : 'S') : (dir < 0 ? 'W' : 'E'), depthIn: Math.round(pick.d / inch) };
+        });
+      });
+      if (!best) return null;
+      return { poly: best.poly, wall: best.wall, depthIn: best.depthIn };
+    }
+    function island(B) {
+      var m = 18 * inch, E = { x0: B.x0 - m, y0: B.y0 - m, x1: B.x1 + m, y1: B.y1 + m };
+      // first line in from each side covering half the box's extent along it
+      function edge(horiz, from, to, a0, a1) {
+        var step = from < to ? 1 : -1;
+        for (var v = Math.round(from); step > 0 ? v <= to : v >= to; v += step) if (cover(horiz, v, Math.round(a0), Math.round(a1)) >= 0.5) return v;
+        return null;
+      }
+      var cy = (B.y0 + B.y1) / 2, cx = (B.x0 + B.x1) / 2;
+      var top = edge(true, E.y0, cy, B.x0, B.x1), bot = edge(true, E.y1, cy, B.x0, B.x1);
+      var lef = edge(false, E.x0, cx, B.y0, B.y1), rig = edge(false, E.x1, cx, B.y0, B.y1);
+      if ([top, bot, lef, rig].some(function (v) { return v == null; })) return null;
+      var wi = (rig - lef) / inch, de = (bot - top) / inch;
+      if (Math.min(wi, de) < 18 || Math.min(wi, de) > 72 || Math.max(wi, de) < 30 || Math.max(wi, de) > 180) return null;
+      return { poly: [[lef, top], [rig, top], [rig, bot], [lef, bot]] };
+    }
+  }
+  return { find: find };
+})();

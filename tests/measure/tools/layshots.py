@@ -1,10 +1,10 @@
 """Pictures of the suggested layouts, room by room, for comparing two versions of the page.
 python3 layshots.py <base_url> <outdir> [plan ...]
 Plans: the five real plans (stand-in model replies; CORE=1 recommended) and 'harness' (the drawn
-10-room test plan in tests/harness) and 'open' (the great room in tests/harness/open, make_open.py). For each room it writes <plan>-<room>.png: one panel per card
+10-room test plan in tests/harness) 'open' (the great room in tests/harness/open, make_open.py) and 'kd' (a kitchen/dining room, tests/harness/kd). For each room it writes <plan>-<room>.png: one panel per card
 (the room cropped from the plan with the card's layout previewed), with the card's label and note
 under it, plus <outdir>/cards.txt."""
-import json, os, sys, time, textwrap
+import json, os, re, sys, time, textwrap
 import cv2
 from PIL import Image, ImageDraw, ImageFont
 from playwright.sync_api import sync_playwright
@@ -16,7 +16,7 @@ os.makedirs(OUT, exist_ok=True)
 HDIR = os.path.join(os.path.dirname(D), 'harness')
 ROOMS = {'studio': ['Bedroom', 'Living Room'], 'cabin': ['Sleeping', 'Living'], 'twostory': ['Bedroom', 'Living Room'],
          'floor2': ['Primary Bedroom', 'Sitting Room'], 'bedroom': ['Bedroom'],
-         'harness': ['Living Room', 'Dining Room', 'Office', 'Bedroom'], 'open': ['Living Room']}
+         'harness': ['Living Room', 'Dining Room', 'Office', 'Bedroom'], 'open': ['Living Room'], 'kd': ['Kitchen/Dining']}
 try: FONT = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 15); BOLD = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 16)
 except Exception: FONT = BOLD = ImageFont.load_default()
 
@@ -65,7 +65,7 @@ def shoot(page, plan, rooms, log):
         if i < 0: log.write('%s %s: no such room\n' % (plan, rm)); continue
         t0 = time.time()
         if not page.evaluate("(i) => !!layoutKind(state.rooms[i])", i):
-            slug = '%s-%s' % (plan, rm.replace(' ', '-').lower()); p = os.path.join(OUT, '_%s-x.png' % slug)
+            slug = '%s-%s' % (plan, re.sub('[^a-z0-9]+', '-', rm.lower())); p = os.path.join(OUT, '_%s-x.png' % slug)
             page.evaluate("(i) => { select(i, false); draw(); }", i); page.wait_for_timeout(120)
             page.screenshot(path=p, clip=page.evaluate(CROP, rm))
             sheet([panel(p, 'No layouts offered', 'Suggest a layout is not offered for this room type.')], '%s, %s' % (plan, rm), os.path.join(OUT, slug + '.png'))
@@ -75,7 +75,7 @@ def shoot(page, plan, rooms, log):
         dt = time.time() - t0
         cards = page.evaluate("() => state.layout.list.map(o => [o.label, o.note])")
         why = page.evaluate("() => state.layout.why")
-        slug = '%s-%s' % (plan, rm.replace(' ', '-').lower())
+        slug = '%s-%s' % (plan, re.sub('[^a-z0-9]+', '-', rm.lower()))
         log.write('%-9s %-16s (%.1fs) %s\n' % (plan, rm, dt, ' | '.join('%s [%s]' % tuple(c) for c in cards) or 'WHY ' + str(why)))
         panels = []
         for k, (label, note) in enumerate(cards):
@@ -100,8 +100,8 @@ with sync_playwright() as pw, open(os.path.join(OUT, 'cards.txt'), 'w') as log:
         ctx = b.new_context(viewport={'width': 1360, 'height': 860}, device_scale_factor=2)
         page = ctx.new_page(); errs = []
         page.on('pageerror', lambda e: errs.append(str(e)))
-        if plan in ('harness', 'open'):
-            hd = HDIR if plan == 'harness' else os.path.join(HDIR, 'open')
+        if plan in ('harness', 'open', 'kd'):
+            hd = HDIR if plan == 'harness' else os.path.join(HDIR, plan)
             rj, oj = open(os.path.join(hd, 'rooms.json')).read(), open(os.path.join(hd, 'openings.json')).read()
             ctx.route('**/*', mocked(rj, oj)); img = os.path.join(hd, 'plan.png')
         else:

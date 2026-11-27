@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=43"></script>
+  <script src="/static/tools/plan-engine.js?v=44"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -527,7 +527,7 @@
       'You are reading a residential floor plan image. List every door, doorway opening, and window drawn on it.',
       '',
       'Return ONLY a JSON object. No prose, no markdown, no code fences. Use exactly this shape:',
-      '{"openings":[{"kind":"door","type":"swing","x":42.5,"y":61,"width_in":32,"rooms":["Bedroom","Hallway"]}],"overall":{"width_ft":20,"length_ft":28},"dims":[{"text":"12\'4\"","feet":12.33,"x1":10,"y1":5,"x2":40,"y2":5}]}',
+      '{"openings":[{"kind":"door","type":"swing","x":42.5,"y":61,"width_in":32,"rooms":["Bedroom","Hallway"]}],"overall":{"width_ft":20,"length_ft":28},"dims":[{"text":"12\'4\"","feet":12.33,"x1":10,"y1":5,"x2":40,"y2":5}],"fixtures":[{"kind":"counter","x":30,"y":8,"w":25,"h":4}]}',
       '',
       'Rules:',
       '- kind is "door" for any door, "opening" for a doorway or gap in a wall with no door drawn, and "window" for a window.',
@@ -537,7 +537,8 @@
       '- rooms names the space on each side as the plan labels them, or "outside" for an exterior wall.',
       '- Include every one: closet doors, sliding glass doors, and doors to balconies, decks and porches too. Skip stairs, cabinets and appliances.',
       '- overall is the size of the whole building from the dimension lines printed around the outside of the plan, in decimal feet: width_ft across the image, length_ft up and down. Use null for any that is not printed.',
-      '- dims lists every dimension line printed on the plan (a measurement drawn with a line, arrows or ticks showing what it spans), inside or outside: text is the measurement as printed, feet is the same in decimal feet, and x1,y1 and x2,y2 are the two ends of its line (where the arrows or ticks are), as percentages of the FULL image. Leave out sizes printed under room names. Use [] if there are none.'
+      '- dims lists every dimension line printed on the plan (a measurement drawn with a line, arrows or ticks showing what it spans), inside or outside: text is the measurement as printed, feet is the same in decimal feet, and x1,y1 and x2,y2 are the two ends of its line (where the arrows or ticks are), as percentages of the FULL image. Leave out sizes printed under room names. Use [] if there are none.',
+      '- fixtures lists the kitchen counters and islands drawn on the plan: kind is "counter" for a run of counters against a wall (one entry per straight run, appliances in it included), "island" for a free-standing island, or "peninsula" for a counter run that sticks out into the room. x,y is its top-left corner and w,h its width and height, as percentages of the FULL image. Use [] if there are none.'
     ].join('\n');
 
     var RETRY_SUFFIX = '\n\nIMPORTANT: Your previous reply could not be parsed. Reply with the raw JSON object only, starting with { and ending with }.';
@@ -711,6 +712,14 @@
         return { kind: String(o.kind || 'door').toLowerCase(), type: o.type ? String(o.type).toLowerCase() : null, x: clamp(x, 0, 100), y: clamp(y, 0, 100) };
       }).filter(Boolean);
       out.overall = ov;   // the building's printed overall size, for a scale when no room gives one
+      // kitchen counters and islands: rough boxes (KITCHEN finds their edges in the drawing)
+      out.fixtures = (!Array.isArray(obj) && Array.isArray(obj.fixtures) ? obj.fixtures : []).map(function (f) {
+        var v = [num(f && f.x), num(f && f.y), num(f && f.w), num(f && f.h)];
+        if (v.some(function (q) { return q == null; }) || !(v[2] > 0 && v[3] > 0)) return null;
+        if (v.every(function (q) { return q <= 1; })) v = v.map(function (q) { return q * 100; });
+        var k = String(f.kind || 'counter').toLowerCase();
+        return { kind: k === 'island' ? 'island' : 'counter', peninsula: k === 'peninsula', x: v[0], y: v[1], w: v[2], h: v[3] };
+      }).filter(Boolean);
       // printed dimension lines: the value and roughly where the line's two ends are (WALLS finds the line itself)
       out.dims = (!Array.isArray(obj) && Array.isArray(obj.dims) ? obj.dims : []).map(function (d) {
         var v = [num(d && d.x1), num(d && d.y1), num(d && d.x2), num(d && d.y2)];
@@ -4000,6 +4009,16 @@
         if (r.shape) r.traced = true;
       });
       state.wallsRead = { w: G.w, h: G.h, ppf: res.ppf, openings: res.openings };
+      // kitchen counters and islands, pinned down on the drawing: kept on the room they stand in, in
+      // percent of the image like room shapes (r.fixtures: { kind, wall, rough, poly })
+      if (typeof KITCHEN !== 'undefined' && hints && hints.fixtures && hints.fixtures.length) {
+        KITCHEN.find(G, res, hints.fixtures).forEach(function (f) {
+          var poly = f.poly.map(function (q) { return { x: q[0] / G.w * 100, y: q[1] / G.h * 100 }; });
+          var c = poly.reduce(function (m, q) { return { x: m.x + q.x / poly.length, y: m.y + q.y / poly.length }; }, { x: 0, y: 0 });
+          var r = rooms.filter(function (rr) { return PLAN.pointInPoly(c, rr.shape || [{ x: rr.bbox.x, y: rr.bbox.y }, { x: rr.bbox.x + rr.bbox.w, y: rr.bbox.y }, { x: rr.bbox.x + rr.bbox.w, y: rr.bbox.y + rr.bbox.h }, { x: rr.bbox.x, y: rr.bbox.y + rr.bbox.h }]); })[0];
+          if (r) (r.fixtures = r.fixtures || []).push({ kind: f.kind, wall: f.wall || null, rough: !!f.rough, poly: poly });
+        });
+      }
       useWallsMap(res.wall, G.w, G.h, res.kmax);
       state.shapesDone = true;   // the outlines are already the walls'
     }
@@ -4598,6 +4617,8 @@
     function layoutKind(r) {
       if (!r || !state.scale || !r.ftShape) return null;
       var t = roomLType(r);
+      // a kitchen named for dining too (Kitchen/Dining, eat-in kitchen, kitchen and breakfast nook): a table in its free floor
+      if (t === 'kitchen' && /dining|eat|breakfast|nook/i.test(r.name)) return 'kitchendining';
       return t === 'bedroom' || t === 'living' || t === 'dining' || t === 'office' ? t : null;
     }
     function layoutOpen() { var r = state.rooms[state.selected]; return !!(state.layout && r && state.layout.room === r.id && state.mode === 'furnish'); }
@@ -5023,6 +5044,7 @@
       var sts = LAYOUT.stretches(poly, opens, wallTestFt()), kind = layoutKind(r);
       // a dining table stands in the middle of the room, so it needs no wall
       if (kind === 'dining') return diningLayouts(r, sts, done);
+      if (kind === 'kitchendining') return kitchenDiningLayouts(r, done);
       if (!sts.length) return done({ why: 'This room has no straight stretch of wall to set furniture against. Add pieces from Furniture and the checks will show what fits.' });
       if (kind === 'living') return livingLayouts(r, sts, opens, done);
       if (kind === 'office') return officeLayouts(r, sts, done);
@@ -5479,6 +5501,91 @@
         done({ list: out.map(function (c0) { var c = fillOut(r, c0, sts, 'dining', run); return c.option || (c.option = diningOption(r, c)); }), tried: run.tried, more: !!more });
       }
     }
+    /* ---------- Kitchen/dining rooms (Nov 27) ----------
+       The counters and islands come from the plan reader (r.fixtures: the model points, the drawing
+       pins each down). Each keeps a 42" work aisle clear in front (an island all round; NKBA's work
+       aisle), and the table goes in the floor that's left: the largest rectangular, round and oval
+       table with its chairs, each clear of the aisles and the walls with the usual dining checks.
+       Its rug keeps off the aisles too. */
+    var KD_AISLE = 42 / 12;
+    function fixturesFt(r) {
+      var f = state.scale.ftPerPx;
+      return (r.fixtures || []).map(function (fx) {
+        var poly = PLAN.shapeFt(fx.poly, f, state.W, state.H), b = PLAN.bounds(poly), A = KD_AISLE, zone;
+        // the aisle: in front of a counter (the side away from its wall), all round an island
+        if (fx.kind === 'counter' && fx.wall === 'N') zone = [{ x: b.x, y: b.y + b.h }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x + b.w, y: b.y + b.h + A }, { x: b.x, y: b.y + b.h + A }];
+        else if (fx.kind === 'counter' && fx.wall === 'S') zone = [{ x: b.x, y: b.y - A }, { x: b.x + b.w, y: b.y - A }, { x: b.x + b.w, y: b.y }, { x: b.x, y: b.y }];
+        else if (fx.kind === 'counter' && fx.wall === 'W') zone = [{ x: b.x + b.w, y: b.y }, { x: b.x + b.w + A, y: b.y }, { x: b.x + b.w + A, y: b.y + b.h }, { x: b.x + b.w, y: b.y + b.h }];
+        else if (fx.kind === 'counter' && fx.wall === 'E') zone = [{ x: b.x - A, y: b.y }, { x: b.x, y: b.y }, { x: b.x, y: b.y + b.h }, { x: b.x - A, y: b.y + b.h }];
+        else zone = [{ x: b.x - A, y: b.y - A }, { x: b.x + b.w + A, y: b.y - A }, { x: b.x + b.w + A, y: b.y + b.h + A }, { x: b.x - A, y: b.y + b.h + A }];
+        return { kind: fx.kind, poly: poly, zone: zone };
+      });
+    }
+    function kitchenDiningLayouts(r, done) {
+      if (!r.fixtures || !r.fixtures.length)
+        return done({ why: 'I can\u2019t tell where the counters are on this plan, so I can\u2019t suggest a table here yet. Add a table from Furniture and the checks will show what fits.' });
+      var poly = r.ftShape, b = PLAN.bounds(poly), fx = fixturesFt(r), cands = [];
+      var keepOff = fx.map(function (q) { return q.poly; }).concat(fx.map(function (q) { return q.zone; }));
+      // the middle of the floor the kitchen leaves: where a table reads as part of the room, not wedged in a corner
+      var free = { x: 0, y: 0, n: 0 };
+      for (var y = b.y + 0.25; y < b.y + b.h; y += 0.5) for (var x = b.x + 0.25; x < b.x + b.w; x += 0.5) {
+        var pt = { x: x, y: y };
+        if (PLAN.pointInPoly(pt, poly) && !keepOff.some(function (k) { return PLAN.pointInPoly(pt, k); })) { free.x += x; free.y += y; free.n++; }
+      }
+      if (!free.n) return done({ why: 'The counters and their 42" work aisles take the whole room, so there\u2019s no floor left for a table.' });
+      free.x /= free.n; free.y /= free.n;
+      [['rect', 2], ['rect', 1], ['rect', 0], ['round', 2], ['round', 1], ['round', 0], ['oval', 2], ['oval', 1], ['oval', 0]].forEach(function (fs) {
+        var sp = FURNITURE.sizeSpec(fs[0], fs[1]);
+        (sp.w === sp.d ? [0] : [0, 90]).forEach(function (rot) {
+          for (var y2 = b.y + 2; y2 <= b.y + b.h - 2; y2 += 0.5) for (var x2 = b.x + 2; x2 <= b.x + b.w - 2; x2 += 0.5) {
+            var c = { x: x2, y: y2 };
+            if (!PLAN.pointInPoly(c, poly) || keepOff.some(function (k) { return PLAN.pointInPoly(c, k); })) continue;
+            var places = LAYOUT.withChairs(sp, c, rot), polys = places.map(polyOf);
+            if (polys.some(function (pl) { return pl.some(function (q) { return !PLAN.pointInPoly(q, poly); }); })) continue;
+            // the table and its chairs keep out of the counters and their work aisles
+            if (polys.some(function (pl) { return keepOff.some(function (k) { return GEO.polyDist(pl, k) <= 1e-6; }); })) continue;
+            cands.push({ fam: fs[0], size: fs[1], places: places, off: Math.hypot(x2 - free.x, y2 - free.y), rot: rot });
+          }
+        });
+      });
+      cands.forEach(function (c) {
+        c.pcs = layPieces(c.places);
+        var q = layoutQuick(r, c.pcs);
+        c.close = q.close; c.qTight = q.tight;
+        // nearest the middle of the free floor; long side along the room's long side
+        c.score = q.tight * 10 + c.off * 2 + ((c.rot === 0) !== (b.w >= b.h) ? 2 : 0);
+      });
+      cands = cands.filter(function (c) { return !c.close; });
+      var run = layoutRunner(r), out = [], fams = ['rect', 'round', 'oval'], fi = 0;
+      var easy = function (c) { return !c.full.tight; };
+      function pick(fam, cb) {
+        var sizes = [2, 1, 0], si = 0, roomy = true;
+        (function step() {
+          if (si >= sizes.length) { if (!roomy) return cb(null); roomy = false; si = 0; }
+          var sz = sizes[si++], list = cands.filter(function (c) { return c.fam === fam && c.size === sz; }).sort(function (a, b2) { return a.score - b2.score; }).slice(0, 40);
+          if (!list.length) return step();
+          run.first(list, 3, function (c) { if (c) cb(c); else step(); }, roomy ? easy : null);
+        })();
+      }
+      (function next() {
+        if (fi >= fams.length) return finish(false);
+        pick(fams[fi++], function (c) { if (c) { out.push(c); finish(true); } next(); });
+      })();
+      function finish(more) {
+        if (!out.length) {
+          if (!more) done({ why: 'No table fits in the floor the counters leave, with 42" clear in front of them and room to walk around the chairs. Add a table from Furniture and the checks will show what\u2019s in the way.' });
+          return;
+        }
+        done({ list: out.map(function (c) {
+          if (c.option) return c.option;
+          var tbl = c.places[0];
+          c.rugAt = LAYOUT.tableRug(poly, tbl, keepOff);
+          var o = diningOption(r, c);
+          o.note = o.note.replace('Light adds a chandelier over the table.', '42" clear in front of the counters' + (fx.some(function (q) { return q.kind === 'island'; }) ? ' and all round the island' : '') + '. Light adds a chandelier over the table.');
+          return (c.option = o);
+        }), tried: run.tried, more: !!more });
+      }
+    }
     function diningWhy(r) {
       var b = PLAN.bounds(r.ftShape), short = Math.min(b.w, b.h) - (48 + 60) / 12;
       if (short < -1 / 12) return 'This room is ' + fmtFtIn(-short) + ' too small for a round table for 4 and the 30" it needs around it.';
@@ -5783,7 +5890,7 @@
       if (!el || !r) return;
       var html = '<button class="link-btn detail-back" data-lyback="1">' + backToRoom(r) + '</button>' +
         '<p class="lay-title">Layouts for ' + esc(r.name) + '</p>';
-      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the ' + ({ living: 'seating', dining: 'table', office: 'desk' }[layoutKind(r)] || 'bed') + ' on each wall and checking the walkways from the doors...</p>';
+      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the ' + ({ living: 'seating', dining: 'table', kitchendining: 'table', office: 'desk' }[layoutKind(r)] || 'bed') + ' on each wall and checking the walkways from the doors...</p>';
       else if (!L.list.length) html += '<p class="pane-sub">' + esc(L.why || 'No layout fits this room yet.') + '</p>';
       else {
         html += '<p class="pane-sub">' + (L.intro ? esc(L.intro) + ' ' : '') + 'Each one passes the spacing and walkway checks. Tap one to see it on the plan.</p><div class="lay-list">' +
