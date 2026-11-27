@@ -3779,8 +3779,35 @@ var LIGHT = (function () {
     var avg0 = o.avg || (n ? sum / n : 0), cs = 0;
     for (var c0 = 0; c0 < v.length; c0++) if (v[c0] != null) cs += Math.min(v[c0], avg0 * 3);
     var direct = n ? cs / n : 0, avg = avg0, BOUNCE = 0.25, k2 = direct ? avg * (1 - BOUNCE) / direct : 0, lo = Infinity, hi = 0;
-    for (var q = 0; q < v.length; q++) if (v[q] != null) { v[q] = v[q] * k2 + avg * BOUNCE; lo = Math.min(lo, v[q]); hi = Math.max(hi, v[q]); }
-    return { x0: x0, y0: y0, step: step, nx: nx, ny: ny, v: v, avg: avg, min: n ? lo : 0, max: hi };
+    // Light from the next room (o.spill: [{ fixtures, portals: [{ a, b }] }]): a fixture there reaches
+    // a spot here only along a straight line through a doorway or open side, at the point method's
+    // level less the usual losses (CU x LLF). It brightens the map and its dark spots; the room's own
+    // average (avg, the lumen method) stays its own lights'.
+    for (var q0 = 0; q0 < v.length; q0++) if (v[q0] != null) v[q0] = v[q0] * k2 + avg * BOUNCE;
+    var spill = (o.spill || []).map(function (sp) {
+      return { portals: sp.portals, fx: sp.fixtures.map(function (f) { return { x: f.x, y: f.y, z: f.z, lm: f.lm, m: f.m != null ? f.m : spread(f.beam) }; }) };
+    }), SK = CU * LLF, spilled = 0;
+    for (var j2 = 0; j2 < ny; j2++) for (var i2 = 0; i2 < nx; i2++) {
+      var kk = j2 * nx + i2;
+      if (v[kk] == null) continue;
+      var pp = { x: x0 + (i2 + 0.5) * step, y: y0 + (j2 + 0.5) * step }, add = 0;
+      spill.forEach(function (sp) {
+        sp.fx.forEach(function (f) {
+          if (!sp.portals.some(function (g) { return crosses(f, pp, g.a, g.b); })) return;
+          var h = Math.max(0.25, f.z), d2 = (f.x - pp.x) * (f.x - pp.x) + (f.y - pp.y) * (f.y - pp.y), r2 = d2 + h * h;
+          add += f.lm * (f.m + 1) / (2 * Math.PI) * Math.pow(h / Math.sqrt(r2), f.m + 1) / r2 * SK;
+        });
+      });
+      if (add) { v[kk] += add; spilled++; }
+    }
+    for (var q = 0; q < v.length; q++) if (v[q] != null) { lo = Math.min(lo, v[q]); hi = Math.max(hi, v[q]); }
+    return { x0: x0, y0: y0, step: step, nx: nx, ny: ny, v: v, avg: avg, min: n ? lo : 0, max: hi, spilled: spilled };
+  }
+  // does segment p-q cross segment a-b
+  function crosses(p, q, a, b) {
+    var c = function (o, u, w) { return (u.x - o.x) * (w.y - o.y) - (u.y - o.y) * (w.x - o.x); };
+    var d1 = c(a, b, p), d2 = c(a, b, q), d3 = c(p, q, a), d4 = c(p, q, b);
+    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
   }
   /* Dark spots on a light map: patches below limit (foot-candles) at least minArea square feet,
      each placed at its middle and valued at its darkest point. Darkest first, at most `most`. */

@@ -497,7 +497,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=45"></script>
+  <script src="/static/tools/plan-engine.js?v=46"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -2670,6 +2670,17 @@
       }
       return best;
     }
+    // The wall a floor lamp stands against (its room's nearest wall, within 15" of the lamp's middle),
+    // as the direction into the room, or null. Lamps on tables don't face anything.
+    function floorLampWall(l) {
+      if (l.table || !state.scale) return null;
+      var r = roomById(l.room);
+      if (!r || !r.ftShape) return null;
+      var w = wallAt(r, lightFt(l));
+      return w && w.d <= 15 / 12 ? { x: w.nx, y: w.ny } : null;
+    }
+    // Where a floor lamp's shade is drawn when it stands against a wall: out into the room, past its base
+    function floorLampShade(p, fw, rad, ratio) { var o = rad + 5 * ratio; return { x: p.x + fw.x * o, y: p.y + fw.y * o }; }
     // Put a sconce on the nearest wall of its room
     function snapSconce(l) {
       var r = roomById(l.room);
@@ -2935,6 +2946,10 @@
         var q = lampPx(pc);
         if (!q) return;
         var d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (q.floor) {   // a lamp against a wall: its shade is drawn out in the room
+          var rm = pieceRoom(pc), fw = rm ? floorLampWall({ kind: 'floorlamp', x: q.x / state.W * 100, y: q.y / state.H * 100, room: rm.id }) : null;
+          if (fw) { var sh = floorLampShade(q, fw, lightRad({ kind: 'floorlamp', dia: 16 }), displayRatio()); d = Math.min(d, Math.hypot(sh.x - p.x, sh.y - p.y)); }
+        }
         if (d <= reach && d < bd) { bd = d; best = k; }
       });
       return best;
@@ -2992,7 +3007,8 @@
       state.pieces.forEach(function (pc) {
         var q = lampPx(pc);
         if (!q) return;
-        drawFixture(ctx, { kind: 'floorlamp', x: q.x / state.W * 100, y: q.y / state.H * 100, dia: q.floor ? 16 : 12 }, !forExport && state.lampSel === pc.id, ratio, f);
+        var rm = q.floor ? pieceRoom(pc) : null;
+        drawFixture(ctx, { kind: 'floorlamp', x: q.x / state.W * 100, y: q.y / state.H * 100, dia: q.floor ? 16 : 12, room: rm ? rm.id : null, table: !q.floor }, !forExport && state.lampSel === pc.id, ratio, f);
       });
     }
 
@@ -3047,6 +3063,53 @@
        the floor elsewhere. Paler is brighter, deeper taupe dimmer. Patches under half the room's general
        target are dark spots: marked on the plan and named on the room card. */
     var MAPCACHE = {}, MAPCACHE_N = 0, LP_EXPORT = false;
+    // The fixtures that light a room, as the light map takes them: its own lights (not under-cabinet
+    // strips, which light their counter) and the lamps on its furniture
+    function roomFixturesFt(r) {
+      var f = state.scale.ftPerPx, ceil = roomCeil(r), out = [];
+      lightsIn(r).forEach(function (l) {
+        var k = kindOf(l), p = lightFt(l);
+        if (k === 'undercab') return;
+        var z = k === 'recessed' || k === 'flush' ? ceil : k === 'sconce' ? (l.mount || LIGHT.SCONCE_H) / 12 : k === 'floorlamp' ? 58 / 12 : (l.hang || 66) / 12;
+        out.push({ x: p.x, y: p.y, z: z, lm: lumensOf(l), beam: l.beam || 'wide', m: k === 'recessed' ? null : 1 });
+      });
+      state.pieces.forEach(function (pc) {
+        if (!LIGHT.isLamp(pc) || pieceRoom(pc) !== r) return;
+        var q = lampPx(pc);
+        if (q) out.push({ x: q.x * f, y: q.y * f, z: (q.floor ? 58 : surfaceH(pc) + 18) / 12, lm: lampLmOf(pc), m: 1 });
+      });
+      return out;
+    }
+    // The ways light gets from the next rooms into this one: doors and doorways (not windows) on its
+    // outline and another room's, and its open sides (no wall drawn), each with the room across it.
+    // [{ room, a, b }] in feet
+    function lightPortals(r) {
+      var out = [], others = state.rooms.filter(function (o) { return o !== r && o.ftShape; });
+      realDoors().forEach(function (d) {
+        var g = DOOR.geom(doorFt(d)), a = g.jambs[0], b = g.jambs[1], m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        if (GEO.edgeDist(m, r.ftShape) > 1) return;
+        others.forEach(function (o) { if (GEO.edgeDist(m, o.ftShape) <= 1) out.push({ room: o, a: a, b: b }); });
+      });
+      var opens = state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); return { a: g.jambs[0], b: g.jambs[1], window: isWin(d) }; });
+      LAYOUT.openSides(r.ftShape, opens, wallTestFt()).forEach(function (sd) {
+        var far = { x: (sd.strip[2].x + sd.strip[3].x) / 2, y: (sd.strip[2].y + sd.strip[3].y) / 2 };
+        var o = others.filter(function (o2) { return PLAN.pointInPoly(far, o2.ftShape) || GEO.edgeDist(far, o2.ftShape) <= 0.5; })[0];
+        if (o) out.push({ room: o, a: sd.strip[0], b: sd.strip[1] });
+      });
+      return out;
+    }
+    // The light that comes in from the next rooms (lit ones only): each room's fixtures with the gaps between
+    function lightSpill(r) {
+      var by = {};
+      lightPortals(r).forEach(function (pt) {
+        if (!lightable(pt.room) || !lightCfg(pt.room).done) return;
+        (by[pt.room.id] = by[pt.room.id] || { room: pt.room, portals: [] }).portals.push({ a: pt.a, b: pt.b });
+      });
+      return Object.keys(by).map(function (id) {
+        var fx = roomFixturesFt(by[id].room);
+        return fx.length ? { fixtures: fx, portals: by[id].portals } : null;
+      }).filter(Boolean);
+    }
     function lightMapFor(r) {
       if (!lightable(r) || !lightCfg(r).done) return null;
       var f = state.scale.ftPerPx, ceil = roomCeil(r), ls = lightsIn(r);
@@ -3072,7 +3135,12 @@
         var even = strips[pc.id] ? strips[pc.id] * LIGHT.CU * LIGHT.LLF / Math.max(1, LIGHT.polyArea(pf.poly)) : 0;
         surfaces.push({ poly: pf.poly, h: surfaceH(pc) / 12, even: even });
       });
-      var mp = LIGHT.map({ poly: r.ftShape, step: 0.5, fixtures: fixtures, surfaces: surfaces, skip: skip, avg: roomLight(r).fcAll });
+      var spill = lightSpill(r);
+      if (spill.length) {   // the next rooms' lights count toward this map too: the cache key has to know them
+        key += JSON.stringify(spill);
+        if (MAPCACHE[key]) return MAPCACHE[key];
+      }
+      var mp = LIGHT.map({ poly: r.ftShape, step: 0.5, fixtures: fixtures, surfaces: surfaces, skip: skip, avg: roomLight(r).fcAll, spill: spill });
       var tg = roomGeneral(r) || 10;
       mp.target = tg;
       mp.dark = LIGHT.darkSpots(mp, tg * 0.5, 1.5, 2);
@@ -3225,6 +3293,10 @@
     }
     function drawFixture(ctx, l, sel, ratio, f) {
       var k = kindOf(l), p = lightPx(l), rad = lightRad(l), ink = '#582b36';
+      if (k === 'floorlamp') {
+        var fw = floorLampWall(l);
+        if (fw) { l._fw = fw; l._base = { x: p.x, y: p.y }; p = floorLampShade(p, fw, rad, ratio); }
+      }
       function ring(rr, fill) { ctx.beginPath(); ctx.arc(p.x, p.y, rr, 0, Math.PI * 2); if (fill) { ctx.fillStyle = fill; ctx.fill(); } }
       ctx.save();
       if (k === 'undercab') {
@@ -3279,6 +3351,10 @@
       else if (k === 'floorlamp') {
         ctx.lineWidth = 1.4 * ratio; var d = rad * 0.6;
         ctx.beginPath(); ctx.moveTo(p.x - d, p.y - d); ctx.lineTo(p.x + d, p.y + d); ctx.moveTo(p.x + d, p.y - d); ctx.lineTo(p.x - d, p.y + d); ctx.stroke();
+        if (l._base) {   // against a wall: the base where it stands, an arm out to the shade
+          ctx.beginPath(); ctx.moveTo(l._base.x, l._base.y); ctx.lineTo(p.x - l._fw.x * rad, p.y - l._fw.y * rad); ctx.stroke();
+          ctx.beginPath(); ctx.arc(l._base.x, l._base.y, Math.max(2.2 * ratio, rad * 0.26), 0, Math.PI * 2); ctx.fillStyle = ink; ctx.fill();
+        }
       }
       ctx.restore();
     }
