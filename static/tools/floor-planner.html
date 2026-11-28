@@ -1019,7 +1019,7 @@
         if (lit) { ctx.save(); ctx.globalAlpha = 0.5; }
         RUG_TAGS = []; drawRugs(ctx, forExport); drawPieces(ctx, forExport); drawRugTags(ctx);
         if (lit) ctx.restore();
-        drawDoors(ctx, forExport); if (!LP_EXPORT) drawWalkways(ctx, forExport, 'routes');
+        drawDoors(ctx, forExport); if (!LP_EXPORT && state.mode !== 'light') drawWalkways(ctx, forExport, 'routes');
         if (lit) drawLights(ctx, forExport);
       }
 
@@ -4004,7 +4004,7 @@
         var what = isWin(d) ? '' : t === 'barn' ? ' slide' : t === 'bifold' ? ' fold' : ' swing';
         rows.push({ label: doorName(d) + what, status: st.bad ? 'close' : 'ok', word: st.word, value: st.value, a: -1, b: -1, hits: st.hits || [], say: !st.bad ? ''
           : isWin(d) ? 'The ' + listNames(st.hits) + ' stands in front of ' + doorName(d).toLowerCase() + '. Move it, or pick something lower.'
-          : cap1(doorName(d).toLowerCase()) + ' hits the ' + listNames(st.hits) + ' as it' + (t === 'barn' ? ' slides' : t === 'bifold' ? ' folds' : ' swings') + ' open. Move the ' + listNames(st.hits.map(owner)) + ' out of its way.' });
+          : cap1(doorName(d).toLowerCase()) + ' hits the ' + listNames(st.hits) + ' as it' + (t === 'barn' ? ' slides' : t === 'bifold' ? ' folds' : ' swings') + ' open. ' + (t === 'swing' || t === 'double' ? 'Flip its swing, or move the ' : 'Move the ') + listNames(st.hits.map(owner)) + (t === 'swing' || t === 'double' ? '.' : ' out of its way.') });
       });
       return rows;
     }
@@ -7194,26 +7194,86 @@
       var total = 0, est = 0;
       state.rooms.forEach(function (r) { total += area(r); if (r.source === 'estimated') est++; });
 
-      // Header
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(67, 62, 60);
-      doc.text('Floor Plan Summary', margin, y + 6);
-      if (logo) doc.addImage(logo, 'PNG', pageW - margin - 54, margin - 18, 54, 54);
-      y += 28;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(107, 101, 96);
       var date = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      doc.text(state.rooms.length + ' spaces  \u00b7  ' + Math.round(total).toLocaleString() + ' total sq ft  \u00b7  ' + date, margin, y);
-      y += 22;
+      function header(title, sub) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(67, 62, 60);
+        doc.text(title, margin, y + 6);
+        if (logo) doc.addImage(logo, 'PNG', pageW - margin - 54, margin - 18, 54, 54);
+        y += 28;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(107, 101, 96);
+        doc.text(sub, margin, y);
+        y += 22;
+      }
+      // The furniture plan (lighting has pages of its own), as words or with every measurement
+      function planImage(maxH, words) {
+        var was = state.mode;
+        if (state.pieces.length && was === 'light') state.mode = 'furnish';
+        NUMBERS = !words;
+        try { draw(true); var img = $('planCanvas').toDataURL('image/jpeg', 0.92); }
+        finally { NUMBERS = true; state.mode = was; }
+        var iw = contentW, ih = iw * state.H / state.W;
+        if (ih > maxH) { ih = maxH; iw = ih * state.W / state.H; }
+        var ix = margin + (contentW - iw) / 2;
+        doc.addImage(img, 'JPEG', ix, y, iw, ih);
+        doc.setDrawColor(208, 201, 188); doc.setLineWidth(1); doc.rect(ix, y, iw, ih);
+        y += ih + 24;
+      }
+      // A short line with a colored dot, wrapped
+      function said(text, col) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+        var ln = doc.splitTextToSize(ascii(text), contentW - 18), h = ln.length * 14 + 6;
+        checkPage(h);
+        doc.setFillColor.apply(doc, col); doc.circle(margin + 4, y + 4, 3, 'F');
+        doc.setTextColor(67, 62, 60); doc.text(ln, margin + 16, y + 8);
+        y += h;
+      }
+      var DOT = { ok: [127, 148, 51], tight: [176, 125, 20], close: [88, 43, 54] };
 
-      // Annotated plan
-      draw(true);
-      var img = $('planCanvas').toDataURL('image/jpeg', 0.92);
+      // ---- Page 1: the summary, in plain words (the plan as it looks on screen)
+      header('Floor Plan Summary', state.rooms.length + ' rooms  \u00b7  ' + date);
+      planImage(290, true);
+      if (state.scale && state.pieces.length) {
+        var fixes = sayOnce(spaceRows(null).filter(function (rw) { return rw.status !== 'ok'; }));
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+        checkPage(40); doc.text(fixes.length ? 'What to fix' : 'Furniture', margin, y); y += 16;
+        if (!fixes.length) said('Everything fits.', DOT.ok);
+        fixes.forEach(function (rw) { said(rw.say || rw.label, DOT[rw.status]); });
+        y += 10;
+      }
+      var lit = state.scale ? state.rooms.filter(function (r) { return lightable(r) && lightCfg(r).done && roomTarget(r) != null && lightsIn(r).length; }) : [];
+      if (lit.length) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
+        checkPage(40); doc.text('Lighting', margin, y); y += 16;
+        var well = [];
+        lit.forEach(function (r) {
+          var ev = roomLight(r), off = ev.status === 'dim' || ev.status === 'bright' || (ev.vanity && ev.vanity.status !== 'ok') || ev.workStatus === 'dim';
+          if (off) said(r.name + ': ' + lightVerdict(r, ev) + ' ' + (lightFixes(r, ev)[0] || ''), DOT.tight); else well.push(r.name);
+        });
+        if (well.length) said((well.length === lit.length ? 'Every room is well lit' : 'Well lit: ' + (well.length > 1 ? well.slice(0, -1).join(', ') + ' and ' + well[well.length - 1] : well[0])) + '. The lighting pages have the fixture list.', DOT.ok);
+        y += 10;
+      }
+      var guesses = state.rooms.filter(function (r) { return r.source === 'estimated'; }).map(function (r) { return r.name; });
+      var bn = doc.splitTextToSize(ascii((guesses.length ? 'The size of ' + (guesses.length > 1 ? guesses.slice(0, -1).join(', ') + ' and ' + guesses[guesses.length - 1] : guesses[0]) + ' is a guess, so measure ' + (guesses.length > 1 ? 'them' : 'it') + ' first. ' : '') +
+        'Everything here is measured on the plan’s scale. Check with a tape measure before buying.'), contentW - 28);
+      var bh = bn.length * 14 + 34;
+      function beforeBuy() {
+        doc.setFillColor(245, 240, 232); doc.roundedRect(margin, y, contentW, bh, 6, 6, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(88, 43, 54);
+        doc.text('BEFORE YOU BUY', margin + 14, y + 16);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
+        doc.text(bn, margin + 14, y + 31);
+        y += bh + 18;
+      }
+      // on the summary page when it fits; otherwise it opens the details (never a page of its own)
+      var later = y + bh > pageH - margin;
+      if (!later) beforeBuy();
+
+      // ---- Then every number: the plan with its measurements, and the tables
+      doc.addPage(); y = margin;
+      header('The details', state.rooms.length + ' rooms  \u00b7  ' + Math.round(total).toLocaleString() + ' total sq ft');
+      if (later) beforeBuy();
+      planImage(380, false);
       draw();
-      var maxH = 380, iw = contentW, ih = iw * state.H / state.W;
-      if (ih > maxH) { ih = maxH; iw = ih * state.W / state.H; }
-      var ix = margin + (contentW - iw) / 2;
-      doc.addImage(img, 'JPEG', ix, y, iw, ih);
-      doc.setDrawColor(208, 201, 188); doc.setLineWidth(1); doc.rect(ix, y, iw, ih);
-      y += ih + 26;
 
       // Room table
       checkPage(70);
@@ -7227,7 +7287,7 @@
       doc.text('WIDTH', cols[1], y + 14);
       doc.text('LENGTH', cols[2], y + 14);
       doc.text('SQ FT', cols[3], y + 14);
-      doc.text('SOURCE', cols[4], y + 14, { align: 'right' });
+      doc.text('NOTE', cols[4], y + 14, { align: 'right' });
       y += 22;
       state.rooms.forEach(function (r, i) {
         checkPage(22);
@@ -7238,9 +7298,8 @@
         doc.text(fmtFtIn(r.width) || '-', cols[1], y + 13);
         doc.text(fmtFtIn(r.length) || '-', cols[2], y + 13);
         doc.text(area(r) ? Math.round(area(r)).toLocaleString() : '-', cols[3], y + 13);
-        var src = r.source === 'labeled' ? 'From plan' : r.source === 'edited' ? 'Edited' : r.source === 'measured' ? 'Measured' : 'Estimated';
-        if (r.source === 'estimated') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
-        doc.text(src, cols[4], y + 13, { align: 'right' });
+        doc.setTextColor(88, 43, 54);
+        if (r.source === 'estimated') doc.text('A guess: measure it', cols[4], y + 13, { align: 'right' });
         y += 20;
       });
       doc.setDrawColor(67, 62, 60); doc.setLineWidth(1); doc.line(margin, y, margin + contentW, y);
@@ -7333,12 +7392,16 @@
         sRows.forEach(function (rw, i) {
           // Long checks (walkways name their routes) wrap onto more lines rather than being cut off
           doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-          var lines = doc.splitTextToSize(ascii(rw.label), sc[1] - sc[0] - 12), h = 20 + (lines.length - 1) * 12;
+          var lines = doc.splitTextToSize(ascii(rw.label), sc[1] - sc[0] - 12);
+          var fixPart = rw.status !== 'ok' && rw.say ? (rw.say.match(/[^.]*\.\s*(.*)$/) || [])[1] : '';
+          var fixLines = fixPart ? doc.splitTextToSize(ascii(fixPart), sc[1] - sc[0] - 12) : [];
+          var h = 20 + (lines.length - 1) * 12 + fixLines.length * 12;
           checkPage(h + 2);
           doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
           doc.rect(margin, y, contentW, h, 'F');
           doc.setTextColor(67, 62, 60);
           doc.text(lines, sc[0], y + 13);
+          if (fixLines.length) { doc.setTextColor(107, 101, 96); doc.text(fixLines, sc[0], y + 13 + lines.length * 12); doc.setTextColor(67, 62, 60); }
           doc.text(ascii(rw.value).slice(0, 30), sc[1], y + 13);
           if (rw.status === 'close') doc.setTextColor(88, 43, 54); else doc.setTextColor(107, 101, 96);
           doc.text(rw.word, sc[2], y + 13, { align: 'right' });
@@ -7349,20 +7412,6 @@
         var sn = doc.splitTextToSize('Measured on this plan\u2019s scale. Check with a tape measure before buying.', contentW);
         doc.text(sn, margin, y + 4);
         y += sn.length * 12 + 18;
-      }
-
-      // Practical note when anything was estimated
-      if (est) {
-        checkPage(60);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-        var note = doc.splitTextToSize(est + (est === 1 ? ' room was' : ' rooms were') + ' estimated because the plan did not print its dimensions. Measure ' + (est === 1 ? 'it' : 'those') + ' in person before ordering flooring, rugs, or furniture.', contentW - 28);
-        var nh = note.length * 14 + 34;
-        doc.setFillColor(245, 240, 232); doc.roundedRect(margin, y, contentW, nh, 6, 6, 'F');
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(88, 43, 54);
-        doc.text('BEFORE YOU BUY', margin + 14, y + 16);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
-        doc.text(note, margin + 14, y + 31);
-        y += nh + 18;
       }
 
       // Lighting plan: its own page once any room has lights
@@ -7502,7 +7551,7 @@
       for (var pg = 1; pg <= pages; pg++) {
         doc.setPage(pg);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(107, 101, 96);
-        doc.text('Made with the Studio Lou Floor Plan Parser  \u00b7  studiolouinteriors.com', pageW / 2, pageH - 30, { align: 'center' });
+        doc.text('Made with the Studio Lou Floor Planner  \u00b7  studiolouinteriors.com', pageW / 2, pageH - 30, { align: 'center' });
       }
       doc.save('floor-plan-summary.pdf');
     }

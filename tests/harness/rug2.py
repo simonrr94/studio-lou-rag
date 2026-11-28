@@ -54,8 +54,9 @@ with sync_playwright() as pw:
         after = page.evaluate("() => { var r = state.rooms[H.room('Living Room')]; return [r.rug.x, r.rug.y, r.rug2.x, r.rug2.y]; }")
         ok('dragging moves the second rug only', after[:2] == before[:2] and after[2] != before[2], json.dumps([before, after]))
         cap(page, 'dragged')
-        page.evaluate("() => { state.cat = 'Rugs'; renderCatalog(); }"); page.wait_for_timeout(100)
-        ok('the Rugs tab shows the second rug', 'A second rug' in page.evaluate("() => document.getElementById('panel').innerText"))
+        # Phase C: a tapped rug gets the floating toolbar (turn, remove); the Rugs tab is best fit and sizes only
+        tb = page.evaluate("() => { var fb = document.getElementById('floatBar'); return [state.rugBar, !fb.classList.contains('hidden'), !!fb.querySelector('[data-fact=rugremove]')]; }")
+        ok('the second rug gets the floating toolbar', tb[0] and str(tb[0]).endswith('~2') and tb[1] and tb[2], json.dumps(tb))
         cap(page, 'rugs-tab')
         page.keyboard.press('Delete'); page.wait_for_timeout(100)
         ok('Delete removes the second rug, not the first', page.evaluate("() => { var r = state.rooms[H.room('Living Room')]; return !!r.rug && !r.rug2; }"))
