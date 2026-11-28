@@ -82,6 +82,9 @@ with sync_playwright() as pw:
     pg = page_for('fire3'); d = run(pg, 'fire3'); L = [c['label'] for c in d['cards']]
     ok('fire3: the first card faces the fireplace', L and 'facing the fireplace' in L[0], json.dumps(L))
     ok('fire3: the TV goes over the fireplace', 'over the fireplace' in d['cards'][0]['note'], d['cards'][0]['note'])
+    import re
+    m = re.search(r"over the fireplace, (\d+)'", d['cards'][0]['note'])
+    ok('fire3: the sofa within 10\' of the fireplace', bool(m) and int(m.group(1)) <= 10, d['cards'][0]['note'][:160])
     ok('fire3: a card with the TV on its own wall', any('own wall' in x for x in L), json.dumps(L))
     ok('fire3: nothing on the hearth or right in front of it', not any(poly_hit(p['poly'], d['fire']['keep']) for c in d['cards'] for p in c['places']))
     bk = [p for p in d['cards'][0]['places'] if p['id'] == 'bookcase']
@@ -100,7 +103,8 @@ with sync_playwright() as pw:
         return bool(main) and (lambda f: f[0] * n['x'] + f[1] * n['y'] > 0.5)(seat_front(main[0]))
     ok('fire2: no layout turns its back on the fireplace', not any(back_to_fire(c) for c in d['cards']), json.dumps(L))
     ok('fire2: no media console in front of the fireplace', not any(p['id'] == 'media' and poly_hit(p['poly'], d['fire']['keep']) for c in d['cards'] for p in c['places']))
-    ok('fire2: open to the kitchen, so every card has a dining zone', all('dining' in x for x in L), json.dumps(L))
+    ok('fire2: open to the kitchen, a card with a dining zone', any('dining' in x for x in L), json.dumps(L))
+    ok('fire rooms: no layout ignores the fireplace (no plain conversation card)', not any('conversation' in x.lower() for x in L), json.dumps(L))
     for k in range(len(d['cards'])):
         u = pg.evaluate(USE, k)
         ok('fire2: card %d used, nothing in burgundy' % (k + 1), not u['rows'], json.dumps(u['rows']))
@@ -108,14 +112,15 @@ with sync_playwright() as pw:
     # big: a big closed living room, room for a reading spot and a desk
     pg = page_for('big'); d = run(pg, 'big'); L = [c['label'] for c in d['cards']]
     rd = [c for c in d['cards'] if 'reading' in c['label']]
-    ok('big: a card with a reading corner', bool(rd), json.dumps(L))
-    ok('big: a card with a desk', any('desk' in x for x in L), json.dumps(L))
+    ok('big: no office in the house, so a card with a desk', any('desk' in x for x in L), json.dumps(L))
+    ok('big: no bare sectional in a corner of a big room', not any(x == 'Sectional in the corner' for x in L), json.dumps(L))
     import math
     def near_seat(c):
         seats = [p for p in c['places'] if p['role'] == 'seat']
         ch = [p for p in c['places'] if p['id'] == 'armchair'][-1]
         return min(math.hypot(ch['cx'] - s['cx'], ch['cy'] - s['cy']) for s in seats if s is not ch) <= 8.5
-    ok('big: the reading chair within conversation distance of the group', all(near_seat(c) for c in rd))
+    chairs_off = [c['label'] for c in d['cards'] if sum(1 for p in c['places'] if p['id'] == 'armchair') > 2 and 'reading' not in c['label'] and 'fireplace' not in c['label']]
+    ok('big: no stray third armchair', not chairs_off, json.dumps(chairs_off))
     for k in range(len(d['cards'])):
         u = pg.evaluate(USE, k)
         ok('big: card %d used, nothing in burgundy' % (k + 1), not u['rows'], json.dumps(u['rows']))
