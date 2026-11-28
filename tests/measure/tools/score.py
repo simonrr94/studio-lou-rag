@@ -167,7 +167,7 @@ FOUND_JS = """() => {
   return { ftPerPx: f || null, from: state.scale && state.scale.from, walls: state.scale && state.scale.walls,
     rooms: state.rooms.map(function (r) {
       var poly = r.ftShape && f ? r.ftShape.map(px) : r.bbox ? [[r.bbox.x/100*W, r.bbox.y/100*H], [(r.bbox.x+r.bbox.w)/100*W, r.bbox.y/100*H], [(r.bbox.x+r.bbox.w)/100*W, (r.bbox.y+r.bbox.h)/100*H], [r.bbox.x/100*W, (r.bbox.y+r.bbox.h)/100*H]] : null;
-      return { name: r.name, poly: poly }; }),
+      return { name: r.name, poly: poly, fixtures: (r.fixtures || []).map(function (x) { return { kind: x.kind, front: x.front, rough: x.rough }; }) }; }),
     doors: f ? state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); var a = px(g.jambs[0]), b = px(g.jambs[1]);
       return { type: d.type === 'window' ? 'window' : (d.type || 'swing'), a: a, b: b, c: [(a[0]+b[0])/2, (a[1]+b[1])/2] }; }) : [] };
 }"""

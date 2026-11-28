@@ -463,7 +463,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=50"></script>
+  <script src="/static/tools/plan-engine.js?v=51"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -504,7 +504,7 @@
       '- Include every one: closet doors, sliding glass doors, and doors to balconies, decks and porches too. Skip stairs, cabinets and appliances.',
       '- overall is the size of the whole building from the dimension lines printed around the outside of the plan, in decimal feet: width_ft across the image, length_ft up and down. Use null for any that is not printed.',
       '- dims lists every dimension line printed on the plan (a measurement drawn with a line, arrows or ticks showing what it spans), inside or outside: text is the measurement as printed, feet is the same in decimal feet, and x1,y1 and x2,y2 are the two ends of its line (where the arrows or ticks are), as percentages of the FULL image. Leave out sizes printed under room names. Use [] if there are none.',
-      '- fixtures lists the kitchen counters and islands, and every fireplace, drawn on the plan: kind is "counter" for a run of counters against a wall (one entry per straight run, appliances in it included), "island" for a free-standing island, "peninsula" for a counter run that sticks out into the room, or "fireplace" for a fireplace (its surround, chimney breast and hearth together). x,y is its top-left corner and w,h its width and height, as percentages of the FULL image. Use [] if there are none.'
+      '- fixtures lists the kitchen counters and islands, every fireplace, and the bathroom fixtures drawn on the plan: kind is "counter" for a run of counters against a wall (one entry per straight run, appliances in it included), "island" for a free-standing island, "peninsula" for a counter run that sticks out into the room, "fireplace" for a fireplace (its surround, chimney breast and hearth together), and in bathrooms "toilet", "tub" for a bathtub (a shower over a tub is a tub), "shower" for a stand-alone shower, or "vanity" for a bathroom sink cabinet or counter (one entry per counter, a double vanity is one). x,y is its top-left corner and w,h its width and height, as percentages of the FULL image. Use [] if there are none.'
     ].join('\n');
 
     var RETRY_SUFFIX = '\n\nIMPORTANT: Your previous reply could not be parsed. Reply with the raw JSON object only, starting with { and ending with }.';
@@ -684,7 +684,8 @@
         if (v.some(function (q) { return q == null; }) || !(v[2] > 0 && v[3] > 0)) return null;
         if (v.every(function (q) { return q <= 1; })) v = v.map(function (q) { return q * 100; });
         var k = String(f.kind || 'counter').toLowerCase();
-        return { kind: k === 'island' ? 'island' : /fire/.test(k) ? 'fireplace' : 'counter', peninsula: k === 'peninsula', x: v[0], y: v[1], w: v[2], h: v[3] };
+        var bk = /toilet|wc/.test(k) ? 'toilet' : /shower/.test(k) ? 'shower' : /tub|bath/.test(k) ? 'tub' : /vanity|basin|lav/.test(k) ? 'vanity' : null;
+        return { kind: bk || (k === 'island' ? 'island' : /fire/.test(k) ? 'fireplace' : 'counter'), peninsula: k === 'peninsula', x: v[0], y: v[1], w: v[2], h: v[3] };
       }).filter(Boolean);
       // printed dimension lines: the value and roughly where the line's two ends are (WALLS finds the line itself)
       out.dims = (!Array.isArray(obj) && Array.isArray(obj.dims) ? obj.dims : []).map(function (d) {
@@ -4228,7 +4229,7 @@
           var r = rooms.filter(function (rr) { return PLAN.pointInPoly(c, rr.shape || [{ x: rr.bbox.x, y: rr.bbox.y }, { x: rr.bbox.x + rr.bbox.w, y: rr.bbox.y }, { x: rr.bbox.x + rr.bbox.w, y: rr.bbox.y + rr.bbox.h }, { x: rr.bbox.x, y: rr.bbox.y + rr.bbox.h }]); })[0];
           var P = function (q) { return { x: q[0] / G.w * 100, y: q[1] / G.h * 100 }; };
           if (r) (r.fixtures = r.fixtures || []).push({ kind: f.kind, wall: f.wall || null, rough: !!f.rough, poly: poly,
-            face: f.face ? f.face.map(P) : null, n: f.n || null, breast: !!f.breast });
+            face: f.face ? f.face.map(P) : null, n: f.n || null, breast: !!f.breast, front: f.front || null, against: f.against || null });
         });
       }
       useWallsMap(res.wall, G.w, G.h, res.kmax);
@@ -6335,7 +6336,7 @@
     var KD_AISLE = 42 / 12;
     function fixturesFt(r) {
       var f = state.scale.ftPerPx;
-      return (r.fixtures || []).map(function (fx) {
+      return (r.fixtures || []).filter(function (fx) { return fx.kind === 'counter' || fx.kind === 'island'; }).map(function (fx) {
         var poly = PLAN.shapeFt(fx.poly, f, state.W, state.H), b = PLAN.bounds(poly), A = KD_AISLE, zone;
         // the aisle: in front of a counter (the side away from its wall), all round an island
         if (fx.kind === 'counter' && fx.wall === 'N') zone = [{ x: b.x, y: b.y + b.h }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x + b.w, y: b.y + b.h + A }, { x: b.x, y: b.y + b.h + A }];
@@ -6347,7 +6348,7 @@
       });
     }
     function kitchenDiningLayouts(r, done) {
-      if (!r.fixtures || !r.fixtures.length)
+      if (!fixturesFt(r).length)
         return done({ why: 'I can\u2019t tell where the counters are on this plan, so I can\u2019t suggest a table here yet. Add a table from Furniture and the checks will show what fits.' });
       var poly = r.ftShape, b = PLAN.bounds(poly), fx = fixturesFt(r), cands = [];
       var keepOff = fx.map(function (q) { return q.poly; }).concat(fx.map(function (q) { return q.zone; }));

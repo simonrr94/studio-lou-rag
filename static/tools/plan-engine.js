@@ -5846,6 +5846,11 @@ var KITCHEN = (function () {
         out.push(fp || { kind: 'fireplace', rough: true, poly: [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]] });
         return;
       }
+      if (BATH[h.kind]) {   // bath fixtures (Phase D, Nov 28): toilets, tubs, showers, vanities
+        var bf = bath(B, h.kind);
+        out.push(bf || sides({ kind: h.kind, rough: true, poly: [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]] }));
+        return;
+      }
       var got = h.kind === 'island' ? island(B) : counter(B);
       if (got) { got.kind = h.kind === 'island' ? 'island' : 'counter'; out.push(got); }
       else out.push({ kind: h.kind === 'island' ? 'island' : 'counter', rough: true, poly: [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]] });
@@ -6001,6 +6006,145 @@ var KITCHEN = (function () {
       if (Math.min(wi, de) < 18 || Math.min(wi, de) > 72 || Math.max(wi, de) < 30 || Math.max(wi, de) > 180) return null;
       return { poly: [[lef, top], [rig, top], [rig, bot], [lef, bot]] };
     }
+    /* A bath fixture (Phase D, Nov 28): the drawing's own outline near the model's box. The thin lines
+       (not walls) in and around the box are split into connected pieces; the piece with the most ink
+       inside the box starts the outline, and every other piece mostly inside the box that lies wholly
+       inside it, or within 3" of the outline so far, joins (a toilet's tank and bowl, a basin inside its
+       counter, a tub's rim). A side that stops short of a wall (within 8") is carried to the wall's face.
+       A vanity drawn as a counter (its front line running wall to wall) is found the way a kitchen
+       counter is, first. Kept only when its size is one the kind comes in (SIZE_IN). */
+    function bath(B0, kind) {
+      // the model's box the right way round, and at least as big as the kind's shorter side
+      var B = { x0: Math.min(B0.x0, B0.x1), y0: Math.min(B0.y0, B0.y1), x1: Math.max(B0.x0, B0.x1), y1: Math.max(B0.y0, B0.y1) }, mn = SIZE_IN[kind][0] * inch;
+      if (B.x1 - B.x0 < mn) { var cxB = (B.x0 + B.x1) / 2; B.x0 = cxB - mn / 2; B.x1 = cxB + mn / 2; }
+      if (B.y1 - B.y0 < mn) { var cyB = (B.y0 + B.y1) / 2; B.y0 = cyB - mn / 2; B.y1 = cyB + mn / 2; }
+      var seed = null, drawn = outline();
+      if (drawn || kind !== 'vanity') return drawn;
+      var cv = counter(B);
+      if (cv) {
+        var cb = bounds(cv.poly), cd = Math.min(cb.x1 - cb.x0, cb.y1 - cb.y0) / inch;
+        if (cd >= 15 && cd <= 28 && okSize(kind, cb)) return sides({ kind: kind, poly: cv.poly });
+      }
+      return null;
+      function outline() {
+        var slack = 3 * inch + 0.01 * Math.max(W, H), m = 14 * inch + 0.02 * Math.max(W, H);
+        var E = { x0: Math.max(0, Math.floor(B.x0 - m)), y0: Math.max(0, Math.floor(B.y0 - m)), x1: Math.min(W - 1, Math.ceil(B.x1 + m)), y1: Math.min(H - 1, Math.ceil(B.y1 + m)) };
+        var ew = E.x1 - E.x0 + 1, eh = E.y1 - E.y0 + 1, lab = new Int32Array(ew * eh), parts = [], stack = [];
+        // thin ink, leaving out the soft edge along a wall's face (it would join everything that touches the wall)
+        var raw = function (x, y) {
+          var i = y * W + x;
+          if (g[i] >= INK || wall[i]) return false;
+          for (var d = 1; d <= 2; d++) if ((x - d >= 0 && wall[i - d]) || (x + d < W && wall[i + d]) || (y - d >= 0 && wall[i - d * W]) || (y + d < H && wall[i + d * W])) return false;
+          return true;
+        };
+        var inB = function (x, y) { return x >= B.x0 - slack && x <= B.x1 + slack && y >= B.y0 - slack && y <= B.y1 + slack; };
+        for (var y0 = 0; y0 < eh; y0++) for (var x0 = 0; x0 < ew; x0++) {
+          if (lab[y0 * ew + x0] || !raw(x0 + E.x0, y0 + E.y0)) continue;
+          var id = parts.length + 1, p = { n: 0, k: 0, x0: 1e9, y0: 1e9, x1: -1, y1: -1 };
+          lab[y0 * ew + x0] = id; stack.push(x0, y0);
+          while (stack.length) {
+            var yy = stack.pop(), xx = stack.pop(), X = xx + E.x0, Y = yy + E.y0;
+            p.n++; if (inB(X, Y)) p.k++;
+            if (X < p.x0) p.x0 = X; if (X > p.x1) p.x1 = X; if (Y < p.y0) p.y0 = Y; if (Y > p.y1) p.y1 = Y;
+            for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+              var nx = xx + dx, ny = yy + dy;
+              if (nx < 0 || ny < 0 || nx >= ew || ny >= eh || lab[ny * ew + nx] || !raw(nx + E.x0, ny + E.y0)) continue;
+              lab[ny * ew + nx] = id; stack.push(nx, ny);
+            }
+          }
+          parts.push(p);
+        }
+        var keep = parts.filter(function (p) { return p.n >= 3 && p.k / p.n >= 0.4; });
+        // starting from the piece with the most ink in the box (then the next, up to four: a door's swing
+        // can have more), the outline with its neighbours joined, else that piece alone (a door's track or a
+        // dimension arrow beside a tub can join it and make it too big); the first the right size wins
+        var seeds = keep.filter(function (p) { return p.k >= 6 * inch; }).sort(function (a, b) { return b.k - a.k; }).slice(0, 4), gap = 3 * inch;
+        for (var si = 0; si < seeds.length; si++) {
+          seed = seeds[si]; var got = outlineFrom(true) || outlineFrom(false);
+          if (got) return got;
+        }
+        return null;
+        function outlineFrom(join) {
+        var U = { x0: seed.x0, y0: seed.y0, x1: seed.x1, y1: seed.y1 }, grew = true, used = [seed];
+        while (grew) {
+          grew = false;
+          keep.forEach(function (p) {
+            if (used.indexOf(p) > -1) return;
+            // a small piece (a drain, a button, a letter of the room's name) only fills in, never stretches the outline
+            if (Math.max(p.x1 - p.x0, p.y1 - p.y0) < 9 * inch) { if (!(p.x0 >= U.x0 - 2 && p.x1 <= U.x1 + 2 && p.y0 >= U.y0 - 2 && p.y1 <= U.y1 + 2)) return; }
+            else {
+              if (!join) return;
+              var near = p.x0 <= U.x1 + gap && p.x1 >= U.x0 - gap && p.y0 <= U.y1 + gap && p.y1 >= U.y0 - gap;
+              var inside = p.x0 >= B.x0 - slack && p.x1 <= B.x1 + slack && p.y0 >= B.y0 - slack && p.y1 <= B.y1 + slack;
+              if (!near && !inside) return;
+            }
+            used.push(p); grew = true;
+            U.x0 = Math.min(U.x0, p.x0); U.y0 = Math.min(U.y0, p.y0); U.x1 = Math.max(U.x1, p.x1); U.y1 = Math.max(U.y1, p.y1);
+          });
+        }
+        // carry each side to a wall within 8"
+        var reach = 8 * inch;
+        var toWall = function (horiz, v, a0, a1, dir) {   // horiz: the side runs along x at y = v
+          var hits = [];
+          for (var i = 1; i <= 7; i++) {
+            var t = a0 + (a1 - a0) * i / 8;
+            for (var s = 0; s <= reach; s++) { var w = v + dir * s; if (horiz ? isWall(t, w) : isWall(w, t)) { hits.push(w - dir); break; } }
+          }
+          if (hits.length < 4) return v;
+          hits.sort(function (a, b) { return a - b; });
+          return hits[Math.floor(hits.length / 2)];
+        };
+        var R = { x0: toWall(false, U.x0, U.y0, U.y1, -1), x1: toWall(false, U.x1, U.y0, U.y1, 1), y0: toWall(true, U.y0, U.x0, U.x1, -1), y1: toWall(true, U.y1, U.x0, U.x1, 1) };
+        if (!okSize(kind, R)) return null;
+        return sides({ kind: kind, poly: [[R.x0, R.y0], [R.x1, R.y0], [R.x1, R.y1], [R.x0, R.y1]] });
+        }
+        }
+    }
+    function bounds(poly) {
+      var xs = poly.map(function (q) { return q[0]; }), ys = poly.map(function (q) { return q[1]; });
+      return { x0: Math.min.apply(null, xs), y0: Math.min.apply(null, ys), x1: Math.max.apply(null, xs), y1: Math.max.apply(null, ys) };
+    }
+    function okSize(kind, R) {
+      var s = SIZE_IN[kind], a = (R.x1 - R.x0) / inch, b = (R.y1 - R.y0) / inch;
+      return Math.min(a, b) >= s[0] && Math.min(a, b) <= s[1] && Math.max(a, b) >= s[2] && Math.max(a, b) <= s[3];
+    }
+    /* Which sides of a fixture stand against a wall (wall within 4" along most of the side): against;
+       the wall it backs onto (the side with the most wall): wall; its open side, where people stand
+       (opposite the back for a toilet or vanity; for a tub or shower the long side with the least
+       wall): front. Sides as 'N', 'S', 'W', 'E' on the picture. */
+    function sides(f) {
+      var R = bounds(f.poly), cov = {}, d4 = 4 * inch;
+      var test = function (horiz, v, a0, a1, dir) {
+        var n = 0, k = 0;
+        for (var i = 1; i <= 9; i++) {
+          var t = a0 + (a1 - a0) * i / 10; n++;
+          for (var s = 0; s <= d4; s++) { var w = v + dir * s; if (horiz ? isWall(t, w) : isWall(w, t)) { k++; break; } }
+        }
+        return k / n;
+      };
+      cov.N = test(true, R.y0, R.x0, R.x1, -1); cov.S = test(true, R.y1, R.x0, R.x1, 1);
+      cov.W = test(false, R.x0, R.y0, R.y1, -1); cov.E = test(false, R.x1, R.y0, R.y1, 1);
+      var opp = { N: 'S', S: 'N', W: 'E', E: 'W' }, len = { N: R.x1 - R.x0, S: R.x1 - R.x0, W: R.y1 - R.y0, E: R.y1 - R.y0 };
+      f.against = ['N', 'S', 'W', 'E'].filter(function (k) { return cov[k] >= 0.6; });
+      var back = ['N', 'S', 'W', 'E'].reduce(function (a, b) { return cov[b] > cov[a] + 1e-9 || (Math.abs(cov[b] - cov[a]) < 1e-9 && len[b] > len[a]) ? b : a; });
+      if (f.kind === 'tub' || f.kind === 'shower') {
+        // the open side people step out from: least wall, then the longer side, then away from the back
+        var open = ['N', 'S', 'W', 'E'].sort(function (a, b) { return (cov[a] - cov[b]) * 4 - (len[a] - len[b]) / Math.max(len.N, len.W) + (b === opp[back] ? 0.01 : 0) - (a === opp[back] ? 0.01 : 0); });
+        f.front = open[0];
+        f.wall = opp[f.front];
+      } else {
+        // a toilet or vanity backs onto a wall; a narrow toilet's back is a short side
+        if (f.kind === 'toilet') {
+          var shortSides = len.N < len.W ? ['N', 'S'] : ['W', 'E'];
+          if (cov[back] < 0.6 || shortSides.indexOf(back) < 0) back = shortSides.reduce(function (a, b) { return cov[b] > cov[a] ? b : a; });
+        }
+        f.wall = back; f.front = opp[back];
+      }
+      return f;
+    }
   }
-  return { find: find };
+  var BATH = { toilet: 1, tub: 1, shower: 1, vanity: 1 };
+  // sizes the kinds come in, inches: shorter side min, max; longer side min, max
+  var SIZE_IN = { toilet: [13, 26, 20, 36], tub: [22, 48, 44, 84], shower: [26, 96, 30, 120], vanity: [15, 30, 16, 144] };
+  return { find: find, BATH: BATH };
 })();
