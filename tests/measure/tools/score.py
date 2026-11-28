@@ -43,6 +43,9 @@ def mock(name, key, out, img):
         bx0, by0, bx1, by1 = j(x0, J * W), j(y0, J * H), j(x1, J * W), j(y1, J * H)
         kr = [k for k in key['rooms'] if k['name'] == r['name']][0]
         pr = kr.get('printed') or ''
+        # PRINTED='{"Bedroom": "5\'9\" x 5\'9\""}': sizes as a model misreading the plan reported them
+        # (the real model read the two-story's dimension lines as room sizes, Nov 27)
+        if os.environ.get('PRINTED'): pr = json.loads(os.environ['PRINTED']).get(r['name'], pr)
         wft = lft = None
         import re
         m = re.match(r"(\d+)'(?:\s*(\d+)\")?\s*x\s*(\d+)'(?:\s*(\d+)\")?", pr.replace('’', "'").replace('”', '"'))
@@ -215,6 +218,7 @@ def main():
             except Exception: pass
             page.wait_for_timeout(1500)
             page.screenshot(path=os.path.join(OUT, name + '-page.png'))
+            if os.environ.get('DEBUG_JS'): print(page.evaluate(os.environ['DEBUG_JS']))
             found = page.evaluate(FOUND_JS)
             json.dump(found, open(os.path.join(OUT, name + '.found.json'), 'w'))
             r = score(name, key, out, found, img)

@@ -503,7 +503,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=46"></script>
+  <script src="/static/tools/plan-engine.js?v=47"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -4266,6 +4266,13 @@
         setShape(r, f.poly.map(function (q) { return { x: q[0] / G.w * 100, y: q[1] / G.h * 100 }; }));
         r.walled = true; r.snapped = true; r.weak = false;
         if (r.shape) r.traced = true;
+        // a "printed" size far from the floor the walls enclose is a misread (a window's or a wall's dimension
+        // line taken for the room's, Lauren, Nov 27): the size comes from the walls instead
+        var have = f.area / (res.ppf * res.ppf), said = r.printedArea || (r.width && r.length ? r.width * r.length : 0);
+        if (said && (have > 1.6 * said || have < said / 1.6)) {
+          r.misread = { width: r.width, length: r.length, printedArea: r.printedArea };
+          r.width = r.length = r.printedArea = null; r.source = 'measured'; r.boxSized = true;
+        }
       });
       // rooms the model didn't list (closets, mostly), found on the walls with a door or opening into each.
       // Named Closet (or Room), numbered when there are several or the plan already has one by that name
@@ -4315,10 +4322,12 @@
       var list = wr.openings.map(function (o) {
         var win = o.kind === 'window', swing = o.kind === 'swing' || o.kind === 'double';
         // n points into the room it opens into (a swing), or away from the outside
-        var n = swing && o.side ? [o.n[0] * o.side, o.n[1] * o.side] : o.outs && o.outs[0] ? [-o.n[0], -o.n[1]] : o.n;
+        // (a bifold folds to the side its leaves are drawn on, out onto a balcony too)
+        var n = (swing || o.kind === 'bifold') && o.side ? [o.n[0] * o.side, o.n[1] * o.side] : o.outs && o.outs[0] ? [-o.n[0], -o.n[1]] : o.n;
         return { kind: win ? 'window' : 'door', type: win ? 'window' : (WALL_TYPES[o.kind] || 'opening'), cx: o.c[0], cy: o.c[1], ux: o.u[0], uy: o.u[1],
                  nx: n[0], ny: n[1], w: Math.round(o.w / wr.ppf * 12), thick: o.depth / wr.ppf,
-                 hinge: o.kind === 'swing' && o.hingePt ? { x: o.hingePt[0], y: o.hingePt[1] } : null, outside: !!o.exterior };
+                 hinge: o.kind === 'swing' && o.hingePt ? { x: o.hingePt[0], y: o.hingePt[1] } : null, outside: !!o.exterior,
+                 sided: (swing || o.kind === 'bifold') && !!o.side };
       });
       if (list.length) pushUndo();   // one Undo takes them all off again
       var made = addFound(list, wr.w / state.W);
@@ -4460,7 +4469,7 @@
           var into = { x: n.x * side, y: n.y * side }, face = { x: c.x + into.x * half, y: c.y + into.y * half };
           var fd = { id: state.nextId++, type: it.type, w: Math.round(clamp(it.w, 12, 192)), hinge: 1, out: false, found: true,
                      x: face.x / state.W * 100, y: face.y / state.H * 100, ux: u.x, uy: u.y, nx: into.x, ny: into.y, room: home.id };
-          if (it.hinge && side < 0) { fd.out = true; fd.nx = n.x; fd.ny = n.y; }
+          if ((it.hinge || it.sided) && side < 0) { fd.out = true; fd.nx = n.x; fd.ny = n.y; }
           if (it.hinge) fd.hinge = (it.hinge.x / k - c.x) * u.x + (it.hinge.y / k - c.y) * u.y < 0 ? -1 : 1;
           if (state.doors.some(function (o) { return Math.hypot(o.x / 100 * state.W - face.x, o.y / 100 * state.H - face.y) < (Math.min(o.w, fd.w) / 2) / 12 / f; })) return;
           state.doors.push(fd); made.push(fd);
@@ -4471,10 +4480,14 @@
         if (!PLAN.pointInPoly({ x: best.q.x + nn.x * s, y: best.q.y + nn.y * s }, best.poly)) nn = { x: -nn.x, y: -nn.y };
         best.n = nn;
         var d = { id: state.nextId++, type: it.type, w: Math.round(clamp(it.w, 12, 192)), hinge: 1, out: false, found: true };
-        if (it.hinge && nn.x * n.x + nn.y * n.y < 0) d.out = true;   // swings out of this room
+        if ((it.hinge || it.sided) && nn.x * n.x + nn.y * n.y < 0) d.out = true;   // swings (or folds) out of this room
         var c2 = doorSpot(best, d.w);
         if (state.doors.some(function (o) { return Math.hypot(o.x / 100 * state.W - c2.x, o.y / 100 * state.H - c2.y) < (Math.min(o.w, d.w) / 2) / 12 / f; })) return;   // already marked
         setDoorOn(d, best);
+        // on the wall's face as drawn, not on an outline traced a few inches short of it (the two-story's
+        // bathroom window sat below the window, Lauren, Nov 27): same spot along the wall, moved across to the face
+        var dp = { x: d.x / 100 * state.W, y: d.y / 100 * state.H }, shift = (c.x - dp.x) * nn.x + (c.y - dp.y) * nn.y + half;
+        if (Math.abs(shift) > 1 / 12 / f && Math.abs(shift) < reach) { d.x = (dp.x + nn.x * shift) / state.W * 100; d.y = (dp.y + nn.y * shift) / state.H * 100; }
         if (it.hinge) {
           var H = { x: it.hinge.x / k, y: it.hinge.y / k };
           d.hinge = (H.x - c.x) * d.ux + (H.y - c.y) * d.uy < 0 ? -1 : 1;

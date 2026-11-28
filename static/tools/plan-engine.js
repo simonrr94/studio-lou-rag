@@ -5263,7 +5263,13 @@ var WALLS = (function () {
           }
           if (!best || gain > best.gain) best = { gain: gain, x: x, y: y, gap: !cut };
         });
-        if (!best && open.length === 1 && !(open[0].r.pa || (open[0].r.w_ft && open[0].r.l_ft))) best = { gain: 0, x: x, y: open[0] };
+        // floor open (across a cut, no wall) to just one room joins it: when that room prints no size, or when
+        // its printed size is plainly a misread (a dimension line read as the room: the two-story's bedroom
+        // "5'9" x 5'9"" is a window's width; its own floor is already far bigger, Lauren, Nov 27)
+        if (!best && open.length === 1) {
+          var o1 = open[0].r, pa1 = o1.pa || (o1.w_ft && o1.l_ft ? o1.w_ft * o1.l_ft : 0);
+          if (!pa1 || open[0].p.n / p2 > 1.6 * pa1) best = { gain: 0, x: x, y: open[0] };
+        }
       });
       if (!best) break;
       // joined: across a gap, the wall's closing line between them is filled in too
@@ -5598,8 +5604,11 @@ var WALLS = (function () {
     for (var sd = 1; sd >= -1; sd -= 2) {
       if (Math.min(arcScore(F, inkd, W, H, 0, sd, w / 2), arcScore(F, inkd, W, H, 1, sd, w / 2)) >= 0.8) { r.kind = 'double'; r.side = sd; return r; }
     }
-    var fold = Math.max(offWall(F, ink, W, H, 1, h, 0.35 * w), offWall(F, ink, W, H, -1, h, 0.35 * w));
+    var fo1 = offWall(F, ink, W, H, 1, h, 0.35 * w), fo2 = offWall(F, ink, W, H, -1, h, 0.35 * w), fold = Math.max(fo1, fo2);
     r.fold = fold;
+    // the side the leaves are drawn on, when no arc said so (the two-story's balcony doors, Lauren, Nov 27)
+    r.inkSide = fo1 >= fo2 ? 1 : -1;
+    if (best.v < 0.85 && fold >= 0.04) r.side = r.inkSide;
     if (nspan === 1 || part >= 1) {
       if (r.exterior && nspan === 1) { r.kind = 'window'; return r; }
       var inches = ppf ? w / ppf * 12 : null;
