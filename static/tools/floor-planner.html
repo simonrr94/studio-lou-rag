@@ -1243,7 +1243,10 @@
       var s = RUG.get(r.rug.size), c = rugCenterFt(r);
       return { clearance: RUG.clearanceAt(r.ftShape, s, r.rug.rot, c.x, c.y), gaps: RUG.gaps(r.ftShape, s, r.rug.rot, c.x, c.y) };
     }
-    function gapColor(g) { var st = RUG.status(g); return st === 'fits' ? '#7f9433' : st === 'tight' ? '#b07d14' : '#582b36'; }
+    // Rugs can sit close to the walls (Lauren, Nov 27): a rug fits, or it runs past a wall. No "tight".
+    // (Best fit still picks the largest size that leaves a foot of floor; see RUG.check.)
+    function rugFit(gapFt) { return gapFt >= 0 ? 'fits' : 'big'; }
+    function gapColor(g) { return rugFit(g) === 'fits' ? '#7f9433' : '#582b36'; }
     function fmtGap(ft) { return ft < 3 ? Math.max(0, Math.round(ft * 12)) + '"' : fmtFtIn(ft); }
     // The rug (holder) under a point, or null. The selected room's rugs win (a second rug, smaller
     // and laid on its own spot, before the main one), then any other rug
@@ -1265,7 +1268,7 @@
       allRugs().forEach(function (r) {
         var q = rugPx(r), sel = !forExport && state.mode === 'furnish' && holderRoom(r) === state.rooms[state.selected] && (!r.second || state.rugFocus === r.id);
         var picked = !forExport && state.mode === 'furnish' && rugPicked(r);
-        var bad = RUG.status(rugInfo(r).clearance) === 'big', turned = !q.round && !RUG.square(r.rug.rot);
+        var bad = rugFit(rugInfo(r).clearance) === 'big', turned = !q.round && !RUG.square(r.rug.rot);
         var sz = RUG.get(r.rug.size), f0 = state.scale.ftPerPx;
         function shape(inset) {
           ctx.beginPath();
@@ -1334,8 +1337,7 @@
       var num = NUMBERS || !badOnly;   // a picked rug, or the PDF, shows its inches
       rugInfo(r).gaps.forEach(function (g) {
         if (badOnly && gapColor(g.gap) === SPACE_COL.ok) return;
-        var st = RUG.status(g.gap);
-        drawGapLine(ctx, g.from, g.to, gapColor(g.gap), num ? fmtGap(g.gap) : st === 'tight' ? 'Tight' : st === 'fits' ? 'Fine' : 'Too close');
+        drawGapLine(ctx, g.from, g.to, gapColor(g.gap), num ? fmtGap(g.gap) : rugFit(g.gap) === 'fits' ? 'Fine' : 'Past the wall');
       });
     }
     // The picked room's rug is selected on the plan (alone or with pieces)
@@ -4106,13 +4108,20 @@
       var el = $('spaceList');
       if (!el) return;
       var r = state.rooms[state.selected], rows = spaceRows(r);
-      var issues = spaceRows(null).filter(function (rw) { return rw.status !== 'ok'; }).length;
+      var issues = sayOnce(spaceRows(r || null).filter(function (rw) { return rw.status !== 'ok'; })).length;
       $('checkCount').textContent = issues; $('checkCount').classList.toggle('hidden', !issues);
       $('spaceSub').innerHTML = !state.scale ? 'Spacing is measured to scale, so this plan needs a scale first.'
         : !walkways() && state.walls && state.walls.map && !realDoors().length ? 'Mark your doors in Measure to check the real walkways.' : '';
       $('spaceSub').classList.toggle('hidden', !$('spaceSub').innerHTML);
       var bad = sayOnce(rows.filter(function (rw) { return rw.status !== 'ok'; }));
-      el.innerHTML = !bad.length ? '<p class="all-good">' + (rows.length || state.pieces.length ? 'Everything fits.' : 'Add a few pieces and anything that doesn\u2019t fit shows up here.') + '</p>'
+      var others = [];
+      if (!bad.length && r) state.rooms.forEach(function (o, i) {
+        if (o === r) return;
+        var n = sayOnce(spaceRows(o).filter(function (rw) { return rw.status !== 'ok'; })).length;
+        if (n) others.push('<button class="link-btn" data-room="' + i + '">' + esc(o.name) + '</button> (' + n + ')');
+      });
+      el.innerHTML = !bad.length ? '<p class="all-good">' + (rows.length || state.pieces.length ? 'Everything' + (r ? ' in ' + esc(r.name) : '') + ' fits.' : 'Add a few pieces and anything that doesn\u2019t fit shows up here.') + '</p>' +
+          (others.length ? '<p class="pane-sub" style="margin-top:12px">Other rooms to check: ' + others.join(', ') + '.</p>' : '')
         : '<div class="say-list">' + bad.map(function (rw) { return '<p class="say ' + rw.status + '"><span class="kdot ' + rw.status + '"></span>' + esc(rw.say || rw.label) + '</p>'; }).join('') + '</div>';
     }
 
@@ -4718,7 +4727,7 @@
     }
     function rugDetail(c) {
       if (c < 0) return 'Larger than the room';
-      if (RUG.status(c) === 'big') return 'Only ' + fmtGap(c) + ' of floor at the closest wall';
+      if (rugFit(c) === 'big') return 'Only ' + fmtGap(c) + ' of floor at the closest wall';
       return 'Leaves ' + fmtGap(c) + ' at the closest wall';
     }
     // Card text for one size: the floor it leaves at the walls
@@ -4749,7 +4758,7 @@
       var cards = res.list.map(function (it) {
         var on = r.rug && r.rug.size === it.size.id;
         return '<button class="rug-card' + (on ? ' on' : '') + '" data-rug="' + it.size.id + '">' +
-          '<span class="rug-top"><b>' + it.size.label + '</b><span class="badge ' + it.status + '">' + STATUS_TEXT[it.status] + '</span></span>' +
+          '<span class="rug-top"><b>' + it.size.label + '</b><span class="badge ' + rugFit(it.spot ? it.spot.clearance : -1) + '">' + STATUS_TEXT[rugFit(it.spot ? it.spot.clearance : -1)] + '</span></span>' +
           (it.size.id === res.best ? '<span class="best">Best fit</span>' : '') +
         '</button>';
       }).join('');
@@ -4783,7 +4792,7 @@
     function placedMsg(r, second) {
       var info = rugInfo(r), s = RUG.get(r.rug.size);
       var msg = (second ? 'A second rug, <b>' + s.label + '</b>, under the table, ' : 'Your <b>' + s.label + '</b> rug ') + (info.clearance < 0 ? 'runs past the walls. Drag it back inside the room' + (second ? '.' : ', or tap <b>Center it</b>.')
-        : 'leaves <b>' + fmtGap(info.clearance) + '</b> of floor at the closest wall (' + STATUS_TEXT[RUG.status(info.clearance)].toLowerCase() + ').');
+        : 'leaves <b>' + fmtGap(info.clearance) + '</b> of floor at the closest wall (' + STATUS_TEXT[rugFit(info.clearance)].toLowerCase() + ').');
       return msg;
     }
     // Updates just the sentence under the sizes while a rug is dragged
@@ -7305,7 +7314,7 @@
       doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
       doc.text('Rooms', margin, y);
       y += 12;
-      var cols = [margin + 8, margin + 230, margin + 310, margin + 400, pageW - margin - 8];
+      var cols = [margin + 8, margin + 200, margin + 270, margin + 340, pageW - margin - 8];   // room, width, length, sq ft, note (right-aligned)
       doc.setFillColor(67, 62, 60); doc.rect(margin, y, contentW, 22, 'F');
       doc.setFontSize(9); doc.setTextColor(255, 255, 255);
       doc.text('ROOM', cols[0], y + 14);
@@ -7324,7 +7333,7 @@
         doc.text(fmtFtIn(r.length) || '-', cols[2], y + 13);
         doc.text(area(r) ? Math.round(area(r)).toLocaleString() : '-', cols[3], y + 13);
         doc.setTextColor(88, 43, 54);
-        if (r.source === 'estimated') doc.text('A guess: measure it', cols[4], y + 13, { align: 'right' });
+        if (r.source === 'estimated') doc.text('Size is a guess, measure it', cols[4], y + 13, { align: 'right' });
         y += 20;
       });
       doc.setDrawColor(67, 62, 60); doc.setLineWidth(1); doc.line(margin, y, margin + contentW, y);
@@ -7381,7 +7390,7 @@
         y += 22;
         rugRooms.forEach(function (r, i) {
           checkPage(22);
-          var info = rugInfo(r), st = RUG.status(info.clearance);
+          var info = rugInfo(r), st = rugFit(info.clearance);
           doc.setFillColor.apply(doc, i % 2 === 0 ? [245, 240, 232] : [255, 255, 255]);
           doc.rect(margin, y, contentW, 20, 'F');
           doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(67, 62, 60);
