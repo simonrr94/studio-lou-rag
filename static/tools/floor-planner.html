@@ -1989,6 +1989,10 @@
       $('pieceSub').innerHTML = !state.scale ? 'Furniture is drawn to scale, so this plan needs a scale first. Use <b>Set the scale</b> under the plan.'
         : r ? '' : 'Pick a room, then tap a piece to add it at its real size.';
       $('pieceSub').classList.toggle('hidden', !$('pieceSub').innerHTML);
+      if (pc && state.mode === 'furnish' && selCount() === 1) {   // the title follows the picked piece to its room
+        var own = pieceRoom(pc), oi = own ? state.rooms.indexOf(own) : -1;
+        if (oi > -1 && oi !== state.selected) { state.selected = oi; renderRoomPick(); renderCards(); renderFurnishRooms(); }
+      }
       if ($('pieceBack')) $('pieceBack').innerHTML = backToRoom(state.rooms[state.selected]);
       if (!pc) { bar.innerHTML = ''; showPane(); placeFloat(); return; }
       var sel = selList(), rugs = selRugs();
@@ -3569,8 +3573,11 @@
       tidyLights();
       renderRoomPick();
       var l = state.lights[state.lightSel];
-      if (l) { el.innerHTML = lightDetail(l); return; }
       var lampPc = state.lampSel != null ? pieceById(state.lampSel) : null;
+      // the panel's title follows what's picked, however it was picked
+      var own = l ? roomById(l.room) : lampPc ? pieceRoom(lampPc) : null, oi = own ? state.rooms.indexOf(own) : -1;
+      if (oi > -1 && oi !== state.selected) { state.selected = oi; renderRoomPick(); renderCards(); }
+      if (l) { el.innerHTML = lightDetail(l); return; }
       if (lampPc && LIGHT.isLamp(lampPc)) { el.innerHTML = lampDetail(lampPc); return; }
       state.lampSel = null;
       if (!lightAsked()) {
@@ -7231,16 +7238,17 @@
 
       // ---- Page 1: the summary, in plain words (the plan as it looks on screen)
       header('Floor Plan Summary', state.rooms.length + ' rooms  \u00b7  ' + date);
-      planImage(290, true);
+      var fixes = state.scale && state.pieces.length ? sayOnce(spaceRows(null).filter(function (rw) { return rw.status !== 'ok'; })) : [];
+      var lit = state.scale ? state.rooms.filter(function (r) { return lightable(r) && lightCfg(r).done && roomTarget(r) != null && lightsIn(r).length; }) : [];
+      var nSaid = fixes.length + lit.filter(function (r) { var ev = roomLight(r); return ev.status === 'dim' || ev.status === 'bright' || ev.workStatus === 'dim' || (ev.vanity && ev.vanity.status !== 'ok'); }).length;
+      planImage(Math.max(170, 300 - Math.max(0, nSaid - 6) * 24), true);
       if (state.scale && state.pieces.length) {
-        var fixes = sayOnce(spaceRows(null).filter(function (rw) { return rw.status !== 'ok'; }));
         doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
         checkPage(40); doc.text(fixes.length ? 'What to fix' : 'Furniture', margin, y); y += 16;
         if (!fixes.length) said('Everything fits.', DOT.ok);
         fixes.forEach(function (rw) { said(rw.say || rw.label, DOT[rw.status]); });
         y += 10;
       }
-      var lit = state.scale ? state.rooms.filter(function (r) { return lightable(r) && lightCfg(r).done && roomTarget(r) != null && lightsIn(r).length; }) : [];
       if (lit.length) {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(67, 62, 60);
         checkPage(40); doc.text('Lighting', margin, y); y += 16;
