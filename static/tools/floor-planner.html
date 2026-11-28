@@ -328,6 +328,9 @@
     .chip.on { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
 
     /* Checks */
+    .say-list { display: flex; flex-direction: column; gap: 8px; }
+    .say { position: relative; margin: 0; padding: 10px 12px 10px 30px; font-size: 13.5px; line-height: 1.45; color: #433E3C; background: #ffffff; border: 1px solid #e3dccf; border-radius: 12px; }
+    .say .kdot { position: absolute; left: 12px; top: 16px; margin: 0; }
     .space-list { background: #ffffff; border: 1px solid #e3dccf; border-radius: 12px; overflow: hidden; }
     .space-list .rug-empty { padding: 12px 14px; }
     .space-row { padding: 9px 12px; font-size: 13px; line-height: 1.45; }
@@ -1083,16 +1086,16 @@
       // the furniture checks, plus every side of the selected piece while it's picked
       // (a lighting export leaves them out so the lights read)
       if (state.scale && state.mode !== 'light') {
-        if (forExport) allRugs().forEach(function (r) { drawGaps(ctx, r); });
+        if (forExport) allRugs().forEach(function (r) { drawGaps(ctx, r, !NUMBERS); });
         else if (state.mode === 'furnish' && state.selected > -1) roomRugs(state.rooms[state.selected]).forEach(function (h) { drawGaps(ctx, h, !rugPicked()); });
         if (forExport || state.mode === 'furnish') {
           var selPc = forExport ? -1 : state.pieceSel;
           spacing().forEach(function (l) {
             // on screen, the plan shows only what needs attention; every side shows on the picked piece
             var mine = l.piece === selPc && selPc > -1;
-            var show = forExport ? (l.show === 'always' || (l.show === 'selected' && mine))
+            var show = forExport && NUMBERS ? l.show === 'always'
                                  : (mine && (l.show === 'always' || l.show === 'selected')) || (l.show === 'always' && l.status !== 'ok');
-            if (show) drawGapLine(ctx, l.from, l.to, SPACE_COL[l.status], fmtGap(l.gap));
+            if (show) drawGapLine(ctx, l.from, l.to, SPACE_COL[l.status], mine || (forExport && NUMBERS) ? fmtGap(l.gap) : planWord(l));
           });
         }
       }
@@ -1324,9 +1327,11 @@
     // badOnly: just the gaps that are tight or too small (the plan's quiet view)
     function drawGaps(ctx, r, badOnly) {
       if (!rugOK(r)) return;
+      var num = NUMBERS || !badOnly;   // a picked rug, or the PDF, shows its inches
       rugInfo(r).gaps.forEach(function (g) {
         if (badOnly && gapColor(g.gap) === SPACE_COL.ok) return;
-        drawGapLine(ctx, g.from, g.to, gapColor(g.gap), fmtGap(g.gap));
+        var st = RUG.status(g.gap);
+        drawGapLine(ctx, g.from, g.to, gapColor(g.gap), num ? fmtGap(g.gap) : st === 'tight' ? 'Tight' : st === 'fits' ? 'Fine' : 'Too close');
       });
     }
     // The picked room's rug is selected on the plan (alone or with pieces)
@@ -1347,7 +1352,7 @@
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
       [a, b].forEach(function (p) { ctx.moveTo(p.x - nx * t, p.y - ny * t); ctx.lineTo(p.x + nx * t, p.y + ny * t); });
       ctx.stroke();
-      var fs = 11 * ratio;
+      var fs = (/\d/.test(label) ? 11 : 10) * ratio;   // a word tag a size smaller than a measurement
       ctx.font = '700 ' + fs + 'px "DM Sans", sans-serif';
       var pw = ctx.measureText(label).width + 10 * ratio, ph = fs + 7 * ratio;
       var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
@@ -1486,7 +1491,6 @@
       return role === 'bed' ? 'the ' + nm + '\u2019s ' + SIDE_WORD[rt.to.side] : role === 'dresser' ? 'the ' + nm + ' drawers' : 'the ' + nm;
     }
     function routeWhat(b) { return b.type === 'piece' ? 'the ' + nameOf(b.i).toLowerCase() : 'the wall'; }
-    function walkRoutesShown() { return state.mode === 'furnish' && state.ptab === 'checks' && state.pieceSel < 0 && state.doorSel < 0 && !state.tool; }
     function wallsFt() { return state.rooms.filter(function (r) { return r.ftShape; }).map(function (r) { return r.ftShape; }); }
     // The pieces standing in a room (their middle inside its outline), in feet
     function groupFor(r) {
@@ -1735,9 +1739,14 @@
     // Pick a piece: on its own (with its group), or added to or taken out of the selection
     function pickPiece(k, add) {
       var pc = state.pieces[k], mates = pc.gid ? state.pieces.filter(function (o) { return o.gid === pc.gid && o !== pc; }) : [];
-      state.doorSel = -1;
+      state.doorSel = -1; state.rugBar = null;
       var gRugs = pc.gid ? allRugs().filter(function (r) { return r.rug.gid === pc.gid; }).map(function (r) { return r.id; }) : [];
-      if (!add || state.pieceSel < 0) { state.pieceSel = k; state.extra = mates.map(function (o) { return o.id; }); state.extraRugs = gRugs; return; }
+      if (!add || state.pieceSel < 0) {
+        state.pieceSel = k; state.extra = mates.map(function (o) { return o.id; }); state.extraRugs = gRugs;
+        // the panel follows the piece to its own room, so "Back to ..." names the room it stands in
+        if (state.mode === 'furnish') followRoom(pieceRoom(pc));
+        return;
+      }
       var sel = selList(), ids = sel.map(function (o) { return o.id; }), take = [pc].concat(mates);
       if (ids.indexOf(pc.id) > -1) {   // already picked: take it (and its group) out
         var left = sel.filter(function (o) { return take.indexOf(o) < 0; });
@@ -1940,7 +1949,7 @@
         var dim = along > 0.7 ? pc.w : pc.d;
         var across = counter.d + l.inch + dim + back.inch, need = counter.d + 42 + dim + 30, fits = across - counter.d - 42 - 30;
         if (across >= need) return;   // there is room: moving the island fixes it, so the usual rows say so
-        out[k] = { aisle: l, back: back, status: 'close',
+        out[k] = { aisle: l, back: back, status: 'close', fits: fits,
           label: 'The kitchen is ' + fmtFtIn(across / 12) + ' across here. The counter, a ' + Math.round(dim) + '" island, a 42" work aisle and 30" to walk past behind it need about ' + fmtFtIn(need / 12) + '.',
           value: fits >= 18 ? 'An island up to ' + Math.floor(fits) + '" deep would fit' : 'No room for an island here' };
       });
@@ -1994,27 +2003,20 @@
         showPane(); placeFloat(); return;
       }
       var k = state.pieceSel, nCh = chairsOf(pc).length, rm = pieceRoom(pc);
-      var partners = groupPartners(k);
-      var probs = conflicts().filter(function (c) { return c.a === k || c.b === k; }).map(function (c) { return conflictText(c, k); });
-      var checks = pieceChecks(k), round = pc.shape === 'round' && Math.round(pc.w) === Math.round(pc.d);
+      // its problems, said the way Checks says them (the inches show on the plan around it)
+      var mine = sayOnce(spaceRows(null)).filter(function (rw) { return rw.status !== 'ok' && (rw.a === k || rw.b === k || (rw.hits && rw.hits.indexOf(k) > -1)); });
+      var round = pc.shape === 'round' && Math.round(pc.w) === Math.round(pc.d);
       bar.innerHTML = '<input class="detail-name" id="pcName" value="' + esc(pc.name) + '" maxlength="30" aria-label="Piece name">' +
-        '<p class="detail-meta">' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (rm ? ', in ' + esc(rm.name) : '') + '.' +
-          (probs.length ? ' <span class="warn-text">It ' + esc(probs.join(' and ')) + '.</span>' : '') + '</p>' +
+        '<p class="detail-meta">' + pieceSize(pc) + (nCh ? ', with ' + nCh + ' chairs' : '') + (rm ? ', in ' + esc(rm.name) : '') + '.</p>' +
         sizeSwitch(pc) +
         '<div class="field-row">' +
           '<label class="field"><span>' + (round ? 'Diameter' : 'Width') + ', inches</span><input id="pcW" value="' + Math.round(pc.w) + '" inputmode="decimal" autocomplete="off"></label>' +
           (round ? '<label class="field"><span>Depth, inches</span><input id="pcD" value="' + Math.round(pc.d) + '" inputmode="decimal" autocomplete="off" title="A different depth makes it an oval"></label>'
                  : '<label class="field"><span>Depth, inches</span><input id="pcD" value="' + Math.round(pc.d) + '" inputmode="decimal" autocomplete="off"></label>') +
         '</div>' +
-        (LIGHT.hasLampSpot(pc.type) ? '<span class="l-label">Lamp on it</span><div class="seg-row" style="margin-top:4px"><button data-pact="lampyes"' + (pc.noLamp ? '' : ' class="on"') + '>Yes</button><button data-pact="lampno"' + (pc.noLamp ? ' class="on"' : '') + '>No</button></div>' : '') +
         (pc.role === 'media' ? '<label class="field"><span>TV screen size, inches (optional)</span><input id="pcTV" value="' + (pc.tv ? Math.round(pc.tv) : '') + '" placeholder="65" inputmode="decimal" autocomplete="off"></label>' : '') +
-        '<p class="section-label">Spacing</p>' +
-        (checks.bad ? '<div class="space-list">' + checks.bad + '</div>' : checks.fine ? '<p class="all-good">Room to spare on every side.</p>' : '<p class="empty-note">Open floor on every side, at least 8 feet.</p>') +
-        (checks.fine && checks.bad ? '<p class="show-more"><button class="link-btn" data-fine="1">' + (state.showFine ? 'Hide the sides that are fine' : 'All sides') + '</button></p>' +
-          (state.showFine ? '<div class="space-list">' + checks.fine + '</div>' : '') : '') +
-        (checks.fine && !checks.bad && state.showFine ? '<div class="space-list" style="margin-top:8px">' + checks.fine + '</div>' : '') +
-        (checks.fine && !checks.bad ? '<p class="show-more"><button class="link-btn" data-fine="1">' + (state.showFine ? 'Hide the sides' : 'Show every side') + '</button></p>' : '') +
-        (partners.length ? '<button class="btn-secondary btn-sm group-hint" data-pact="groupnear" title="With the ' + esc(listNames(partners)) + (rugUnder(pc) ? ' and the rug' : '') + '">Group with nearby pieces</button>' : '') +
+        (mine.length ? '<div class="say-list" style="margin-top:14px">' + mine.map(function (rw) { return '<p class="say ' + rw.status + '"><span class="kdot ' + rw.status + '"></span>' + esc(rw.say || rw.label) + '</p>'; }).join('') + '</div>'
+                     : '<p class="all-good" style="margin-top:14px">It fits.</p>') +
         (pc.gid ? '<p class="empty-note" style="margin-top:12px">Part of a group. <button class="link-btn" data-pact="pickgroup">Pick the whole group</button></p>' : '');
       showPane(); placeFloat();
     }
@@ -2253,7 +2255,8 @@
       ctx.stroke();
     }
     function drawWalkways(ctx, forExport, part) {
-      if (!forExport && (!walkRoutesShown() || (state.drag && state.drag.moved))) return;
+      if (part === 'routes' && !(forExport && NUMBERS)) return;   // the routes themselves draw only in the PDF
+      if (!forExport && (state.mode !== 'furnish' || state.tool || (state.drag && state.drag.moved))) return;
       var wk = walkways();
       if (!wk) return;
       var f = state.scale.ftPerPx, r = displayRatio();
@@ -2285,7 +2288,7 @@
         if (rt.status === 'ok' || !rt.pinch) return;
         var a = rt.pinch.a, b = rt.pinch.b, key = [a.x, a.y, b.x, b.y].map(function (v) { return Math.round(v * 8); }).join(',');
         if (seen[key]) return; seen[key] = 1;
-        drawGapLine(ctx, a, b, SPACE_COL[rt.status], rt.width + '"');   // feet in, like the other spacing lines
+        drawGapLine(ctx, a, b, SPACE_COL[rt.status], forExport && NUMBERS ? rt.width + '"' : rt.blocked || rt.from < 0 ? 'No way through' : spaceWord('walk', rt.status, rt.width));
       });
     }
 
@@ -2468,17 +2471,24 @@
       var lt = state.mode === 'light' ? state.lights[state.lightSel] : null;
       var lp = state.mode === 'light' && !lt && state.lampSel != null ? pieceById(state.lampSel) : null;
       var rm = state.mode === 'measure' && !dr && state.ptSel < 0 ? state.rooms[state.selected] : null;
-      if (state.tool || (state.drag && state.drag.moved) || (!pc && !dr && !lt && !lp && !rm) || (!state.scale && !rm)) { fb.classList.add('hidden'); return; }
+      // a rug tapped on its own in Furnish: turn, center, remove
+      var rg = state.mode === 'furnish' && !pc && state.rugBar ? allRugs().filter(function (h) { return h.id === state.rugBar && rugOK(h); })[0] : null;
+      if (state.tool || (state.drag && state.drag.moved) || (!pc && !dr && !lt && !lp && !rm && !rg) || (!state.scale && !rm)) { fb.classList.add('hidden'); return; }
       if (!pc && !dr) {
         var bx, k2;
-        if (lt || lp) {
+        if (rg) {
+          bx = PLAN.bounds(rugOutlinePx(rg)); k2 = 'rug' + rg.id + rg.rug.size;
+        } else if (lt || lp) {
           var q0 = lt ? lightPx(lt) : lampPx(lp), rr0 = lt ? lightRad(lt) : 11 * displayRatio();
           if (!q0) { fb.classList.add('hidden'); return; }
           bx = { x: q0.x - rr0, y: q0.y - rr0, w: rr0 * 2, h: rr0 * 2 };
           k2 = lt ? 'l' + lt.id + kindOf(lt) : 'lamp' + lp.id;
         } else { bx = px(rm); k2 = 'r' + rm.id; }
         if (fb.getAttribute('data-key') !== k2) {
-          fb.innerHTML = lt ? (kindOf(lt) !== 'undercab' ? '<button data-fact="ldup" title="Duplicate" aria-label="Duplicate">' + ICON.copy + '</button>' : '') +
+          fb.innerHTML = rg ? (RUG.get(rg.rug.size).d ? '' : '<button data-fact="rugturn" title="Turn 90&deg;">90&deg;</button>') +
+              (rg.second ? '' : '<button data-fact="rugcenter" title="Center it in the room">Center</button>') +
+              '<button data-fact="rugremove" class="danger" title="Remove the rug" aria-label="Remove the rug">' + ICON.trash + '</button>'
+            : lt ? (kindOf(lt) !== 'undercab' ? '<button data-fact="ldup" title="Duplicate" aria-label="Duplicate">' + ICON.copy + '</button>' : '') +
               '<button data-fact="lremove" class="danger" title="Remove" aria-label="Remove">' + ICON.trash + '</button>'
             : lp ? '<button data-fact="lampoff" class="danger" title="' + (lp.type === 'lamp' ? 'Remove the floor lamp' : 'No lamp here') + '" aria-label="Remove the lamp">' + ICON.trash + '</button>'
             : '<button data-fact="rremove" class="danger" title="Remove this room" aria-label="Remove this room">' + ICON.trash + '</button>';
@@ -2551,6 +2561,15 @@
       else if (a === 'remove') removePiece();
       else if (a === 'dremove') removeDoor();
       else if (a === 'lremove') removeLight();
+      else if (a === 'rugturn' || a === 'rugcenter' || a === 'rugremove') {
+        var rgh = allRugs().filter(function (h) { return h.id === state.rugBar; })[0];
+        if (!rgh || !rgh.rug) return;
+        if (a === 'rugcenter') { var rr = holderRoom(rgh); select(state.rooms.indexOf(rr), false); placeRug(rgh.rug.size); return; }
+        pushUndo();
+        if (a === 'rugturn') rgh.rug.rot = ((rgh.rug.rot || 0) + 90) % 360;
+        else { rgh.rug = null; state.rugBar = null; }
+        renderFurnish(); draw();
+      }
       else if (a === 'ldup') {
         var src = state.lights[state.lightSel];
         if (!src) return;
@@ -3063,6 +3082,9 @@
        the floor elsewhere. Paler is brighter, deeper taupe dimmer. Patches under half the room's general
        target are dark spots: marked on the plan and named on the room card. */
     var MAPCACHE = {}, MAPCACHE_N = 0, LP_EXPORT = false;
+    // True while the PDF is drawn: lines on the plan carry their inches. On screen and in the PNG they
+    // carry a word, and the inches show only around the picked piece or rug.
+    var NUMBERS = false;
     // The fixtures that light a room, as the light map takes them: its own lights (not under-cabinet
     // strips, which light their counter) and the lamps on its furniture
     function roomFixturesFt(r) {
@@ -3367,11 +3389,13 @@
       var lk = k > -1 || state.space || e.button === 1 ? -1 : hitLamp(p);
       if (lk > -1) {
         state.lampSel = state.pieces[lk].id; state.lightSel = -1;
+        followRoom(pieceRoom(state.pieces[lk]));
         e.preventDefault(); renderLight(); draw();
         return;
       }
       if (k > -1) {
         state.lightSel = k; state.lampSel = null;
+        followRoom(roomById(state.lights[k].room));
         if (kindOf(state.lights[k]) !== 'undercab') {
           state.drag = { mode: 'light', start: p, snap: snap(), orig: { x: state.lights[k].x, y: state.lights[k].y } };
           try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
@@ -3840,6 +3864,96 @@
       return status === 'close' ? 'Too narrow' : 'Tight';
     }
     function inchText(n) { return n < 36 ? n + '"' : fmtFtIn(n / 12); }
+
+    /* ---------- Plain words (Phase C) ----------
+       Every check is said as one sentence with a fix, worked out from how far the gap is from
+       comfortable. The rules and their numbers stay in the engine and the PDF; the screen says
+       what to do. */
+    function the(i) { return 'the ' + nameOf(i).toLowerCase(); }
+    function cap1(t) { return t.charAt(0).toUpperCase() + t.slice(1); }
+    // A distance to move, rounded up: "about 6 inches", "about 2 feet", "about 2 and a half feet"
+    function about(inch) {
+      var n = Math.max(1, Math.ceil(inch - 0.25));
+      if (n <= 24) return 'about ' + n + (n === 1 ? ' inch' : ' inches');
+      var ft = Math.round(n / 6) / 2, whole = Math.floor(ft);
+      return 'about ' + whole + (ft > whole ? ' and a half' : '') + ' feet';
+    }
+    var BIG = { bed: 1, counter: 1, island: 1, sink: 1, range: 1, fridge: 1, pantry: 1, vanity: 1 };   // pieces people don't shift a few inches
+    // Which of two pieces to move: not a bed, counter or island when the other can go
+    // A chair pushed in at a table moves with its table
+    function owner(i) {
+      var pc = state.pieces[i];
+      if (!pc || pc.role !== 'chair' || !pc.group) return i;
+      var t = state.pieces.findIndex(function (o) { return o.id === pc.group; });
+      return t > -1 ? t : i;
+    }
+    function mover(a, b) {
+      a = owner(a); b = b > -1 ? owner(b) : b;
+      if (b < 0 || !state.pieces[b]) return a;
+      var ra = state.pieces[a].role, rb = state.pieces[b].role;
+      return BIG[ra] && !BIG[rb] ? b : a;
+    }
+    function away(a, b, need) {
+      var m = mover(a, b), o = m === owner(a) ? (b > -1 ? owner(b) : -1) : owner(a);
+      return 'Move ' + the(m) + ' ' + about(need) + ' away from ' + (o > -1 ? the(o) : 'the wall') + '.';
+    }
+    function plainRow(r) {
+      var R = SPACE.RULES, A = r.a, B = r.b != null ? r.b : -1, bad = r.status === 'close';
+      var need = function (rule) { return R[rule].ok - r.inch; };
+      switch (r.type) {
+        case 'coffee':
+          return r.inch < SPACE.COFFEE.ok
+            ? cap1(the(A)) + ' and ' + the(B) + ' are ' + (bad ? 'too close' : 'a little close') + ' to get past. Move them ' + about(SPACE.COFFEE.ok - r.inch) + ' apart.'
+            : cap1(the(A)) + ' and ' + the(B) + ' are ' + (bad ? 'too far apart' : 'a little far apart') + ' to reach. Move them ' + about(r.inch - SPACE.COFFEE.max) + ' closer.';
+        case 'talk':
+          return cap1(the(A)) + ' and ' + the(B) + ' are ' + (bad ? 'too far apart' : 'a little far apart') + ' to talk easily. Move them ' + about(r.ft * 12 - SPACE.TALK.ok * 12) + ' closer.';
+        case 'tv':
+          var scr = state.pieces[A].tv || 0, seat = B > -1 ? the(B) : 'the seat';
+          return r.near ? cap1(seat) + ' is ' + (bad ? 'too close' : 'a little close') + ' to the TV. Move it ' + about(scr * SPACE.TV.lo - r.ft * 12) + ' back, or pick a smaller screen.'
+                        : cap1(seat) + ' is ' + (bad ? 'too far' : 'a little far') + ' from the TV. Move it ' + about(r.ft * 12 - scr * SPACE.TV.hi) + ' closer, or pick a bigger screen.';
+        case 'console':
+          return 'Slide ' + the(B) + ' ' + about(r.inch - 8) + ' closer to the back of ' + the(A) + '.';
+        case 'dining':
+          if (r.open) return cap1(the(A)) + ' is close to the wall on its side without chairs. Move it ' + about(need('diningOpen')) + ' out.';
+          return (r.walk ? 'There isn\u2019t room to walk behind the chairs at ' + the(A) : bad ? 'There isn\u2019t room to pull out the chairs at ' + the(A) : 'The chairs at ' + the(A) + ' are a little tight to pull out') +
+            '. Move it ' + about(need(r.walk ? 'diningWalk' : 'dining')) + ' toward the middle of the room, or try a smaller table.';
+        case 'aisle':
+          var isl = state.pieces[A].role === 'island' ? A : B > -1 && state.pieces[B].role === 'island' ? B : mover(A, B), oth = isl === A ? B : A;
+          return r.status === 'tight'
+            ? 'The work aisle between ' + the(A) + ' and ' + the(B) + ' fits one cook. For two, move ' + the(isl) + ' ' + about(need('aisle')) + ' away from ' + the(oth) + '.'
+            : 'The work aisle between ' + the(A) + ' and ' + the(B) + ' is too narrow. Move ' + the(isl) + ' ' + about(R.aisle.tight - r.inch) + ' away from ' + the(oth) + '.';
+        case 'seating':
+          return (bad ? 'There isn\u2019t room' : 'There\u2019s only a little room') + (r.walk ? ' to walk behind the stools at ' : ' behind the stools at ') + the(A) + '. ' +
+            (B > -1 ? 'Move ' + the(B) + ' ' + about(need(r.walk ? 'seatWalk' : 'seat')) + ' away from them.' : 'Move ' + the(A) + ' ' + about(need(r.walk ? 'seatWalk' : 'seat')) + ' away from the wall.');
+        case 'desk':
+          return (bad ? 'There isn\u2019t room' : 'There\u2019s only a little room') + ' to pull the chair out from ' + the(A) + '. ' +
+            (B > -1 ? away(A, B, need('desk')) : 'Move ' + the(A) + ' ' + about(need('desk')) + ' away from the wall behind the chair.');
+        case 'drawers':
+          return (bad ? 'There isn\u2019t room' : 'There\u2019s only a little room') + ' to open the drawers of ' + the(A) + '. ' +
+            (B > -1 ? away(A, B, need('drawers')) : 'Try it on a wall with more open floor in front of it.');
+        case 'bed':
+          var open = (r.sides || []).filter(function (sd) { return !sd.against; }).map(function (sd) { return sd.inch; }).sort(function (p, q) { return p - q; });
+          var short = R.bed.ok - open[0], spare = open.length > 1 ? open[1] - R.bed.ok : 0;
+          return (bad ? 'There isn\u2019t room' : 'There\u2019s only a little room') + ' to get in on one side of ' + the(A) + '. ' +
+            (spare >= short ? 'Slide it ' + about(short) + ' toward its other side.' : 'Try a smaller bed or narrower nightstands.');
+        case 'bedFoot':
+          var bench = state.pieces[A].role === 'bench';
+          return (bad ? 'There isn\u2019t room' : 'There\u2019s only a little room') + ' to walk ' + (bench ? 'in front of ' + the(A) + ' at the foot of the bed' : 'past the foot of ' + the(A)) + '. ' +
+            (B > -1 ? 'Move ' + the(B) + ' ' + about(need('bedFoot')) + ' away.' : bench ? 'Try the bed without the bench.' : 'Try the bed on a longer wall, or a smaller bed.');
+        default:   // a walkway gap (no doors marked)
+          return 'The walkway between ' + the(A) + ' and ' + (B > -1 ? the(B) : 'the wall') + ' is ' + (bad ? 'too narrow' : 'a little narrow') + '. ' + away(A, B, need('walk'));
+      }
+    }
+    // Two narrow spots can come out as the same sentence: say it once
+    function sayOnce(rows) {
+      var seen = {};
+      return rows.filter(function (rw) { var t = rw.say || rw.label; if (seen[t]) return false; seen[t] = 1; return true; });
+    }
+    // A short word for a line on the plan (the inches show on the picked piece and in the PDF)
+    function planWord(l) {
+      if (l.status === 'ok') return 'Fine';
+      return spaceWord(l.rule === 'diningWalk' || l.rule === 'diningOpen' ? 'dining' : l.rule === 'seatWalk' ? 'seat' : l.rule, l.status, l.inch, l.near);
+    }
     function spaceRows(room) {
       if (!state.scale) return [];
       var inRoom = function (i) { return !room || pieceRoom(state.pieces[i]) === room; };
@@ -3865,15 +3979,19 @@
         else if (r.type === 'talk') { label = 'Conversation: the ' + A + ' and the ' + B; value = fmtFtIn(r.ft) + ' apart'; }
         else if (r.type === 'tv') { var pc = state.pieces[r.a]; label = 'TV viewing distance (' + Math.round(pc.tv) + '" screen)'; value = fmtFtIn(r.ft) + ' from the ' + B; }
         else { label = 'Walkway between the ' + A + ' and ' + (B ? 'the ' + B : 'the wall'); value = inchText(r.inch); }
-        return { label: label, value: value, status: r.status, kind: r.type, word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0]), r.near) };
+        return { label: label, value: value, status: r.status, kind: r.type, a: r.a, b: r.b != null ? r.b : -1, say: r.status === 'ok' ? '' : plainRow(r),
+                 word: spaceWord(r.type, r.status, r.inch || (r.inches && r.inches[0]), r.near) };
       });
       var pcs = piecesFt(), probs = [];
-      Object.keys(sq).forEach(function (i) { if (inRoom(+i)) rows.unshift({ label: sq[i].label, value: sq[i].value, status: sq[i].status, word: 'Too narrow' }); });
+      Object.keys(sq).forEach(function (i) { if (inRoom(+i)) rows.unshift({ label: sq[i].label, value: sq[i].value, status: sq[i].status, word: 'Too narrow', a: +i, b: sq[i].aisle.piece === +i ? sq[i].aisle.hit.i : sq[i].aisle.piece,
+        say: 'The kitchen is too narrow here for ' + the(+i) + ' with room to cook and walk around it. ' + (sq[i].fits >= 18 ? 'An island up to ' + Math.floor(sq[i].fits) + ' inches deep would fit.' : 'Try it without an island.') }); });
       conflicts().forEach(function (c) {
         if (!inRoom(c.a) && !(c.type === 'overlap' && inRoom(c.b))) return;
         probs.push(c.type === 'wall'
-          ? { label: 'The ' + nameOf(c.a).toLowerCase() + ' runs into a wall', value: c.inch + '"', status: 'close', word: 'Into the wall' }
-          : { label: 'The ' + nameOf(c.a).toLowerCase() + ' overlaps the ' + nameOf(c.b).toLowerCase(), value: c.inch + '"', status: 'close', word: 'Overlapping' });
+          ? { label: 'The ' + nameOf(c.a).toLowerCase() + ' runs into a wall', value: c.inch + '"', status: 'close', word: 'Into the wall', a: c.a, b: -1,
+              say: cap1(the(c.a)) + ' runs into a wall. Move it ' + about(c.inch) + ' into the room.' }
+          : { label: 'The ' + nameOf(c.a).toLowerCase() + ' overlaps the ' + nameOf(c.b).toLowerCase(), value: c.inch + '"', status: 'close', word: 'Overlapping', a: c.a, b: c.b,
+              say: cap1(the(c.a)) + ' overlaps ' + the(c.b) + '. Move them ' + about(c.inch) + ' apart.' });
       });
       rows = probs.concat(rows, walkRows(room));
       state.doors.forEach(function (d) {
@@ -3881,7 +3999,9 @@
         var st = doorStatus(d, pcs), t = d.type || 'swing';
         if (!st || (isWin(d) && !st.bad)) return;   // windows only show up with a problem
         var what = isWin(d) ? '' : t === 'barn' ? ' slide' : t === 'bifold' ? ' fold' : ' swing';
-        rows.push({ label: doorName(d) + what, status: st.bad ? 'close' : 'ok', word: st.word, value: st.value });
+        rows.push({ label: doorName(d) + what, status: st.bad ? 'close' : 'ok', word: st.word, value: st.value, a: -1, b: -1, hits: st.hits || [], say: !st.bad ? ''
+          : isWin(d) ? 'The ' + listNames(st.hits) + ' stands in front of ' + doorName(d).toLowerCase() + '. Move it, or pick something lower.'
+          : cap1(doorName(d).toLowerCase()) + ' hits the ' + listNames(st.hits) + ' as it' + (t === 'barn' ? ' slides' : t === 'bifold' ? ' folds' : ' swings') + ' open. Move the ' + listNames(st.hits.map(owner)) + ' out of its way.' });
       });
       return rows;
     }
@@ -3933,10 +4053,19 @@
           if (ends.indexOf(e) < 0) ends.push(e);
         });
         var way = ends.length > 2 ? ends.slice(0, 2).join(', ') + ' and ' + (ends.length - 2) + ' more' : ends.join(' and ');
-        if (!rw.pinch) return { label: 'No clear way ' + way, value: 'Blocked', status: 'close', word: 'No way through' };
+        if (!rw.pinch) return { label: 'No clear way ' + way, value: 'Blocked', status: 'close', word: 'No way through', a: -1, b: -1,
+          say: 'There\u2019s no clear way ' + way + '. Move the furniture in the way to open a path.' };
         var between = rw.pinch.between.map(routeWhat), same = between[0] === between[1];
         var where = top === 2 && on > -1 ? 'at ' + nodeName(on) : 'on the way ' + way;
-        return { label: 'Walkway ' + (same ? 'past ' + between[0] : 'between ' + between[0] + ' and ' + between[1]) + ', ' + where,
+        var bw = rw.pinch.between, pa = bw[0].type === 'piece' ? bw[0].i : -1, pb = bw[1].type === 'piece' ? bw[1].i : -1;
+        if (pa < 0) { pa = pb; pb = -1; }
+        var short = SPACE.RULES.walk.ok - rw.width;
+        var what = pa < 0 ? 'the walls' : pb < 0 ? the(owner(pa)) + ' and the wall' : owner(pa) === owner(pb) ? the(owner(pa)) : the(owner(pa)) + ' and ' + the(owner(pb));
+        var toward = top === 0 && rw.routes[0] && rw.routes[0].to.piece != null ? ' on the way to ' + routeEnd(rw.routes[0]) : '';
+        return { a: pa, b: pb,
+                 say: (rw.blocked ? 'There\u2019s no way through between ' + what + toward + '.' : 'The walkway between ' + what + toward + ' is ' + (rw.status === 'close' ? 'too narrow.' : 'a little narrow.')) +
+                   (pa < 0 ? '' : ' ' + away(pa, pb, short)),
+                 label: 'Walkway ' + (same ? 'past ' + between[0] : 'between ' + between[0] + ' and ' + between[1]) + ', ' + where,
                  pinchKey: Math.round(pt.x * 4) + ',' + Math.round(pt.y * 4) + '|' + Math.round(rw.width), value: inchText(rw.width), status: rw.blocked ? 'close' : rw.status, word: rw.blocked ? 'No way through' : spaceWord('walk', rw.status, rw.width) };
       });
     }
@@ -3955,15 +4084,9 @@
       $('spaceSub').innerHTML = !state.scale ? 'Spacing is measured to scale, so this plan needs a scale first.'
         : !walkways() && state.walls && state.walls.map && !realDoors().length ? 'Mark your doors in Measure to check the real walkways.' : '';
       $('spaceSub').classList.toggle('hidden', !$('spaceSub').innerHTML);
-      if (!rows.length) { el.innerHTML = '<p class="rug-empty">' + (state.pieces.length || state.doors.length ? 'Nothing to check here yet. Place seating with a coffee table, a bed, a dining table, or a door.' : 'Place a few pieces and the spacing between them shows up here.') + '</p>'; return; }
-      function row(rw) {
-        return '<div class="space-row"><span class="space-label">' + esc(rw.label) + '</span>' +
-          '<span class="space-val">' + esc(rw.value) + ' <span class="badge ' + BADGE[rw.status] + '">' + rw.word + '</span></span></div>';
-      }
-      var bad = rows.filter(function (rw) { return rw.status !== 'ok'; }), fine = rows.filter(function (rw) { return rw.status === 'ok'; });
-      el.innerHTML = (bad.length ? '<div class="space-list">' + bad.map(row).join('') + '</div>' : '<p class="all-good">Everything' + (r ? ' in ' + esc(r.name) : '') + ' has room to spare.</p>') +
-        (fine.length ? '<p class="show-more"><button class="link-btn" data-fine="1">' + (state.showFine ? 'Hide the ones that are fine' : (fine.length === 1 ? 'Show the one that\u2019s fine' : 'Show the ' + fine.length + ' that are fine')) + '</button></p>' +
-          (state.showFine ? '<div class="space-list">' + fine.map(row).join('') + '</div>' : '') : '');
+      var bad = sayOnce(rows.filter(function (rw) { return rw.status !== 'ok'; }));
+      el.innerHTML = !bad.length ? '<p class="all-good">' + (rows.length || state.pieces.length ? 'Everything fits.' : 'Add a few pieces and anything that doesn\u2019t fit shows up here.') + '</p>'
+        : '<div class="say-list">' + bad.map(function (rw) { return '<p class="say ' + rw.status + '"><span class="kdot ' + rw.status + '"></span>' + esc(rw.say || rw.label) + '</p>'; }).join('') + '</div>';
     }
 
     /* ---------- Doors (Furnish mode) ----------
@@ -4373,10 +4496,10 @@
       if (!state.scale) return null;
       var chk = DOOR.check(doorFt(d), pcs || piecesFt()), t = d.type || 'swing';
       if (!chk.moves) return null;
-      if (isWin(d)) return chk.hits.length ? { bad: true, word: 'Blocked', value: 'The ' + listNames(chk.hits) + ' stands in front of it' }
+      if (isWin(d)) return chk.hits.length ? { bad: true, word: 'Blocked', hits: chk.hits, value: 'The ' + listNames(chk.hits) + ' stands in front of it' }
         : { bad: false, word: 'Clear', value: chk.under.length ? 'The ' + listNames(chk.under) + ' sits under it' : 'Nothing in front of it' };
       var verb = t === 'barn' ? 'slides' : t === 'bifold' ? 'folds' : 'swings';
-      return chk.hits.length ? { bad: true, word: 'Door hits', value: 'Hits the ' + listNames(chk.hits) + ' as it ' + verb + ' open' }
+      return chk.hits.length ? { bad: true, word: 'Door hits', hits: chk.hits, value: 'Hits the ' + listNames(chk.hits) + ' as it ' + verb + ' open' }
         : { bad: false, word: 'Door clears', value: chk.nearest && chk.nearest.gap < 2 ? 'Clears by ' + fmtGap(chk.nearest.gap) : 'Clears' };
     }
     function hitDoor(p) {
@@ -4591,36 +4714,15 @@
       }
       var res = rugCheckFor(r), type = RUG.roomType(r.name);
       var bestLabel = res && res.best ? RUG.get(res.best).label : null;
-      $('rugSub').innerHTML = (bestLabel ? 'Best fit: <b>' + bestLabel + '</b>. ' : 'None of the standard sizes leave 12" of floor here. ') + 'Tap a size to lay it in the room.';
+      $('rugSub').innerHTML = (bestLabel ? 'Best fit: <b>' + bestLabel + '</b>. ' : 'None of the standard sizes leave a foot of floor at the walls here. ') + 'Tap a size to lay it in the room.';
       var cards = res.list.map(function (it) {
         var on = r.rug && r.rug.size === it.size.id;
         return '<button class="rug-card' + (on ? ' on' : '') + '" data-rug="' + it.size.id + '">' +
           '<span class="rug-top"><b>' + it.size.label + '</b><span class="badge ' + it.status + '">' + STATUS_TEXT[it.status] + '</span></span>' +
-          '<span class="rug-detail">' + sizeDetail(it) + '</span>' +
           (it.size.id === res.best ? '<span class="best">Best fit</span>' : '') +
         '</button>';
       }).join('');
-      var placed = '';
-      if (rugOK(r)) {
-        var s = RUG.get(r.rug.size);
-        placed = '<div class="rug-placed"><p id="rugPlacedMsg">' + placedMsg(r) + '</p>' +
-          '<div class="btn-row">' +
-            (s.d ? '' : '<button class="btn-secondary btn-sm" data-act="turn">Turn</button>') +
-            '<button class="btn-secondary btn-sm" data-act="center">Center it</button>' +
-            '<button class="btn-secondary btn-sm" data-act="remove">Remove</button>' +
-          '</div></div>';
-      }
-      // the room's second rug (a dining zone's), placed by a suggested layout: turn or remove it here, drag it on the plan
-      var h2 = r.rug2 ? rugHolder2(r) : null;
-      if (h2 && rugOK(h2)) {
-        var s2 = RUG.get(h2.rug.size);
-        placed += '<div class="rug-placed"><p id="rugPlacedMsg2">' + placedMsg(h2, true) + '</p>' +
-          '<div class="btn-row">' +
-            (s2.d ? '' : '<button class="btn-secondary btn-sm" data-act="turn" data-h="2">Turn</button>') +
-            '<button class="btn-secondary btn-sm" data-act="remove" data-h="2">Remove</button>' +
-          '</div></div>';
-      }
-      body.innerHTML = '<div class="rug-grid">' + cards + '</div>' + placed;
+      body.innerHTML = '<div class="rug-grid">' + cards + '</div>';
     }
 
     // Put a rug in the selected room at the spot that leaves the most floor
@@ -4632,6 +4734,7 @@
       var f = state.scale.ftPerPx;
       pushUndo();
       r.rug = { size: id, rot: it.spot.rot, x: it.spot.cx / f / state.W * 100, y: it.spot.cy / f / state.H * 100, style: state.rugCheck.style };
+      state.rugBar = r.id; state.rugFocus = r.id;
       renderFurnish(); draw();
     }
     function onFurnishClick(e) {
@@ -5981,9 +6084,11 @@
       if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the ' + ({ living: 'seating', dining: 'table', kitchendining: 'table', office: 'desk' }[layoutKind(r)] || 'bed') + ' on each wall and checking the walkways from the doors...</p>';
       else if (!L.list.length) html += '<p class="pane-sub">' + esc(L.why || 'No layout fits this room yet.') + '</p>';
       else {
-        html += '<p class="pane-sub">' + (L.intro ? esc(L.intro) + ' ' : '') + 'Each one passes the spacing and walkway checks. Tap one to see it on the plan.</p><div class="lay-list">' +
+        html += '<p class="pane-sub">' + (L.intro ? esc(L.intro) + ' ' : '') + 'Tap one to see it on the plan.</p><div class="lay-list">' +
           L.list.map(function (o, k) {
-            return '<button class="lay-card' + (k === L.pick ? ' on' : '') + '" data-lay="' + k + '"><img src="' + (L.thumbs[k] || '') + '" alt=""><span><b>' + esc(o.label) + '</b><small>' + esc(o.note) + '</small></span></button>';
+            // a name and one line: measurements and tight-spot counts stay off the card
+            var name = o.label.replace(/,[^,]*\d["'][^,]*/g, ''), line = (o.note.match(/^[^.]*\./) || [''])[0];
+            return '<button class="lay-card' + (k === L.pick ? ' on' : '') + '" data-lay="' + k + '"><img src="' + (L.thumbs[k] || '') + '" alt=""><span><b>' + esc(name) + '</b><small>' + esc(line) + '</small></span></button>';
           }).join('') + '</div>' + (L.busy ? '<p class="l-note" style="margin-top:8px">Looking for one more...</p>' : '');
         if (L.pick > -1) {
           var n = state.pieces.filter(function (pc) { return pieceRoom(pc) === r && !(pc.role === 'chair' && pc.group); }).length;
@@ -6189,12 +6294,14 @@
         var i = state.rooms.indexOf(holderRoom(h));
         state.rugFocus = h.id;
         if (i !== state.selected) select(i, false);
+        state.rugBar = h.id; placeFloat();
         state.drag = { mode: 'rug', start: p, snap: snap(), h: h, orig: { x: h.rug.x, y: h.rug.y } };
         try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
         e.preventDefault();
         return;
       }
       // Empty floor: a tap picks the room; a drag pans (touch, Space, or the middle button) or draws a selection box
+      if (state.rugBar) { state.rugBar = null; placeFloat(); }
       var pan = e.pointerType === 'touch' || state.space || e.button === 1;
       state.drag = { mode: pan ? 'pan' : 'box', start: p, cur: p, client: { x: e.clientX, y: e.clientY }, pan0: { x: state.view.px, y: state.view.py } };
       try { $('planCanvas').setPointerCapture(e.pointerId); } catch (err) {}
@@ -6872,6 +6979,7 @@
       }
       var changed = state.selected !== i;
       state.selected = i;
+      if (changed) state.rugBar = null;
       if (changed && state.layout && (!state.rooms[i] || state.rooms[i].id !== state.layout.room)) state.layout = null;
       if (changed && state.cat !== 'Rugs' && state.mode === 'furnish') renderCatalog();   // show the pieces that suit the room
       if (changed) { renderCards(); renderFurnishRooms(); }   // the list, or the picked room's view
@@ -6902,6 +7010,15 @@
        yet), the name, and one short summary that suits the mode. Tapping it opens that room. */
     function roomRow(i, dot, summary) {
       return '<button class="l-row" data-room="' + i + '"><span class="l-dot ' + (dot || '') + '"></span><b>' + esc(state.rooms[i].name) + '</b><small>' + summary + '</small></button>';
+    }
+    // A light, lamp or piece picked on the plan brings its own room into the panel, so the panel's
+    // title and "Back to ..." name the room it stands in
+    function followRoom(rm) {
+      var i = rm ? state.rooms.indexOf(rm) : -1;
+      if (i < 0 || i === state.selected) return;
+      var keep = { l: state.lightSel, m: state.lampSel };
+      select(i, false);
+      state.lightSel = keep.l; state.lampSel = keep.m;
     }
     function backToRoom(r) { return r ? '\u2190 Back to ' + esc(r.name) : '\u2190 All rooms'; }
 
@@ -7066,7 +7183,8 @@
       var btn = $('pdfBtn'), dl = $('dlBtn');
       btn.disabled = dl.disabled = true;
       loadLogo().then(function (logo) {
-        try { buildPDF(logo); } finally { btn.disabled = dl.disabled = false; }
+        NUMBERS = true;   // the PDF keeps every number
+        try { buildPDF(logo); } finally { NUMBERS = false; btn.disabled = dl.disabled = false; draw(); }
       });
     }
 
@@ -7469,7 +7587,6 @@
     var TIPS = {
       measure: 'Drag a room to move it, or a corner to resize it. Drag a + on a side to add a corner; tap a corner, then its ×, to remove it.',
       add: 'Tap a piece to add it to the room at its real size, then drag it into place. Pick it on the plan to turn, stretch or remove it.',
-      checks: 'The plan shows only what’s tight. Dashed lines are the walking routes from your doors. Pick a piece to see every side of it.',
       light: 'Lights line up over where each room is used. Drag one to move it; lights you move stay put when you change a room’s settings.'
     };
     function tipsSeen() { try { return JSON.parse(localStorage.getItem(TIPS_KEY) || '{}') || {}; } catch (e) { return {}; } }
@@ -7926,7 +8043,7 @@
           <p class="m-sum"><b id="statRooms">0</b> rooms, <b id="statArea">0</b> sq ft<span id="statEst"></span></p>
           <div class="room-grid" id="roomGrid"></div>
           <p class="m-add"><button class="link-btn" id="addBtn">+ Add a room</button></p>
-          <p class="m-add"><button class="link-btn" id="eraseOpenM">Furniture drawn on the plan? Clear it off</button></p>
+          <p class="m-add hidden"><button class="link-btn" id="eraseOpenM">Furniture drawn on the plan? Clear it off</button></p>
           <details class="l-more m-doors" id="doorsSection">
             <summary>Doors and windows <span class="m-count" id="doorCount"></span></summary>
             <div class="l-more-body">
@@ -7984,14 +8101,13 @@
               <button class="btn-primary btn-sm" id="customAdd">Add to the plan</button>
               <p class="hint" style="margin-top:10px">Use the listed size of the piece you're shopping for. For round pieces the width is the diameter.</p>
             </div>
-            <p class="erase-link"><button class="link-btn" id="eraseOpen">Furniture drawn on the plan? Clear it off</button></p>
+            <p class="erase-link hidden"><button class="link-btn" id="eraseOpen">Furniture drawn on the plan? Clear it off</button></p>
           </div>
 
           <div class="pane hidden" id="pane-checks">
             <div class="tip-slot" data-tipslot="checks"></div>
             <p class="pane-sub" id="spaceSub"></p>
             <div id="spaceList"></div>
-            <p class="key-line"><span class="kdot ok"></span>Comfortable <span class="kdot tight"></span>Tight <span class="kdot close"></span>Doesn't work</p>
           </div>
 
           <div class="pane hidden" id="pane-detail">
