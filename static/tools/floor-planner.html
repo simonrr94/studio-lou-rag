@@ -4436,8 +4436,7 @@
         if (!el) return;
         el.classList.toggle('hidden', !show);
         if (!show) { el.innerHTML = ''; return; }
-        el.innerHTML = x + '<b>Found ' + what + ' on your plan,</b> marked in green. Tap one to check it: drag it into place, flip it, change its type, or remove it.' +
-          '<br><button class="btn-secondary btn-sm" data-note="check">Show them</button>';
+        el.innerHTML = x + '<b>Found ' + what + '.</b> Check they\u2019re in the right spots.';
       });
     }
     function onNoteClick(e) {
@@ -4610,17 +4609,22 @@
       bar.classList.remove('hidden');
       var tip = 'Type a width, or drag the handles at its ends along the wall.';
       bar.innerHTML = '<p class="detail-name" style="border:none">' + doorName(d) + '</p>' +
-        '<p class="detail-meta">' + d.w + '" wide' + (win ? '' : ', ' + DOOR.TYPES[t].name.toLowerCase()) + '. ' + (msg ? esc(msg) + ' ' : '') + DOOR_NOTE[t] + ' Drag it along the walls to move it. ' + tip + '</p>' +
+        '<p class="detail-meta">' + (st && st.bad ? esc(msg) + ' ' : '') + 'Drag it along the walls to move it.</p>' +
         '<div class="btn-row">' +
           (win ? '' : '<select class="room-select door-w" style="min-width:0" data-dact="type" aria-label="Door type">' + DOOR.ORDER.map(function (k) {
             return '<option value="' + k + '"' + (k === t ? ' selected' : '') + '>' + DOOR.TYPES[k].name + '</option>';
           }).join('') + '</select>') +
-          '<label class="door-wfield"><input data-dact="width" value="' + d.w + '" inputmode="decimal" list="doorWidths" autocomplete="off" aria-label="Width in inches"><span>" wide</span></label>' +
-          '<datalist id="doorWidths">' + widths.map(function (w) { return '<option value="' + w + '">'; }).join('') + '</datalist>' +
           (fl[0] ? '<button class="btn-secondary btn-sm" data-dact="swing">' + fl[0] + '</button>' : '') +
           (fl[1] ? '<button class="btn-secondary btn-sm" data-dact="hinge">' + fl[1] + '</button>' : '') +
           '<button class="btn-secondary btn-sm" data-dact="remove">Remove</button>' +
-        '</div>';
+        '</div>' +
+        '<details class="l-more" data-dopen="adv"' + (state.doorAdv ? ' open' : '') + '><summary>Advanced</summary><div class="l-more-body">' +
+          '<label class="door-wfield"><input data-dact="width" value="' + d.w + '" inputmode="decimal" list="doorWidths" autocomplete="off" aria-label="Width in inches"><span>" wide</span></label>' +
+          '<datalist id="doorWidths">' + widths.map(function (w) { return '<option value="' + w + '">'; }).join('') + '</datalist>' +
+          '<p class="l-note">' + tip + '</p>' +
+        '</div></details>';
+      var adv = bar.querySelector('[data-dopen]');
+      if (adv) adv.addEventListener('toggle', function () { state.doorAdv = adv.open; });
       showPane(); placeFloat();
     }
     function removeDoor() {
@@ -6948,6 +6952,7 @@
       var bar = $('scaleBar'), msg = $('scaleMsg'), btn = $('scaleBtn'), sc = state.scale;
       if (!bar) return;
       bar.classList.toggle('warn', !sc && state.tool !== 'scale');
+      bar.classList.toggle('hidden', !!sc && !sc.rough && state.tool !== 'scale');   // a scale found or set needs no bar
       bar.classList.toggle('compact', !!sc && state.tool !== 'scale');
       if (state.tool === 'scale') {
         msg.innerHTML = '<b>Set the scale.</b> Drag along a wall or dimension line whose length you know. Hold Shift to keep the line straight.';
@@ -7032,7 +7037,7 @@
       if (!one) {
         $('roomGrid').innerHTML = '<div class="l-list">' + state.rooms.map(function (r, i) {
           var look = r.source === 'estimated' || r.weak || (PLAN.areaConflict(r) && !shapeMatches(r)) || PLAN.shapeConflict(r);
-          return roomRow(i, look ? 'dim' : 'ok', (r.width && r.length ? esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) : 'No size yet') + (r.source === 'estimated' ? ', estimated' : look ? ', needs a look' : ''));
+          return roomRow(i, look ? 'dim' : 'ok', (r.width && r.length ? esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) : 'No size yet') + (look ? ', check it' : ''));
         }).join('') + '</div>';
         return;
       }
@@ -7046,7 +7051,7 @@
             '<div><label>Width</label><input data-f="width" value="' + esc(fmtFtIn(r.width)) + '" placeholder="12\'6&quot;"></div>' +
             '<div><label>Length</label><input data-f="length" value="' + esc(fmtFtIn(r.length)) + '" placeholder="10\'"></div>' +
           '</div>' +
-          '<div class="card-foot"><span class="area">' + areaText(r) + '</span>' + badgeFor(r) + '</div>' +
+          '<div class="card-foot"><span class="area">' + (area(r) ? fmtArea(area(r)) : 'Add its size') + '</span></div>' +
           noteFor(r) +
         '</div>';
       }).join('');
@@ -7065,22 +7070,10 @@
     function shapeMatches(r) { return !!(r.shape && r.printedArea && r.shapeArea && Math.abs(r.shapeArea / r.printedArea - 1) <= 0.10); }
     function noteFor(r) {
       // a room the plan reader didn't list, found on the walls with a door into it
-      if (r.found && !r.dimsEdited && !r.boxEdited) return '<div class="box-note fine">Found on the plan without a name, so it\u2019s called ' + esc(r.name) +
-        '. Its size is measured from its walls. Rename it if it\u2019s something else, or remove it.</div>';
-      if (shapeMatches(r)) return '<div class="box-note fine">' + (r.traced
-        ? 'Not a rectangle, so its outline was traced from the walls to match the printed ' + fmtArea(r.printedArea) + '. Drag a corner if it\u2019s off.'
-        : 'Its shape matches the printed ' + fmtArea(r.printedArea) + '.') + '</div>';
-      var ac = PLAN.areaConflict(r);
-      if (ac) return '<div class="box-note">The plan prints ' + fmtArea(ac.printed) + ', so that is used. ' + esc(fmtFtIn(r.width)) + ' x ' + esc(fmtFtIn(r.length)) +
-        ' gives ' + fmtArea(ac.dims) + '. The dimension lines may measure outside the walls or only part of the room.</div>';
-      var sc = PLAN.shapeConflict(r);
-      if (sc) return '<div class="box-note">' + (r.walled && !r.boxEdited ? 'Its outline, traced from the walls, measures ' : 'The shape you drew measures ') + fmtArea(sc.shape) + ', but the plan prints ' + fmtArea(sc.printed) +
-        '. Check the corners or the scale.</div>';
-      if (r.weak && !r.boxEdited) return '<div class="box-note">This space couldn\u2019t be placed from the plan. Drag its box into place' +
-        (boxMeasured(r) ? ' and its size will follow.' : '.') + '</div>';
-      if (!r.mismatch) return '<div class="box-note hidden"></div>';
-      return '<div class="box-note">The box on the plan measures ' + esc(fmtFtIn(r.mismatch.w)) + ' x ' + esc(fmtFtIn(r.mismatch.h)) +
-        '. Adjust the box or the size, or check the scale.</div>';
+      if (r.found && !r.dimsEdited && !r.boxEdited) return '<div class="box-note fine">Found on the plan without a name. Rename it if it\u2019s not a ' + esc(r.name.toLowerCase()) + '.</div>';
+      if (r.dimsEdited) return '<div class="box-note hidden"></div>';
+      var guess = r.source === 'estimated' || (r.weak && !r.boxEdited) || (PLAN.areaConflict(r) && !shapeMatches(r)) || PLAN.shapeConflict(r) || r.mismatch;
+      return guess ? '<div class="box-note">This size is a guess. Check it with a tape measure.</div>' : '<div class="box-note hidden"></div>';
     }
 
     function renderStats() {
@@ -7115,8 +7108,7 @@
           r.dimsEdited = true; // the area now follows the typed dimensions
           if (r.source === 'estimated') r.source = 'edited';
           var card = el.closest('.room-card');
-          card.querySelector('.area').textContent = areaText(r);
-          card.querySelector('.badge').outerHTML = badgeFor(r);
+          card.querySelector('.area').textContent = area(r) ? fmtArea(area(r)) : 'Add its size';
           renderStats(); draw();
           card.querySelector('.box-note').outerHTML = noteFor(r);
         }
@@ -7997,6 +7989,7 @@
           <button role="menuitem" class="mm-core" data-more="saveBtn" id="moreSave">Save</button>
           <button role="menuitem" class="mm-core" data-more="pdfBtn">Download PDF</button>
           <button role="menuitem" class="mm-core" data-more="pngBtn">Download PNG</button>
+          <button role="menuitem" data-more="scaleBtn">Check the scale</button>
           <button role="menuitem" data-more="eraseOpenM">Clear furniture off the plan</button>
           <button role="menuitem" data-more="resetBtn">New plan</button>
           <button role="menuitem" data-more="keysBtn">Keys and gestures</button>
@@ -8043,7 +8036,7 @@
           <div id="measureBack"><button class="link-btn detail-back" data-act="allrooms">&larr; All rooms</button></div>
           <div class="found-note hidden" id="foundNoteM"></div>
           <div class="tip-slot" data-tipslot="measure"></div>
-          <p class="m-sum"><b id="statRooms">0</b> rooms, <b id="statArea">0</b> sq ft<span id="statEst"></span></p>
+          <p class="m-sum hidden"><b id="statRooms">0</b> rooms, <b id="statArea">0</b> sq ft<span id="statEst"></span></p>
           <div class="room-grid" id="roomGrid"></div>
           <p class="m-add"><button class="link-btn" id="addBtn">+ Add a room</button></p>
           <p class="m-add hidden"><button class="link-btn" id="eraseOpenM">Furniture drawn on the plan? Clear it off</button></p>
