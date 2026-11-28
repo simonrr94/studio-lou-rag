@@ -5576,7 +5576,7 @@
           // conversation distance: 8' or less to the nearest seat of the group; the conversation check holds
           // it to 8' from any seat it faces straight on
           if (d < 4.5 || d > 12) continue;
-          if (!seatsG.some(function (q) { return Math.hypot(q.cx - p.x, q.cy - p.y) <= 8; })) continue;
+
           var f = { x: dx / d, y: dy / d };
           // its back to a wall: the chair slid back until it's as close as it goes (a turned chair's back
           // corners meet the wall first), from a spot no more than 18" out
@@ -5591,6 +5591,7 @@
           }
           if (!walled) c0 = p;
           if (!c0) continue;
+          if (!seatsG.some(function (q) { return Math.hypot(q.cx - c0.x, q.cy - c0.y) <= 8; })) continue;
           // not behind the seat, not in front of the TV
           if ((c0.x - seat.cx) * sf.x + (c0.y - seat.cy) * sf.y < -seat.spec.d / 24 + 0.25) continue;
           if (media && GEO.segDist(c0, { x: seat.cx, y: seat.cy }, { x: media.cx, y: media.cy }) < 2.5) continue;
