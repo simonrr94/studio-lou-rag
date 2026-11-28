@@ -6,5 +6,5 @@
   it by `tools/keytool.py`. `tools/score.py <url> <outdir>` scores the page's Measure against the keys;
   `tools/proto.py` is the wall-first prototype.
 - `harness/`: the page test harness (`run.py` regression captures, `feature.py` layout checks,
-  `realplans.py` layouts on the cabin and studio, `compare.py` to diff two runs). Paths inside assume
+  `realplans.py` layouts on the cabin and studio, `kb.py` kitchens and baths (stools, runners, mats), `compare.py` to diff two runs). Paths inside assume
   the build sandbox (`/home/claude/...`); adjust when moving.

@@ -4719,9 +4719,11 @@
         body.innerHTML = '<p class="rug-empty">Pick a room on the plan or from the list.</p>';
         return;
       }
-      var res = rugCheckFor(r);
+      var small = smallRugRoom(r), res = small ? RUG.check(r.ftShape, small === 'kitchen' ? ['2x3', '2x6', '2x8', '2.5x8', '2.5x10', '2.5x12', '3x10'] : ['20x30', '21x34', '2x5', '2x6']) : rugCheckFor(r);
+      if (small && res) res.best = null;
       var bestLabel = res && res.best ? RUG.get(res.best).label : null;
-      $('rugSub').innerHTML = (bestLabel ? 'Best fit: <b>' + bestLabel + '</b>. ' : 'None of the standard sizes leave a foot of floor at the walls here. ') + 'Tap a size to lay it in the room.';
+      $('rugSub').innerHTML = small ? (small === 'kitchen' ? 'Runners and mats for the work aisle. ' : 'Bath mats and runners. ') + 'Tap a size to lay it ' + (small === 'kitchen' ? 'in the aisle.' : 'by the tub or vanity.')
+        : (bestLabel ? 'Best fit: <b>' + bestLabel + '</b>. ' : 'None of the standard sizes leave a foot of floor at the walls here. ') + 'Tap a size to lay it in the room.';
       var cards = res.list.map(function (it) {
         var on = r.rug && r.rug.size === it.size.id;
         return '<button class="rug-card' + (on ? ' on' : '') + '" data-rug="' + it.size.id + '">' +
@@ -4736,11 +4738,15 @@
     function placeRug(id) {
       var r = state.rooms[state.selected];
       if (!r || !state.scale || !r.ftShape) return;
-      var res = rugCheckFor(r), it = res.list.filter(function (x) { return x.size.id === id; })[0];
-      if (!it || !it.spot) return;
-      var f = state.scale.ftPerPx;
+      var f = state.scale.ftPerPx, smart = RUG.get(id) && (RUG.get(id).mat || RUG.get(id).runner) ? smartRug(r, id) : null, spot;
+      if (smart) spot = { rot: smart.rot, cx: smart.cx, cy: smart.cy };
+      else {
+        var res = RUG.get(id) && (RUG.get(id).mat || RUG.get(id).runner) ? RUG.check(r.ftShape, [id]) : rugCheckFor(r), it = res.list.filter(function (x) { return x.size.id === id; })[0];
+        if (!it || !it.spot) return;
+        spot = it.spot;
+      }
       pushUndo();
-      r.rug = { size: id, rot: it.spot.rot, x: it.spot.cx / f / state.W * 100, y: it.spot.cy / f / state.H * 100, style: state.rugCheck.style };
+      r.rug = { size: id, rot: spot.rot, x: spot.cx / f / state.W * 100, y: spot.cy / f / state.H * 100, style: 'walls' };
       state.rugBar = r.id; state.rugFocus = r.id;
       renderFurnish(); draw();
     }
@@ -4819,6 +4825,7 @@
       if (t === 'kitchen' && /dining|eat|breakfast|nook/i.test(r.name)) return 'kitchendining';
       // an entryway (zones Z3): a console table or bench by the front door
       if (/\b(entry|entrance|entryway|foyer|mudroom|mud room)\b/i.test(r.name)) return 'entry';
+      if (t === 'kitchen' || t === 'bath') return t;   // stools, runners and mats (Phase D)
       return t === 'bedroom' || t === 'living' || t === 'dining' || t === 'office' ? t : null;
     }
     function layoutOpen() { var r = state.rooms[state.selected]; return !!(state.layout && r && state.layout.room === r.id && state.mode === 'furnish'); }
@@ -5840,6 +5847,8 @@
       // a dining table stands in the middle of the room, so it needs no wall
       if (kind === 'dining') return diningLayouts(r, sts, done);
       if (kind === 'kitchendining') return kitchenDiningLayouts(r, done);
+      if (kind === 'kitchen') return kitchenLayouts(r, done);
+      if (kind === 'bath') return bathLayouts(r, done);
       if (!sts.length) return done({ why: 'This room has no straight stretch of wall to set furniture against. Add pieces from Furniture and the checks will show what fits.' });
       if (kind === 'living') return livingLayouts(r, sts, opens, done);
       if (kind === 'office') return officeLayouts(r, sts, done);
@@ -6408,10 +6417,230 @@
           c.rugAt = LAYOUT.tableRug(poly, tbl, keepOff);
           var o = diningOption(r, c);
           o.note = o.note.replace('Light adds a chandelier over the table.', '42" clear in front of the counters' + (fx.some(function (q) { return q.kind === 'island'; }) ? ' and all round the island' : '') + '. Light adds a chandelier over the table.');
+          // counter stools at the island and a runner in the work aisle, where they fit around the table (Phase D)
+          var kfx = kbFixtures(r).filter(function (q) { return q.kind === 'counter' || q.kind === 'island'; }), tpolys = c.places.map(polyOf), st = null, extra = [];
+          kfx.filter(function (q) { return q.kind === 'island'; }).some(function (q) { return (st = islandStools(r, q, kfx.concat(tpolys.map(function (pl) { return { poly: pl, kind: 'piece' }; })))); });
+          if (st && !layoutQuick(r, layPieces(c.places.concat(st.places))).close) { o.places = c.places.concat(st.places); extra.push(st.places.length + ' counter stool' + (st.places.length > 1 ? 's' : '') + ' at the island'); }
+          var avoidK = o.places.map(polyOf).concat(o.rug ? [RUG.outline(RUG.get(o.rug.size), o.rug.rot, o.rug.cx, o.rug.cy)] : []), kr = kitchenRunner(r, kfx, avoidK);
+          if (kr) { o.rug2 = kr.rug; extra.push('a ' + RUG.get(kr.rug.size).label + ' runner in the work aisle'); }
+          if (extra.length) o.note = o.note.replace(/\.\s/, ', and ' + andList(extra) + '. ');
           return (c.option = o);
         }), tried: run.tried, more: !!more });
       }
     }
+    /* ---------- Kitchens and baths (Phase D, Nov 28) ----------
+       A furnishing tool, not a renovation layout: the counters, islands, toilets, tubs, showers and
+       vanities come from the plan reader (r.fixtures), and the suggestion is what people buy for them.
+       - Counter stools at an island: 24" of counter each and 6" clear at each end (NKBA's 24" per seat),
+         tucked about 6" under the edge, on the side with 36" clear behind them (47" from the island's
+         edge), facing the room rather than a counter.
+       - A runner in the work aisle: 2', 2'6" or 3' wide with 6" of floor to the counters on each side
+         (Lowe's, Wayfair), as long as the aisle's working length less 6" at each end, the smaller size
+         when between two (Wayfair); between a counter and the island first, else a galley's two counters,
+         else along the longest counter.
+       - A bath mat at the open side of the tub or shower (20" x 30" or 21" x 34"), and at the vanity a mat,
+         or a runner about the vanity's length at a double vanity (Wayfair). Rugs keep out of door swings
+         and off the floor in front of the toilet.
+       Nothing for laundry rooms. */
+    var DIRS = { N: { x: 0, y: -1 }, S: { x: 0, y: 1 }, W: { x: -1, y: 0 }, E: { x: 1, y: 0 } }, OPP = { N: 'S', S: 'N', W: 'E', E: 'W' };
+    var KRUN = ['3x12', '3x10', '2.5x12', '2.5x10', '2.5x8', '2x8', '2x6'];
+    function kbFixtures(r) {
+      var f = state.scale.ftPerPx;
+      return (r.fixtures || []).map(function (fx) {
+        var poly = PLAN.shapeFt(fx.poly, f, state.W, state.H), b = PLAN.bounds(poly);
+        var front = fx.front || (fx.kind === 'counter' && fx.wall ? OPP[fx.wall] : null);
+        return { kind: fx.kind, poly: [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }], b: b, front: front };
+      });
+    }
+    // One side of a fixture's box: its ends, the way along it and the way out from it
+    function fxEdge(fx, side) {
+      var b = fx.b, n = DIRS[side], a, e;
+      if (side === 'N') { a = { x: b.x, y: b.y }; e = { x: b.x + b.w, y: b.y }; }
+      else if (side === 'S') { a = { x: b.x, y: b.y + b.h }; e = { x: b.x + b.w, y: b.y + b.h }; }
+      else if (side === 'W') { a = { x: b.x, y: b.y }; e = { x: b.x, y: b.y + b.h }; }
+      else { a = { x: b.x + b.w, y: b.y }; e = { x: b.x + b.w, y: b.y + b.h }; }
+      var L = Math.hypot(e.x - a.x, e.y - a.y);
+      return { fx: fx, side: side, a: a, b: e, len: L, u: { x: (e.x - a.x) / L, y: (e.y - a.y) / L }, n: n };
+    }
+    // How far the floor runs straight out from p before a wall, a fixture or anything in the way (feet, up to 9')
+    // (through an open side into the next room too; wall ink stops it)
+    function clearOut(r, p, n, blocks) {
+      var ink = wallTestFt(true), left = null;
+      for (var d = 1 / 24; d <= 9; d += 1 / 12) {
+        var q = { x: p.x + n.x * d, y: p.y + n.y * d };
+        if (ink && ink(q)) return { d: left == null ? d : left, hit: 'wall' };
+        // between two rooms' outlines across an open side (the wall's thickness, no ink): up to 9"
+        if (!(PLAN.pointInPoly(q, r.ftShape) || state.rooms.some(function (o) { return o.ftShape && PLAN.pointInPoly(q, o.ftShape); }))) {
+          if (left == null) left = d;
+          if (d - left > 0.75) return { d: left, hit: 'wall' };
+          continue;
+        }
+        left = null;
+        for (var i = 0; i < blocks.length; i++) if (PLAN.pointInPoly(q, blocks[i].poly)) return { d: d, hit: blocks[i].kind || 'piece', fx: blocks[i] };
+      }
+      return { d: 9, hit: null };
+    }
+    // The least clear floor out from the middle part of an edge (between t0 and t1 along it)
+    function edgeClear(r, ed, blocks, t0, t1) {
+      var best = null;
+      for (var i = 0; i <= 4; i++) {
+        var t = (t0 == null ? 0.2 * ed.len : t0) + ((t1 == null ? 0.8 * ed.len : t1) - (t0 == null ? 0.2 * ed.len : t0)) * i / 4;
+        var p = { x: ed.a.x + ed.u.x * t + ed.n.x / 96, y: ed.a.y + ed.u.y * t + ed.n.y / 96 }, c = clearOut(r, p, ed.n, blocks.filter(function (q) { return q !== ed.fx; }));
+        if (!best || c.d < best.d) best = c;
+      }
+      return best;
+    }
+    function doorSweeps() {
+      var out = [];
+      realDoors().forEach(function (d) {
+        var g = DOOR.geom(doorFt(d));
+        (g.leaves || []).forEach(function (l) { if (l.sector && l.sector.length > 2) out.push(l.sector); });
+        if (g.sector && !(g.leaves || []).length) out.push(g.sector);
+      });
+      return out;
+    }
+    // A rug laid along an edge: its long side along it, off the edge by off feet, slid along by t
+    function rugAlong(ed, id, off, mid) {
+      var s = RUG.get(id), rot = Math.abs(ed.u.x) > 0.5 ? 90 : 0, m = mid == null ? ed.len / 2 : mid;
+      var c = { x: ed.a.x + ed.u.x * m + ed.n.x * (off + s.w / 2), y: ed.a.y + ed.u.y * m + ed.n.y * (off + s.w / 2) };
+      return { size: id, rot: rot, cx: c.x, cy: c.y };
+    }
+    // Inside the room, off every fixture and piece, out of the door swings
+    function rugClear(r, rg, avoid) {
+      var rp = RUG.outline(RUG.get(rg.size), rg.rot, rg.cx, rg.cy);
+      if (rp.some(function (q) { return !PLAN.pointInPoly(q, r.ftShape); })) return false;
+      return !avoid.some(function (a) { return GEO.polyDist(rp, a) <= 0.02; });
+    }
+    // Counter stools along the island's best side (places for LAYOUT pieces), or null
+    function islandStools(r, fx, blocks) {
+      var st = FURNITURE.get('stool'), best = null;
+      if (!st) return null;
+      ['N', 'S', 'W', 'E'].forEach(function (side) {
+        var ed = fxEdge(fx, side), n = Math.floor(ed.len * 12 / 24 + 1e-6);
+        if (ed.len < 3 || n < 1) return;
+        var c = edgeClear(r, ed, blocks), need = (st.d - 6 + 36) / 12;
+        if (c.d < need) return;
+        var sc = ed.len * 2 + Math.min(c.d, 6) - (c.hit === 'counter' ? 6 : 0);
+        if (!best || sc > best.sc) best = { sc: sc, ed: ed, n: Math.min(n, 5) };
+      });
+      if (!best) return null;
+      var ed = best.ed, out = [];
+      for (var k = 0; k < best.n; k++) {
+        var t = ed.len / 2 + (k - (best.n - 1) / 2) * 2, off = (st.d / 2 - 6) / 12;
+        out.push({ spec: st, cx: ed.a.x + ed.u.x * t + ed.n.x * off, cy: ed.a.y + ed.u.y * t + ed.n.y * off, rot: 0 });
+      }
+      return { places: out, side: ed.side };
+    }
+    // The kitchen runner: the best aisle a standard runner fits, or null. avoid: polygons it keeps off
+    function kitchenRunner(r, fxs, avoid, sizeOnly) {
+      var counters = fxs.filter(function (q) { return q.kind === 'counter' && q.front; }), islands = fxs.filter(function (q) { return q.kind === 'island'; });
+      var blocks = fxs.concat(avoid.map(function (a) { return { poly: a, kind: 'piece' }; })), cands = [];
+      counters.forEach(function (fx) {
+        var ed = fxEdge(fx, fx.front), c0 = edgeClear(r, ed, blocks), t0 = 0, t1 = ed.len, rank = c0.hit === 'island' ? 0 : c0.hit === 'counter' ? 1 : 2;
+        if (rank === 0) {   // the island's stretch of the aisle
+          var ib = c0.fx.b, lo = Math.abs(ed.u.x) > 0.5 ? ib.x - ed.a.x : ib.y - ed.a.y, hi = lo + (Math.abs(ed.u.x) > 0.5 ? ib.w : ib.h);
+          t0 = Math.max(0, lo); t1 = Math.min(ed.len, hi);
+          if (t1 - t0 < 3) { t0 = 0; t1 = ed.len; }
+        }
+        var A = Math.min(edgeClear(r, ed, blocks, t0 + 0.1 * (t1 - t0), t1 - 0.1 * (t1 - t0)).d, rank === 2 ? 4 : 9);
+        // the island's stretch of the aisle first; the whole counter run when no runner fits that
+        [[t0, t1], [0, ed.len]].forEach(function (span, si) {
+        if (si && (cands.length || (span[0] === t0 && span[1] === t1))) return;
+        var work = span[1] - span[0] - 1, mid = (span[0] + span[1]) / 2;
+        (sizeOnly ? [sizeOnly] : KRUN).forEach(function (id) {
+          var s = RUG.get(id);
+          if (!s || s.h > work + 1e-6 || A - s.w < (s.w <= 2 ? 0.5 : 1) - 1e-6) return;
+          // centered across a narrow aisle; 6" off the counter (the sink side) in a wide one
+          var off = A <= 4.5 || rank === 2 ? Math.max(0.5, (A - s.w) / 2) : 0.5;
+          if (rank === 2) off = 0.5;
+          [0, -0.25, 0.25, -0.5, 0.5].some(function (sl) {
+            var rg = rugAlong(ed, id, off, mid + sl);
+            if (!rugClear(r, rg, avoid.concat(fxs.map(function (q) { return q.poly; })).concat(doorSweeps()))) return false;
+            cands.push({ rug: rg, rank: rank, area: s.w * s.h, fx: fx, A: A });
+            return true;
+          });
+        });
+        });
+      });
+      cands.sort(function (a, b) { return a.rank - b.rank || b.area - a.area; });
+      return cands[0] || null;
+    }
+    // Bath rugs: a mat at the tub or shower, and a mat or runner at the vanity
+    function bathRugs(r, fxs, sizeOnly) {
+      var sweeps = doorSweeps(), toilets = fxs.filter(function (q) { return q.kind === 'toilet' && q.front; });
+      // the floor in front of a toilet (21" out, its width) stays bare
+      var keep = toilets.map(function (t) {
+        var ed = fxEdge(t, t.front), d = 21 / 12, n = ed.n;
+        return [ed.a, ed.b, { x: ed.b.x + n.x * d, y: ed.b.y + n.y * d }, { x: ed.a.x + n.x * d, y: ed.a.y + n.y * d }];
+      });
+      var avoid = fxs.map(function (q) { return q.poly; }).concat(sweeps).concat(keep), used = [];
+      function at(fx, ids) {
+        if (!fx.front) return null;
+        var ed = fxEdge(fx, fx.front), got = null;
+        (sizeOnly ? [sizeOnly] : ids).some(function (id) {
+          var s = RUG.get(id);
+          if (!s || s.h > ed.len + 0.5 + 1e-6) return false;
+          return [0, -0.25, 0.25, -0.5, 0.5, -0.75, 0.75].some(function (sl) {
+            var rg = rugAlong(ed, id, 1 / 12, ed.len / 2 + sl);
+            if (!rugClear(r, rg, avoid.concat(used))) return false;
+            got = { rug: rg, fx: fx }; return true;
+          });
+        });
+        if (got) used.push(RUG.outline(RUG.get(got.rug.size), got.rug.rot, got.rug.cx, got.rug.cy));
+        return got;
+      }
+      var wet = fxs.filter(function (q) { return q.kind === 'tub' || q.kind === 'shower'; }).sort(function (a, b) { return b.b.w * b.b.h - a.b.w * a.b.h; });
+      var vans = fxs.filter(function (q) { return q.kind === 'vanity'; }).sort(function (a, b) { return Math.max(b.b.w, b.b.h) - Math.max(a.b.w, a.b.h); });
+      var mat = null, van = null;
+      wet.some(function (fx) { return (mat = at(fx, ['21x34', '20x30'])); });
+      vans.some(function (fx) {
+        var wide = fxEdge(fx, fx.front || 'S').len >= 4;
+        return (van = at(fx, wide ? ['2x6', '2x5', '21x34', '20x30'] : ['21x34', '20x30']));
+      });
+      return { mat: mat, van: van };
+    }
+    function kitchenLayouts(r, done) {
+      var fxs = kbFixtures(r).filter(function (q) { return q.kind === 'counter' || q.kind === 'island'; });
+      if (!fxs.length) return done({ why: 'I can’t tell where the counters are on this plan yet. Add counter stools or a runner from Furniture and Rugs and the checks will show what fits.' });
+      var stools = null;
+      fxs.filter(function (q) { return q.kind === 'island'; }).some(function (fx) { return (stools = islandStools(r, fx, fxs)); });
+      var opts = [];
+      function card(st) {
+        var places = st ? st.places : [], avoid = places.map(polyOf), run = kitchenRunner(r, fxs, avoid);
+        if (st) { var q = layoutQuick(r, layPieces(places)); if (q.close) return; }
+        if (!st && !run) return;
+        var n = st ? st.places.length : 0, parts = [];
+        if (n) parts.push(n + ' counter stool' + (n > 1 ? 's' : '') + ' at the island (36" clear behind them)');
+        if (run) parts.push((/^(8|11|18)'/.test(RUG.get(run.rug.size).label) ? 'an ' : 'a ') + RUG.get(run.rug.size).label + ' runner ' + (run.rank === 0 ? 'between the counter and the island' : run.rank === 1 ? 'between the counters' : 'along the counter'));
+        opts.push({ label: n ? 'Counter stools and a runner'.replace(' and a runner', run ? ' and a runner' : '') : 'A runner in the work aisle',
+          note: 'With ' + andList(parts) + '.' + (run ? ' It leaves about 6" of floor at the cabinets.' : ''), places: places, rug: run ? run.rug : null, rug2: null });
+      }
+      card(stools);
+      if (stools) card(null);
+      if (!opts.length) return done({ why: 'The work aisles here are too narrow for a runner with floor showing at the cabinets, and there’s no island with room for stools.' });
+      done({ list: opts, tried: 0, more: false });
+    }
+    function bathLayouts(r, done) {
+      var fxs = kbFixtures(r).filter(function (q) { return /toilet|tub|shower|vanity/.test(q.kind); });
+      if (!fxs.length) return done({ why: 'I can’t tell where the tub and vanity are on this plan yet. Lay a mat from Rugs and the checks will show what fits.' });
+      var got = bathRugs(r, fxs), opts = [];
+      if (!got.mat && !got.van) return done({ why: 'There isn’t floor for a bath mat here that keeps clear of the door’s swing and the toilet.' });
+      var parts = [];
+      if (got.mat) parts.push('a ' + RUG.get(got.mat.rug.size).label + ' bath mat at the ' + got.mat.fx.kind);
+      if (got.van) parts.push((RUG.get(got.van.rug.size).runner ? 'a ' + RUG.get(got.van.rug.size).label + ' runner along' : 'a ' + RUG.get(got.van.rug.size).label + ' mat at') + ' the vanity');
+      opts.push({ label: got.mat && got.van ? 'Bath mat and ' + (RUG.get(got.van.rug.size).runner ? 'a runner' : 'a vanity mat') : got.mat ? 'Bath mat by the ' + got.mat.fx.kind : 'Mat at the vanity',
+        note: 'With ' + andList(parts) + '. Clear of the door’s swing and the floor in front of the toilet.', places: [], rug: (got.mat || got.van).rug, rug2: got.mat && got.van ? got.van.rug : null });
+      done({ list: opts, tried: 0, more: false });
+    }
+    // Where a runner or mat tapped in the Rugs tab goes in a kitchen or bath: the spot a suggestion would use
+    function smartRug(r, id) {
+      if (!state.scale || !r.fixtures || !r.fixtures.length) return null;
+      var t = roomLType(r), fxs = kbFixtures(r);
+      if (t === 'kitchen') { var k = kitchenRunner(r, fxs.filter(function (q) { return q.kind === 'counter' || q.kind === 'island'; }), [], id); return k ? k.rug : null; }
+      if (t === 'bath') { var b = bathRugs(r, fxs, id); return (b.mat || b.van || {}).rug || null; }
+      return null;
+    }
+    function smallRugRoom(r) { var t = roomLType(r); return t === 'kitchen' && !/dining|eat|breakfast|nook/i.test(r.name) ? 'kitchen' : t === 'bath' ? 'bath' : null; }
     function diningWhy(r) {
       var b = PLAN.bounds(r.ftShape), short = Math.min(b.w, b.h) - (48 + 60) / 12;
       if (short < -1 / 12) return 'This room is ' + fmtFtIn(-short) + ' too small for a round table for 4 and the 30" it needs around it.';
@@ -6761,6 +6990,10 @@
       ctx.translate(cv.width / 2 - (b.x + b.w / 2) * k, cv.height / 2 - (b.y + b.h / 2) * k);
       ctx.beginPath(); r.ftShape.forEach(function (p, i) { if (i) ctx.lineTo(p.x * k, p.y * k); else ctx.moveTo(p.x * k, p.y * k); }); ctx.closePath();
       ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 2 * dpr; ctx.strokeStyle = '#433E3C'; ctx.stroke();
+      if (r.fixtures && r.fixtures.length) kbFixtures(r).forEach(function (q) {   // counters, islands and bath fixtures, faint
+        ctx.beginPath(); q.poly.forEach(function (p, i) { if (i) ctx.lineTo(p.x * k, p.y * k); else ctx.moveTo(p.x * k, p.y * k); }); ctx.closePath();
+        ctx.fillStyle = '#efe6d8'; ctx.fill(); ctx.lineWidth = dpr; ctx.strokeStyle = '#b5a999'; ctx.stroke();
+      });
       [o.rug, o.rug2].forEach(function (rg) {
         if (!rg) return;
         var rp = RUG.outline(RUG.get(rg.size), rg.rot, rg.cx, rg.cy);
@@ -6779,7 +7012,7 @@
       if (!el || !r) return;
       var html = '<button class="link-btn detail-back" data-lyback="1">' + backToRoom(r) + '</button>' +
         '<p class="lay-title">Layouts for ' + esc(r.name) + '</p>';
-      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the ' + ({ living: 'seating', dining: 'table', kitchendining: 'table', office: 'desk', entry: 'console table and bench' }[layoutKind(r)] || 'bed') + ' on each wall and checking the walkways from the doors...</p>';
+      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the ' + ({ living: 'seating', dining: 'table', kitchendining: 'table', office: 'desk', entry: 'console table and bench', kitchen: 'stools and runner', bath: 'mats' }[layoutKind(r)] || 'bed') + ' on each wall and checking the walkways from the doors...</p>';
       else if (!L.list.length) html += '<p class="pane-sub">' + esc(L.why || 'No layout fits this room yet.') + '</p>';
       else {
         html += '<p class="pane-sub">' + (L.intro ? esc(L.intro) + ' ' : '') + 'Tap one to see it on the plan.</p><div class="lay-list">' +

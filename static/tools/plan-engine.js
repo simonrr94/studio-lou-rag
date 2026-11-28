@@ -721,11 +721,27 @@ var RUG = (function () {
     { id: '6r', label: "6' round", d: 6 },
     { id: '8r', label: "8' round", d: 8 }
   ];
+  // Runners and mats for kitchens and baths (Phase D, Nov 28): runners come 2', 2'6" or 3' wide and 6' to
+  // 12' long (Wayfair); a bath mat is about 20" x 30" to 21" x 34" (The Company Store, Bed Bath & Beyond);
+  // a double vanity takes a runner about its length (Wayfair). Not in the area-rug list.
+  var SMALL = [
+    { id: '20x30', label: '20" x 30"', w: 20 / 12, h: 30 / 12, mat: true },
+    { id: '21x34', label: '21" x 34"', w: 21 / 12, h: 34 / 12, mat: true },
+    { id: '2x3', label: "2' x 3'", w: 2, h: 3, mat: true },
+    { id: '2x5', label: "2' x 5'", w: 2, h: 5, runner: true },
+    { id: '2x6', label: "2' x 6'", w: 2, h: 6, runner: true },
+    { id: '2x8', label: "2' x 8'", w: 2, h: 8, runner: true },
+    { id: '2.5x8', label: "2'6\" x 8'", w: 2.5, h: 8, runner: true },
+    { id: '2.5x10', label: "2'6\" x 10'", w: 2.5, h: 10, runner: true },
+    { id: '2.5x12', label: "2'6\" x 12'", w: 2.5, h: 12, runner: true },
+    { id: '3x10', label: "3' x 10'", w: 3, h: 10, runner: true },
+    { id: '3x12', label: "3' x 12'", w: 3, h: 12, runner: true }
+  ];
   var COMFORT = 1;   // 12" of floor between rug and walls
   var TIGHT = 0.5;   // 6" or more still works, just tight
   var EPS = 1e-6;
 
-  function get(id) { for (var i = 0; i < SIZES.length; i++) if (SIZES[i].id === id) return SIZES[i]; return null; }
+  function get(id) { for (var i = 0; i < SIZES.length; i++) if (SIZES[i].id === id) return SIZES[i]; for (i = 0; i < SMALL.length; i++) if (SMALL[i].id === id) return SMALL[i]; return null; }
   function sizeArea(s) { return s.d ? Math.PI * s.d * s.d / 4 : s.w * s.h; }
   // Footprint in feet on the plan: rot 90 turns a rectangle on its side
   function footprint(s, rot) {
@@ -835,9 +851,9 @@ var RUG = (function () {
 
   // Every standard size checked against one room outline (feet).
   // best: the largest size that leaves at least 12" of floor all around.
-  function check(poly) {
+  function check(poly, ids) {
     if (!poly || poly.length < 3) return null;
-    var list = SIZES.map(function (s) {
+    var list = (ids ? ids.map(get).filter(Boolean) : SIZES).map(function (s) {
       var spot = bestSpot(poly, s);
       return { size: s, spot: spot, status: spot ? status(spot.clearance) : 'big' };
     });
@@ -898,7 +914,7 @@ var RUG = (function () {
   }
 
   return {
-    SIZES: SIZES, COMFORT: COMFORT, TIGHT: TIGHT,
+    SIZES: SIZES, SMALL: SMALL, COMFORT: COMFORT, TIGHT: TIGHT,
     get: get, footprint: footprint, square: square, outline: outline, roomType: roomType,
     clearanceAt: clearanceAt, bestSpot: bestSpot, status: status, check: check, gaps: gaps
   };

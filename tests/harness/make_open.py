@@ -83,6 +83,18 @@ def build(rooms, doors, windows, openings, open_sides, outdir, fixtures=(), inne
         fx.append({'kind': 'fireplace', 'x': round(bb[0] / W * 100, 2), 'y': round(bb[1] / H * 100, 2), 'w': round((bb[2] - bb[0]) / W * 100, 2), 'h': round((bb[3] - bb[1]) / H * 100, 2)})
     for kind, x0, y0, x1, y1 in fixtures:   # counters and islands: thin-line boxes, a sink on the long ones
         d.rectangle([X(x0), X(y0), X(x1), X(y1)], outline='#555555', width=2)
+        cx, cy = X((x0 + x1) / 2), X((y0 + y1) / 2)
+        if kind in ('toilet', 'tub', 'shower', 'vanity'):   # bath fixtures (Phase D): what plans draw inside the box
+            if kind == 'tub': d.rounded_rectangle([X(x0) + 5, X(y0) + 5, X(x1) - 5, X(y1) - 5], 8, outline='#777777', width=1)
+            elif kind == 'shower': d.line([X(x0), X(y0), X(x1), X(y1)], fill='#777777', width=1); d.line([X(x0), X(y1), X(x1), X(y0)], fill='#777777', width=1)
+            elif kind == 'toilet': d.ellipse([X(x0) + 4, X(y0) + 4, X(x1) - 4, X(y1) - 4], outline='#777777', width=1)
+            else:
+                n = 2 if max(x1 - x0, y1 - y0) >= 4.5 else 1
+                for k in range(n):
+                    if x1 - x0 > y1 - y0: bx = X(x0) + (k + 0.5) * (X(x1) - X(x0)) / n; d.ellipse([bx - 9, cy - 6, bx + 9, cy + 6], outline='#777777', width=1)
+                    else: by = X(y0) + (k + 0.5) * (X(y1) - X(y0)) / n; d.ellipse([cx - 6, by - 9, cx + 6, by + 9], outline='#777777', width=1)
+            fx.append({'kind': kind, 'x': round(X(x0) / W * 100, 2), 'y': round(X(y0) / H * 100, 2), 'w': round((x1 - x0) * PPF / W * 100, 2), 'h': round((y1 - y0) * PPF / H * 100, 2)})
+            continue
         if kind == 'island' or max(x1 - x0, y1 - y0) > 6:
             cx, cy = X((x0 + x1) / 2), X((y0 + y1) / 2); d.rounded_rectangle([cx - 14, cy - 9, cx + 14, cy + 9], 4, outline='#777777', width=1)
         fx.append({'kind': kind, 'x': round(X(x0) / W * 100, 2), 'y': round(X(y0) / H * 100, 2), 'w': round((x1 - x0) * PPF / W * 100, 2), 'h': round((y1 - y0) * PPF / H * 100, 2)})
@@ -172,3 +184,17 @@ def z3(office_name, outdir):
     build(rooms, doors, windows, openings, [], os.path.join(HERE, outdir))
 z3('Office', 'z3')
 z3('Guest Room', 'z3n')
+
+# Kitchen and baths (Phase D, Nov 28): a kitchen with a counter along the top wall and an island (44" aisle
+# between them, 4' clear on the island's far side), a bath with a tub, a toilet beside it and a vanity across from the door, a primary bath with
+# a double vanity, a toilet and a shower (tests/harness/kb/)
+rooms7 = [('Kitchen', 0, 0, 16, 13), ('Living Room', 0, 13, 25, 12), ('Bath', 16, 0, 9, 7), ('Hall', 16, 7, 9, 6),
+          ('Primary Bath', 25, 0, 10, 8), ('Primary Bedroom', 25, 8, 10, 17)]
+doors7 = [((0, 17), D, 3, R, ['Living Room', 'outside']), ((17, 7), R, 28 / 12, U, ['Bath', 'Hall']), ((25, 9), D, 2.75, R, ['Primary Bedroom', 'Hall']),
+          ((28, 8), R, 2.5, U, ['Primary Bath', 'Primary Bedroom'])]
+windows7 = [((4, 0), (9, 0)), ((18, 0), (20, 0)), ((35, 14), (35, 19)), ((4, 25), (10, 25)), ((0, 4), (0, 9))]
+openings7 = [((16, 8), (16, 12), ['Hall', 'Kitchen']), ((3, 13), (13, 13), ['Kitchen', 'Living Room'])]
+fixtures7 = [('counter', 2, w2, 14, w2 + 25 / 12), ('island', 5, 6, 11, 9),
+             ('tub', 16 + w2, w2, 21 + w2, w2 + 2.5), ('toilet', 25 - w2 - 28 / 12, 0.6, 25 - w2, 0.6 + 19 / 12), ('vanity', 25 - w2 - 21 / 12, 3.8, 25 - w2, 6.8),
+             ('vanity', 27.5, w2, 32.5, w2 + 22 / 12), ('toilet', 25 + w2, 4.4, 25 + w2 + 28 / 12, 4.4 + 19 / 12), ('shower', 35 - w2 - 3.25, 8 - w2 - 3, 35 - w2, 8 - w2)]
+build(rooms7, doors7, windows7, openings7, [], os.path.join(HERE, 'kb'), fixtures7)

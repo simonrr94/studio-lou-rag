@@ -101,7 +101,7 @@ with sync_playwright() as pw:
     ok('a primary bedroom gets no twin or full bed', pb and not any(('Twin' in x or 'Full' in x) for x in pb), json.dumps(pb))
     page.evaluate("() => { closeLayouts(); state.rooms[H.room('Primary Bedroom')].name = 'Bedroom'; renderAll(); }")
     page.evaluate("() => { select(H.room('Kitchen'), false); renderAll(); }")
-    ok('no link in a kitchen', page.evaluate("() => document.getElementById('layoutLink').classList.contains('hidden')"))
+    ok('a link in a kitchen (stools, runner; Phase D)', page.evaluate("() => !document.getElementById('layoutLink').classList.contains('hidden')"))
     page.evaluate("() => select(H.room('Bedroom'), false)")
     ok('link in a bedroom', not page.evaluate("() => document.getElementById('layoutLink').classList.contains('hidden')"))
     # 3. size switch: bed
