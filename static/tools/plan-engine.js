@@ -4177,7 +4177,9 @@ var LAYOUT = (function () {
     return { coffee: coffee, sides: sides, chairs: arm };
   }
   // wide: an open room, where the group may also slide up to 3 ft along its wall
-  function living(sts, poly, wide) {
+  // fire: a fireplace, the room's focal point (zones Z2): { a, b (its face), n (into the room),
+  // poly (face to hearth front) }, feet. The seating faces it, the TV goes over it.
+  function living(sts, poly, wide, fire) {
     var out = [], media = FURNITURE.get('media'), seats = [FURNITURE.get('sofa'), FURNITURE.get('loveseat')], ch = FURNITURE.get('armchair');
     // Centered on the wall (or the stretch); then up to a foot either way, for when a doorway's landing
     // takes one end (these rank below centered ones: each foot off costs as much as a tight spot)
@@ -4191,7 +4193,7 @@ var LAYOUT = (function () {
       [true, 'square', false].forEach(function (chairs) {
         if (kind === 'talk' && chairs !== true) return;
         if (bare && chairs) return;
-        var g = seatGroup(seat, c0, face, right, kind === 'tv' && chairs);
+        var g = seatGroup(seat, c0, face, right, (kind === 'tv' || kind === 'fire') && chairs);
         if (bare) g.coffee = null;
         // side tables: a matching pair, or one on either end (when the other end is the way in), or none
         [[0, 1], [0], [1], []].forEach(function (which) {
@@ -4260,6 +4262,35 @@ var LAYOUT = (function () {
         });
       });
     });
+    // fire: the seat straight across from the fireplace, facing it, the TV over the mantel (zones Z2).
+    // Viewing distance from the fireplace's face to the middle of the seat, 7' to 12'; the coffee table
+    // keeps 36" from the face (24" at least past the hearth): room to tend the fire and step across.
+    // The seat backs onto the far wall or floats with 30"+ behind it, like the TV pattern.
+    if (fire) {
+      var fm = { x: (fire.a.x + fire.b.x) / 2, y: (fire.a.y + fire.b.y) / 2 }, fn = fire.n, fface = neg(fn);
+      var fright = { x: fface.y, y: -fface.x }, fw = Math.hypot(fire.b.x - fire.a.x, fire.b.y - fire.a.y);
+      var hearth = 0;
+      (fire.poly || []).forEach(function (q) { hearth = Math.max(hearth, (q.x - fire.a.x) * fn.x + (q.y - fire.a.y) * fn.y); });
+      var cofF = FURNITURE.get('coffee'), fwall = GEO.rayPoly(add(fm, fn, 0.1), fn.x, fn.y, poly);
+      if (fwall != null) seats.forEach(function (seat) {
+        var wallV = fwall + 0.1 - seat.d / 24 - GAP, vs = [7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12];
+        if (wallV >= 6.5 && wallV <= 12) vs.push(wallV);
+        (wide ? [0, -0.5, 0.5, -1, 1, -1.5, 1.5, -2, 2] : [0, -0.5, 0.5, -1, 1]).forEach(function (k) {
+          uniq(vs).forEach(function (V) {
+            if (V > wallV + 1e-6) return;
+            if (V < wallV - 1e-6 && wallV - V < 2.5) return;
+            var c0 = add(add(fm, fn, V), fright, k);
+            var near = V - seat.d / 24 - COFFEE_GAP - cofF.d / 12;   // the coffee table's edge nearest the fire
+            if (near < Math.max(3, hearth + 2) - 1e-6) return;
+            var tv = [75, 65, 55].filter(function (sz) { return V * 12 / sz >= 1.0 && V * 12 / sz <= 1.9; })
+              .sort(function (p, q) { return Math.abs(V * 12 / p - 1.45) - Math.abs(V * 12 / q - 1.45); })[0] || null;
+            var seatPl = put(seat, c0, fface);
+            variants('fire', { L: 0, fire: true }, k, seat, seatPl, c0, fface, { x: fface.y, y: -fface.x },
+                     { dist: V, tv: tv, tvOver: !!tv, floating: V < wallV - 1e-6, hearthGap: near, fireW: fw });
+          });
+        });
+      });
+    }
     // L: a sectional in each square corner where two stretches meet
     var sec = FURNITURE.get('sectional'), arm = sec.arm / 12;
     sts.forEach(function (A) {

@@ -143,3 +143,17 @@ windows4 = [((4, 0), (9, 0)), ((13, 0), (18, 0)), ((26, 0), (31, 0)), ((0, 20), 
 openings4 = [((14, 25), (14, 27.5), ['Bedroom', 'Hall'])]
 build(rooms4, doors4, windows4, openings4, [((22, 0), (22, 16))], os.path.join(HERE, 'fire'), fires=[((0, 5), (0, 11 - 3.5), R, 'solid')] if False else [((0, 3.5), (0, 9.5), R, 'solid')])
 build(rooms4, doors4, windows4, openings4, [((22, 0), (22, 16))], os.path.join(HERE, 'fire2'), fires=[((8, 16), (14, 16), U, 'line')])
+
+# Zones (Z2): a big living room closed off from the kitchen, with a dining room of its own next door, so the
+# room has floor for a reading spot or a desk (big/); and a closed living room with a solid chimney breast
+# centered on its short wall, with wall to spare either side for bookcases (fire3/)
+rooms5 = [('Living Room', 0, 0, 24, 18), ('Dining Room', 24, 0, 12, 12), ('Kitchen', 24, 12, 12, 10), ('Bedroom', 0, 18, 14, 12), ('Bath', 14, 18, 10, 7)]
+doors5 = [((0, 13), D, 3, R, ['Living Room', 'outside']), ((16, 18), R, 2.5, D, ['Bath', 'Living Room']), ((4, 18), R, 2.75, D, ['Bedroom', 'Living Room'])]
+windows5 = [((4, 0), (10, 0)), ((14, 0), (20, 0)), ((27, 0), (33, 0)), ((0, 22), (0, 27)), ((36, 14), (36, 19))]
+openings5 = [((24, 3), (24, 7), ['Living Room', 'Dining Room']), ((28, 12), (32, 12), ['Dining Room', 'Kitchen'])]
+build(rooms5, doors5, windows5, openings5, [], os.path.join(HERE, 'big'))
+rooms6 = [('Living Room', 0, 0, 24, 17), ('Dining Room', 24, 0, 12, 12), ('Kitchen', 24, 12, 12, 10), ('Bedroom', 0, 17, 14, 12), ('Bath', 14, 17, 10, 7)]
+doors6 = [((18, 17), R, 3, U, ['Living Room', 'outside']), ((15, 17), R, 2.5, D, ['Bath', 'Living Room'])]
+windows6 = [((4, 0), (10, 0)), ((14, 0), (20, 0)), ((27, 0), (33, 0)), ((0, 21), (0, 26)), ((36, 14), (36, 19))]
+openings6 = [((24, 3), (24, 7), ['Living Room', 'Dining Room']), ((28, 12), (32, 12), ['Dining Room', 'Kitchen'])]
+build(rooms6, doors6, windows6, openings6, [], os.path.join(HERE, 'fire3'), fires=[((0, 5.5), (0, 11.5), R, 'solid')])

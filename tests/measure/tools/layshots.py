@@ -1,7 +1,7 @@
 """Pictures of the suggested layouts, room by room, for comparing two versions of the page.
 python3 layshots.py <base_url> <outdir> [plan ...]
 Plans: the five real plans (stand-in model replies; CORE=1 recommended) and 'harness' (the drawn
-10-room test plan in tests/harness) 'open' (the great room in tests/harness/open, make_open.py) and 'kd' (a kitchen/dining room, tests/harness/kd). For each room it writes <plan>-<room>.png: one panel per card
+10-room test plan in tests/harness) 'open' (the great room in tests/harness/open, make_open.py), 'fire' and 'fire2' (living rooms with a fireplace) and 'kd' (a kitchen/dining room, tests/harness/kd). For each room it writes <plan>-<room>.png: one panel per card
 (the room cropped from the plan with the card's layout previewed), with the card's label and note
 under it, plus <outdir>/cards.txt."""
 import json, os, re, sys, time, textwrap
@@ -12,11 +12,12 @@ import score
 D = score.D
 BASE, OUT = sys.argv[1].rstrip('/'), sys.argv[2]
 ONLY = sys.argv[3:]
+LIVING = os.environ.get('LIVING')   # LIVING=1: living rooms only (Living, Sitting, Great)
 os.makedirs(OUT, exist_ok=True)
 HDIR = os.path.join(os.path.dirname(D), 'harness')
 ROOMS = {'studio': ['Bedroom', 'Living Room'], 'cabin': ['Sleeping', 'Living'], 'twostory': ['Bedroom', 'Living Room'],
          'floor2': ['Primary Bedroom', 'Sitting Room'], 'bedroom': ['Bedroom'],
-         'harness': ['Living Room', 'Dining Room', 'Office', 'Bedroom'], 'open': ['Living Room'], 'kd': ['Kitchen/Dining']}
+         'harness': ['Living Room', 'Dining Room', 'Office', 'Bedroom'], 'open': ['Living Room'], 'kd': ['Kitchen/Dining'], 'fire': ['Living Room'], 'fire2': ['Living Room'], 'fire3': ['Living Room'], 'big': ['Living Room']}
 try: FONT = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 15); BOLD = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 16)
 except Exception: FONT = BOLD = ImageFont.load_default()
 
@@ -61,6 +62,7 @@ def sheet(panels, title, path):
 def shoot(page, plan, rooms, log):
     page.evaluate("() => setMode('furnish')")
     for rm in rooms:
+        if LIVING and not re.search('living|sitting|great', rm, re.I): continue
         i = page.evaluate("(n) => state.rooms.findIndex(r => r.name === n)", rm)
         if i < 0: log.write('%s %s: no such room\n' % (plan, rm)); continue
         t0 = time.time()
@@ -100,7 +102,7 @@ with sync_playwright() as pw, open(os.path.join(OUT, 'cards.txt'), 'w') as log:
         ctx = b.new_context(viewport={'width': 1360, 'height': 860}, device_scale_factor=2)
         page = ctx.new_page(); errs = []
         page.on('pageerror', lambda e: errs.append(str(e)))
-        if plan in ('harness', 'open', 'kd'):
+        if plan in ('harness', 'open', 'kd', 'fire', 'fire2', 'fire3', 'big'):
             hd = HDIR if plan == 'harness' else os.path.join(HDIR, plan)
             rj, oj = open(os.path.join(hd, 'rooms.json')).read(), open(os.path.join(hd, 'openings.json')).read()
             ctx.route('**/*', mocked(rj, oj)); img = os.path.join(hd, 'plan.png')
