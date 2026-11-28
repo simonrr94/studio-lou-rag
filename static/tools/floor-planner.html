@@ -347,6 +347,9 @@
     .l-res-top b { font-size: 28px; font-weight: 500; color: #582b36; letter-spacing: -0.03em; line-height: 1; }
     .l-res-top span { font-size: 13px; color: #6b6560; }
     .l-res p { font-size: 13px; color: #433E3C; line-height: 1.5; margin-top: 8px; }
+    .l-res p.l-verdict { position: relative; font-size: 16px; line-height: 1.4; color: #433E3C; margin-top: 6px; padding-left: 18px; }
+    .l-verdict::before { content: ''; position: absolute; left: 0; top: 8px; width: 9px; height: 9px; border-radius: 50%; background: #7f9433; }
+    .l-verdict.off::before { background: #b07d14; }
     .l-st { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 99px; padding: 3px 9px; margin-left: auto; white-space: nowrap; }
     .l-note.l-follow { color: #7a5a12; }
     .l-mapsw { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font-size: 13px; color: #433E3C; }
@@ -572,7 +575,7 @@
       lightAdd: false,  // the Add a light menu is open
       lampSel: null,    // Light: the id of the piece whose lamp is picked
       lightEditCeil: false,   // the plan's ceiling height is being changed
-      lightOpen: { details: false, settings: false },
+      lightOpen: { adv: false },
       layout: null,           // Furnish: the layouts suggested for one room { room, busy, list, why, pick } (not saved, not in Undo)
       lightMap: false,        // the Light map switch (a view setting: not saved, not in Undo)   // which folds on the room card are open
       lightCfg: { ceil: 8, rooms: {} }
@@ -2922,22 +2925,22 @@
           var over = surfaceUnder(l), word = k === 'chandelier' ? 'The chandelier' : 'A pendant', hang = l.hang || defaultHang(r, over);
           if (over) {
             var need = LIGHT.hangOver(surfaceH(over), ceil), above = hang - surfaceH(over);
-            if (above < need - surfaceH(over) - 0.5) out.push(word + ' hangs ' + above + '" above the ' + (over.role === 'island' ? 'island' : 'table') + '. Give it ' + (need - surfaceH(over)) + '" or more' + (ceil > 8 ? ' with ' + aCeil(ceil) + ' ceiling' : '') + '.');
+            if (above < need - surfaceH(over) - 0.5) out.push(word + ' hangs too low over the ' + (over.role === 'island' ? 'island' : 'table') + '. Raise it so the bottom is about ' + (need - surfaceH(over)) + ' inches above it.');
             if (k === 'chandelier' && over.role === 'dining') {
               var tw = Math.min(over.w, over.d), rg = LIGHT.chandelierRange(tw);
-              if (l.dia > rg[1] + 0.5) out.push('The chandelier is ' + l.dia + '" across, wide for a ' + tw + '" table. ' + rg[0] + '" to ' + rg[1] + '" fits.');
-              else if (l.dia < rg[0] - 0.5) out.push('The chandelier is ' + l.dia + '" across, small for a ' + tw + '" table. ' + rg[0] + '" to ' + rg[1] + '" fits.');
+              if (l.dia > rg[1] + 0.5) out.push('The chandelier is too wide for this table. Try one ' + rg[0] + ' to ' + rg[1] + ' inches across.');
+              else if (l.dia < rg[0] - 0.5) out.push('The chandelier is small for this table. Try one ' + rg[0] + ' to ' + rg[1] + ' inches across.');
             }
           } else {
             var where = k === 'pendant' ? 'A pendant isn’t over an island or a table.' : 'The chandelier isn’t over a table.';
             if (ceil <= 8) out.push(where + ' With ' + aCeil(ceil) + ' ceiling, a flush mount suits that spot better.');
-            else if (hang < 84) out.push(where + ' Leave at least 7 ft of floor clearance under it.');
+            else if (hang < 84) out.push(where + ' Raise it so there\u2019s at least 7 feet of floor under it.');
             else if (k === 'pendant') out.push(where);
           }
         }
         if (k === 'sconce' && l.piece != null && pieceById(l.piece)) {
           var mh = l.mount || LIGHT.SCONCE_H;
-          if (mh < 60 || mh > 65) out.push('A vanity sconce’s center is ' + fmtFtIn(mh / 12) + ' off the floor. 60" to 65" lights the face evenly.');
+          if (mh < 60 || mh > 65) out.push('A vanity sconce is ' + (mh < 60 ? 'too low' : 'too high') + '. Center it 60 to 65 inches off the floor to light the face evenly.');
         }
         if (k !== 'sconce' && k !== 'undercab' && k !== 'floorlamp' && LIGHT.edgeDist(lightFt(l), r.ftShape) < 0.34) out.push('A light sits on a wall. Drag it into the room.');
       });
@@ -3258,7 +3261,7 @@
       if (!mp.dark.length) return ['No dark spots: the light reaches the whole room.'];
       return mp.dark.map(function (d) {
         var w = darkWhere(r, d);
-        return (w.corner ? 'Dark corner ' : 'Dark spot ') + w.words + ', down to about ' + Math.max(1, Math.round(d.fc)) + ' foot-candles.';
+        return (w.corner ? 'Dark corner ' : 'Dark spot ') + w.words + '.';
       }).concat(['A lamp or another light there evens it out.']);
     }
     function mapSwitch() {
@@ -3511,6 +3514,41 @@
        glance. With a light picked, that light's details instead. */
     var MOOD_WORD = { cozy: 'Cozy', balanced: 'Balanced', bright: 'Bright' };
     var LSTATUS = { ok: 'On target', full: 'As much as fits', dim: 'A little dim', bright: 'Brighter than needed' };
+    var VERDICT_SHORT = { ok: 'Well lit', full: 'Well lit', dim: 'A little dim', bright: 'Brighter than needed' };
+    // "a living room", "an office", "a hall"
+    function roomWords(r) {
+      var w = { living: 'living room', bedroom: 'bedroom', dining: 'dining room', kitchen: 'kitchen', bath: 'bathroom', office: 'office',
+                laundry: 'laundry room', closet: 'closet', hall: 'hall' }[roomLType(r)] || 'room';
+      return (/^[aeiou]/.test(w) ? 'an ' : 'a ') + w;
+    }
+    // The one sentence a room's light comes down to, folding in the counters or the vanity mirror
+    function lightVerdict(r, ev) {
+      var rw = roomWords(r);   // the mood is set right above, so the sentence leaves it out
+      if (!ev.count && !ev.extraLights) return 'No lights here yet. Tap Suggest again to light the room.';
+      var t = roomLType(r), surf = t === 'office' ? 'the desk' : 'the counters';
+      var main = ev.status === 'ok' ? 'Bright enough for ' + rw
+        : ev.status === 'full' ? 'As bright as the ceiling allows for ' + rw
+        : ev.status === 'dim' ? 'A little dim for ' + rw
+        : 'Brighter than ' + rw + ' needs';
+      var extra = '';
+      if (ev.vanity) extra = ev.vanity.status === 'ok' ? ', with good light at the mirror' : ', but the mirror needs more light';
+      else if (ev.work != null) extra = ev.workStatus === 'dim' ? ', but ' + surf + ' could use more light' : ', with good light on ' + surf;
+      return main + extra + '.';
+    }
+    // What to do about it, in words: a fix for each thing that's off
+    function lightFixes(r, ev) {
+      var out = [], size = roomSize(r), t = roomLType(r);
+      var seat = state.pieces.filter(function (pc) { return pieceRoom(pc) === r && (pc.role === 'seat' || pc.role === 'bed' || pc.role === 'desk'); })[0];
+      if (ev.status === 'full') out.push('Recessed lights alone can\u2019t do more here without crowding the ceiling. ' + (seat ? 'A lamp by the ' + seat.name.toLowerCase() + ' makes up the rest.' : 'A lamp or two makes up the rest.'));
+      else if (ev.status === 'dim') out.push(seat ? 'A lamp by the ' + seat.name.toLowerCase() + ' would help, or add a light.' : 'Add a light' + (size === 'r4' ? ', or switch to 6" lights under Advanced' : '') + '.');
+      else if (ev.status === 'bright') out.push('A dimmer brings it down, or remove a light.');
+      if (ev.vanity && ev.vanity.status === 'dim') out.push('Brighter sconces beside the mirror, or one more, would fix it.');
+      if (ev.workStatus === 'dim') out.push((t === 'office' ? 'A desk lamp' : 'Brighter under-cabinet lights or pendants') + ' would fix it.');
+      if (ev.far) out.push('Some lights are far apart, so the floor between them may look patchy. Add one between them.');
+      if (t === 'bath' && !state.pieces.some(function (pc) { return pc.role === 'vanity' && pieceRoom(pc) === r; }))
+        out.push('Add a vanity in Furnish and its sconces come with it, one on each side of the mirror.');
+      return out;
+    }
     var ADD_KINDS = [['recessed', 'Recessed'], ['chandelier', 'Chandelier'], ['pendant', 'Pendant'], ['flush', 'Flush mount'], ['sconce', 'Wall sconce']];
     function fmtNum(n) { return Math.round(n).toLocaleString(); }
     function lightWord(n) { return n === 1 ? 'light' : 'lights'; }
@@ -3557,12 +3595,10 @@
           if (!rm.ftShape) return '';
           if (roomTarget(rm) == null) return roomRow(i, '', 'Outdoor');
           var ev = roomLight(rm), n = lightChecks(rm).length + (furnChanged(rm) ? 1 : 0), all = ev.count + ev.extraLights;
-          return roomRow(i, n || (ev.status !== 'ok' && ev.status !== 'full') || (ev.vanity && ev.vanity.status !== 'ok') ? 'dim' : 'ok', n ? n + ' to check' : all + ' ' + lightWord(all) + ', ' + LSTATUS[ev.status].toLowerCase());
-        }).join('') + '</div>' +
-        '<p class="l-note" style="margin-top:12px">Pick a room to see its lights and change its mood.</p>' +
-        '<p class="l-note">For bulbs, warm white (2700K to 3000K' + info('kelvin') + ') suits most rooms, and dimmers on the ceiling lights let each room go from bright to cozy.</p>';
+          var off = (ev.status !== 'ok' && ev.status !== 'full') || (ev.vanity && ev.vanity.status !== 'ok') || ev.workStatus === 'dim';
+          return roomRow(i, n || off ? 'dim' : 'ok', n ? n + ' to check' : !all ? 'No lights' : VERDICT_SHORT[off ? (ev.status === 'ok' || ev.status === 'full' ? 'dim' : ev.status) : ev.status]);
+        }).join('') + '</div>';
       }
-      html += glossary();
       el.innerHTML = html;
     }
     // Plain definitions of the technical terms only, opened from the (i) buttons or at the bottom of the panel
@@ -3572,16 +3608,9 @@
       ['kelvin', 'Color temperature (K)', 'How warm or cool a bulb’s light looks, in kelvins (K). 2700K is warm and cozy like a classic bulb, 3000K is a soft warm white, and 4000K and up looks cool and bright. Warm white (2700K to 3000K) suits most rooms in a home.'],
       ['beam', 'Beam spread', 'How wide the cone of light from a fixture is. A wide beam (about 90 degrees) lights a whole area; a narrow one (about 40 degrees) puts light on one spot, like art or a counter.']
     ];
-    function info(term) {
-      var g = GLOSS.filter(function (x) { return x[0] === term; })[0];
-      if (!g) return '';   // only the technical terms get an (i)
-      return '<button type="button" class="l-i" data-term="' + term + '" aria-label="What ' + (g ? g[1].toLowerCase() : term) + ' means">i</button>';
-    }
-    function glossary() {
-      return '<details class="l-gloss" id="lGloss"><summary>Lighting terms</summary><dl>' + GLOSS.map(function (g) {
-        return '<dt id="lg-' + g[0] + '">' + g[1] + '</dt><dd>' + g[2] + '</dd>';
-      }).join('') + '</dl></details>';
-    }
+    // Phase C: no (i) buttons and no glossary on screen; the words carry the meaning
+    function info() { return ''; }
+    function glossary() { return ''; }
     function showTerm(term) {
       var d = $('lGloss');
       if (!d) { $('lightBody').insertAdjacentHTML('beforeend', glossary()); d = $('lGloss'); }
@@ -3605,55 +3634,25 @@
       }).join('') + '</select>';
       if (!LIGHT.typeKnown(r.name)) html += '<p class="l-quiet">What\u2019s this room used for? ' + typeSel + '</p>';
       if (roomTarget(r) == null) return html + '<p class="pane-sub">Outdoor spaces aren\u2019t planned here yet.</p>';
-      var fcs = LIGHT.type(t).fc, mood = roomMood(r), size = roomSize(r);
-      html += '<span class="l-label">Mood' + info('mood') + '</span>' + seg('mood', LIGHT.MOODS.map(function (m) { return { v: m.id, t: m.label }; }), mood);
-      var ev = roomLight(r), tgt = ev.target;
-      // the one number, and its status
-      html += '<div class="l-res"><div class="l-res-top"><b>' + Math.round(ev.fc) + '</b><span>foot-candles' + info('fc') + '</span>' +
-        '<span class="l-st ' + ev.status + '">' + LSTATUS[ev.status] + '</span></div>';
-      if (ev.vanity) html += '<p class="l-goal">' + (ev.vanity.n > 1 ? 'Vanity lights' : 'Vanity light') + info('sconce') + ': ' + fmtNum(ev.vanity.lm) + ' of ' + fmtNum(ev.vanity.need) + ' lumens <span class="l-st ' + ev.vanity.status + '">' + LSTATUS[ev.vanity.status] + '</span></p>';
-      else if (ev.task && ev.goal > tgt) {
-        if (ev.work != null) html += '<p class="l-goal">Work surfaces' + info('work') + ': about <b>' + Math.round(ev.work) + '</b> of ' + ev.goal + ' <span class="l-st ' + ev.workStatus + '">' + LSTATUS[ev.workStatus] + '</span></p>';
-        else html += '<p class="l-goal">Task lights' + info('task') + ' ' + ev.task + ' bring the work surfaces up to ' + ev.goal + '.</p>';
-      }
-      html += '</div>';
-      var warns = lightChecks(r);
+      var mood = roomMood(r), size = roomSize(r);
+      html += '<span class="l-label">Mood</span>' + seg('mood', LIGHT.MOODS.map(function (m) { return { v: m.id, t: m.label }; }), mood);
+      var ev = roomLight(r), off = (ev.status === 'dim' || ev.status === 'bright') || (ev.vanity && ev.vanity.status !== 'ok') || ev.workStatus === 'dim';
+      // the verdict, in one sentence, and what to do when something's off
+      html += '<div class="l-res"><p class="l-verdict ' + (off ? 'off' : 'ok') + '">' + esc(lightVerdict(r, ev)) + '</p></div>';
+      var fixes = lightFixes(r, ev).concat(lightChecks(r));
       if (furnChanged(r)) html += '<p class="l-note l-follow">' + furnChangeLine(r) + '</p>';
+      html += fixes.map(function (n) { return '<p class="l-note l-warn">' + n + '</p>'; }).join('');
       if (state.lightMap) html += '<div class="l-dark">' + darkLines(r).map(function (n) { return '<p class="l-note">' + n + '</p>'; }).join('') + '</div>';
-      html += warns.map(function (n) { return '<p class="l-note l-warn">' + n + '</p>'; }).join('');
       html += lamplessChairs(r).map(function (o) {
         return '<p class="l-note l-sug">The ' + esc(nameOf(state.pieces.indexOf(o.pc)).toLowerCase()) + ' has no lamp near it for reading. <button class="link-btn" data-lact="addlamp" data-pid="' + o.pc.id + '">Add a floor lamp</button></p>';
       }).join('');
+      if (!c.aimed) html += '<p class="l-note">Add furniture in Furnish, then tap Suggest again to aim the lights where you\u2019ll use the room.</p>';
       html += '<div class="l-acts"><button class="link-btn" data-lact="addmenu">+ Add a light</button><button class="link-btn" data-lact="redo">Suggest again</button></div>';
       if (state.lightAdd) html += '<div class="l-add">' + ADD_KINDS.map(function (k) { return '<button class="btn-secondary btn-sm" data-ladd="' + k[0] + '">' + k[1] + '</button>'; }).join('') + '</div>';
-      // Details: the numbers behind the result, and the notes
-      var others = {};
-      ev.others.forEach(function (q) { var k = kindOf(q); others[k] = (others[k] || 0) + 1; });
-      var otherWords = Object.keys(others).map(function (k) {
-        var n = others[k], name = LIGHT.KINDS[k].name.toLowerCase();
-        return n + ' ' + (n === 1 ? name : name.replace(/light$/, 'lights').replace(/(lier|ant|mount|sconce|lamp)$/, '$1s'));
-      });
-      var notes = [], mine = hasOwnLights(r);
-      if (ev.status === 'full') notes.push('Recessed lights alone can’t reach ' + tgt + ' here without crowding the ceiling' + (size === 'r4' ? ' (6" lights get closer)' : '') + '. Lamps or task lights make up the rest.');
-      else if (ev.status === 'dim') notes.push('Add a light' + (size === 'r4' ? ', or switch to 6" lights in More settings,' : '') + ' to reach the target.');
-      if (ev.status === 'bright') notes.push('Brighter than the target. A dimmer brings it down, or remove a light.');
-      if (ev.vanity && ev.vanity.status === 'dim') notes.push('The vanity needs ' + fmtNum(ev.vanity.need) + ' lumens or more from the lights beside its mirror' + (ev.vanity.need > 2000 ? ' (a double vanity)' : '') + '. Brighter sconces, or one more, close the gap.');
-      if (ev.workStatus === 'dim') notes.push('The work surfaces are a little dim. Brighter task lights, or more of them, close the gap.');
-      if (ev.far) notes.push(ev.far === 1 ? 'One light is more than ' + fmtFtIn(roomCeil(r)) + ' from its nearest neighbor, so the floor between them may look patchy.' : ev.far + ' lights are more than ' + fmtFtIn(roomCeil(r)) + ' (the ceiling height) from their nearest neighbors, so the light may look patchy.');
-      if (t === 'bath' && !state.pieces.some(function (pc) { return pc.role === 'vanity' && pieceRoom(pc) === r; }))
-        notes.push('Vanity lights at the mirror do the bright work in a bathroom. Add a vanity in Furnish (under Bath) and its sconces come with it, one on each side of the mirror.');
-      if (!c.aimed) notes.push('Add furniture in Furnish to aim the lights at where you’ll use the room, then tap <b>Suggest again</b>.');
-      if (boxMeasured(r) && r.source === 'estimated') notes.push('This room’s size is estimated, so check its outline in Measure.');
-      var details = '<p>' + (ev.task ? 'General light' + info('general') + ' from the recessed lights, target ' + tgt + '.' : 'From the recessed lights, target ' + tgt + ' for ' + MOOD_WORD[mood].toLowerCase() + ' (' + fcs.join(', ') + ' for cozy, balanced, bright).') + ' ' +
-          (ev.count ? ev.count + ' recessed ' + lightWord(ev.count) + ', ' + fmtNum(ev.lm) + ' lumens' + info('lumens') + ' in ' + fmtNum(roomAreaFt(r)) + ' sq ft.' : 'No recessed lights.') + '</p>' +
-        (otherWords.length || ev.lamps ? '<p>With ' + otherWords.concat(ev.lamps ? [(ev.lamps === 1 ? 'the lamp' : 'the ' + ev.lamps + ' lamps') + ' on your furniture'] : []).join(', ').replace(/, ([^,]*)$/, ' and $1') +
-          ' on too: about ' + Math.round(ev.fcAll) + ' foot-candles.</p>' : '') +
-        notes.map(function (n) { return '<p class="l-note">' + n + '</p>'; }).join('');
-      html += '<details class="l-more" data-open="details"' + (state.lightOpen.details ? ' open' : '') + '><summary>Details' + (notes.length ? ' <span class="l-count">' + notes.length + '</span>' : '') + '</summary><div class="l-more-body">' + details + '</div></details>';
-      // More settings: the light size and this room's own ceiling
-      html += '<details class="l-more" data-open="settings"' + (state.lightOpen.settings ? ' open' : '') + '><summary>More settings</summary><div class="l-more-body">' +
-        '<span class="l-label">Recessed lights' + info('recessed') + '</span>' + seg('size', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], size) +
+      // Advanced: this room's own ceiling, and the size of its recessed lights
+      html += '<details class="l-more" data-open="adv"' + (state.lightOpen.adv ? ' open' : '') + '><summary>Advanced</summary><div class="l-more-body">' +
         '<label class="field"><span>Ceiling height in this room</span><input data-lf="ceil" value="' + (c.ceil ? esc(fmtFtIn(c.ceil)) : '') + '" placeholder="' + esc(fmtFtIn(state.lightCfg.ceil || 8)) + ', like the rest" autocomplete="off"></label>' +
+        '<span class="l-label">Recessed lights</span>' + seg('size', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], size) +
         '</div></details>';
       return html;
     }
@@ -3663,16 +3662,21 @@
         '<p class="detail-name" style="border:none;padding-left:0">' + (floor ? 'Floor lamp' : 'Table lamp') + '</p>' +
         '<p class="pane-sub">' + (floor ? '' : 'On the ' + esc(nameOf(state.pieces.indexOf(pc)).toLowerCase()) + (rm ? ' in the ' + esc(rm.name) : '') + '. ') +
           'Lamps are furniture, so move ' + (floor ? 'it' : 'it with its ' + esc(nameOf(state.pieces.indexOf(pc)).toLowerCase())) + ' in Furnish.</p>' +
-        '<label class="field"><span>Brightness, lumens</span><input data-lf="lamplm" value="' + lampLmOf(pc) + '" inputmode="numeric" autocomplete="off"></label>' +
-        '<p class="l-note">A standard lamp bulb is about 800 lumens' + info('lumens') + '. Use the bulb you have, or add up the bulbs in a lamp with more than one.</p>' + glossary();
+        advanced('<label class="field"><span>Brightness, lumens</span><input data-lf="lamplm" value="' + lampLmOf(pc) + '" inputmode="numeric" autocomplete="off"></label>' +
+          '<p class="l-note">A standard lamp bulb is about 800 lumens. Use the bulb you have, or add up the bulbs in a lamp with more than one.</p>');
+    }
+    // Settings most people never need, folded away (stays open once opened)
+    function advanced(body) {
+      return '<details class="l-more" data-open="adv"' + (state.lightOpen.adv ? ' open' : '') + '><summary>Advanced</summary><div class="l-more-body">' + body + '</div></details>';
     }
     function lightDetail(l) {
       var r = roomById(l.room), k = kindOf(l), name;
-      if (k === 'recessed') { var fx = LIGHT.FIXTURES[l.type] || LIGHT.FIXTURES.r4; name = fx.name.charAt(0).toUpperCase() + fx.name.slice(1); }
+      if (k === 'recessed') name = 'Recessed light';   // its size is under Advanced
       else name = LIGHT.KINDS[k].name;
       var html = '<button class="link-btn detail-back" data-lact="back">' + backToRoom(r) + '</button>' +
         '<p class="detail-name" style="border:none;padding-left:0">' + name + (k !== 'recessed' && GLOSS.some(function (g) { return g[0] === k; }) ? info(k) : '') + '</p>' +
         '<p class="pane-sub">' + (r ? 'In the ' + esc(r.name) + '.' : 'Not in a room.') + (k === 'undercab' ? ' It runs along its counter and moves with it.' : k === 'sconce' ? ' Drag it along the walls to move it.' : ' Drag it on the plan to move it.') + '</p>';
+      var head = html; html = '';
       if (k === 'recessed') {
         html += '<span class="l-label">Size</span>' + seg('lsize', [{ v: 'r4', t: '4"' }, { v: 'r6', t: '6"' }], l.type) +
           '<label class="field"><span>Brightness, lumens</span><input data-lf="lm" value="' + Math.round(l.lm) + '" inputmode="numeric" autocomplete="off"></label>' +
@@ -3699,10 +3703,9 @@
             '<p class="l-note">' + (atVan ? 'Beside a vanity mirror, 60" to 65" lights the face evenly.' : 'Beside a mirror, 60" to 65". Elsewhere, about 66" or a little above eye level.') + '</p>';
         }
         html += '<label class="field"><span>Brightness, lumens</span><input data-lf="lm" value="' + Math.round(l.lm) + '" inputmode="numeric" autocomplete="off"></label>' +
-          '<p class="l-note">Use the lumens' + info('lumens') + ' on the fixture you’re buying' + (k === 'chandelier' ? ', or add up its bulbs' : '') + (k === 'sconce' && l.piece != null ? '. A pair at a vanity should give 1,600 or more together' : '') + '.</p>';
+          '<p class="l-note">Use the lumens on the fixture you’re buying' + (k === 'chandelier' ? ', or add up its bulbs' : '') + (k === 'sconce' && l.piece != null ? '. A pair at a vanity should give 1,600 or more together' : '') + '.</p>';
       }
-      html += glossary();
-      return html;
+      return head + advanced(html);
     }
     // A room setting changed: its own lights follow; the person's own lights stay where they are
     function lightSetting(r, key, v) {
