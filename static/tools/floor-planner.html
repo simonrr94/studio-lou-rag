@@ -138,7 +138,6 @@
     .seg-row button.on { background: #582b36; color: #FAF9F6; }
     .brush-field input { width: 100%; accent-color: #582b36; }
     .member-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-    .group-hint { margin-top: 12px; }
     .member-rug { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 50px; background: #f5f0e8; color: #6b6560; font-size: 13px; font-weight: 600; }
     .link-btn { border: none; background: none; padding: 0; color: #582b36; font: inherit; text-decoration: underline; cursor: pointer; }
     .tool-msg {
@@ -200,13 +199,6 @@
     .found-note .btn-sm { margin-top: 8px; }
     .found-note .note-x { position: absolute; top: 6px; right: 8px; border: none; background: none; font-size: 18px; line-height: 1; color: #6b6560; cursor: pointer; padding: 2px 4px; }
     .found-note .note-x:hover { color: #433E3C; }
-
-    /* Measure: stats and room cards */
-    .stats { display: flex; gap: 22px; margin-bottom: 18px; }
-    .stat b { display: block; font-size: 28px; font-weight: 500; color: #582b36; letter-spacing: -0.04em; line-height: 1; margin-bottom: 5px; }
-    .stat span { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #6b6560; }
-    .rooms-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .rooms-head .eyebrow { margin: 0; }
     .m-sum { font-size: 14px; color: #6b6560; margin: 0 0 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
     .m-sum b { color: #582b36; font-weight: 600; }
     .m-sum .badge { margin-left: 6px; }
@@ -266,11 +258,9 @@
     .own-card { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #582b36; }
     .own-card span { font-size: 22px; line-height: 1; margin-bottom: 4px; }
     .erase-link { margin-top: 16px; font-size: 12.5px; }
-    .key-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; font-size: 12px; color: #6b6560; margin-top: 12px; }
     .kdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 6px; }
     .kdot:first-child { margin-left: 0; }
     .kdot.ok { background: #7f9433; } .kdot.tight { background: #b07d14; } .kdot.close { background: #582b36; }
-    .show-more { margin-top: 10px; font-size: 13px; }
     .all-good { font-size: 13.5px; color: #5f7228; background: #eef3dc; border-radius: 10px; padding: 10px 12px; }
     .m-doors { margin-top: 18px; }
     .piece-card {
@@ -297,7 +287,6 @@
     .detail-name:focus { outline: none; border-color: #582b36; background: #ffffff; }
     .detail-meta { font-size: 13px; color: #6b6560; margin-bottom: 14px; line-height: 1.5; }
     .warn-text { color: #582b36; font-weight: 600; }
-    .section-label { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #6b6560; margin: 16px 0 8px; }
 
     /* Rugs */
     .rug-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -306,7 +295,6 @@
     .rug-card.on { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
     .rug-card .rug-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
     .rug-card b { font-size: 14px; font-weight: 600; color: #582b36; }
-    .rug-card .rug-detail { display: block; font-size: 12px; line-height: 1.4; color: #6b6560; }
     .lay-link { margin: 0 0 12px; font-size: 13px; }
     .lay-title { font-size: 16px; font-weight: 600; color: #433E3C; margin: 0 0 4px; }
     .lay-list { display: flex; flex-direction: column; gap: 8px; }
@@ -319,13 +307,8 @@
     .lay-use { margin-top: 12px; }
     .lay-use .l-note { margin: 8px 0 0; }
     .rug-card .best { display: inline-block; margin-top: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4f5c1d; }
-    .rug-placed { margin-top: 12px; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 12px; padding: 10px 12px; }
-    .rug-placed p { font-size: 13px; line-height: 1.5; margin-bottom: 8px; }
     .rug-empty { font-size: 13px; color: #6b6560; line-height: 1.5; }
     .rug-empty.small { margin-bottom: 10px; }
-    .chip { font-size: 12px; font-weight: 600; color: #433E3C; background: #ffffff; border: 1.5px solid #d0c9bc; border-radius: 50px; padding: 5px 12px; cursor: pointer; }
-    .chip:hover { border-color: #582b36; }
-    .chip.on { border-color: #A6BE47; box-shadow: 0 0 0 2px #A6BE47; }
 
     /* Checks */
     .say-list { display: flex; flex-direction: column; gap: 8px; }
@@ -343,14 +326,10 @@
     .l-label + .seg-row { margin-top: 4px; }
     .seg-row button small { font-weight: 500; opacity: 0.75; margin-left: 3px; }
     .l-res { padding: 2px 0 14px; margin: 4px 0 12px; border-bottom: 1px solid #e6dfd3; }
-    .l-res-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-    .l-res-top b { font-size: 28px; font-weight: 500; color: #582b36; letter-spacing: -0.03em; line-height: 1; }
-    .l-res-top span { font-size: 13px; color: #6b6560; }
     .l-res p { font-size: 13px; color: #433E3C; line-height: 1.5; margin-top: 8px; }
     .l-res p.l-verdict { position: relative; font-size: 16px; line-height: 1.4; color: #433E3C; margin-top: 6px; padding-left: 18px; }
     .l-verdict::before { content: ''; position: absolute; left: 0; top: 8px; width: 9px; height: 9px; border-radius: 50%; background: #7f9433; }
     .l-verdict.off::before { background: #b07d14; }
-    .l-st { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 99px; padding: 3px 9px; margin-left: auto; white-space: nowrap; }
     .l-note.l-follow { color: #7a5a12; }
     .l-mapsw { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font-size: 13px; color: #433E3C; }
     .l-mapsw label { cursor: pointer; }
@@ -361,9 +340,6 @@
     .l-mapkey i { display: inline-block; width: 70px; height: 9px; border-radius: 50px; background: linear-gradient(90deg, #8a7d72, #c4b6a2, #efe2c3, #fbf5e6); border: 1px solid #e4ddd0; }
     .l-mapkey b { margin-left: 10px; width: 15px; height: 15px; border-radius: 50%; border: 2px solid #b07d14; color: #b07d14; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
     .l-dark { border-top: 1px solid #ece6dc; padding-top: 10px; margin-top: 4px; }
-    .l-st.ok, .l-st.full { background: #eef2dc; color: #4f5c1d; }
-    .l-st.dim { background: #f7ecd2; color: #7a5a12; }
-    .l-st.bright { background: #f6e6e9; color: #582b36; }
     .l-note { font-size: 12.5px; color: #6b6560; line-height: 1.5; margin: 0 0 10px; }
     .l-list { background: #ffffff; border: 1px solid #e3dccf; border-radius: 12px; overflow: hidden; margin-top: 6px; }
     .l-row { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: transparent; padding: 9px 12px; text-align: left; font: 500 13px 'DM Sans', sans-serif; color: #433E3C; cursor: pointer; }
@@ -374,19 +350,6 @@
     .l-row small { color: #6b6560; font-size: 12px; white-space: nowrap; }
     .l-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #d0c9bc; }
     .l-dot.ok { background: #7f9433; } .l-dot.dim { background: #b07d14; } .l-dot.bright { background: #582b36; }
-    .l-plan { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
-    .l-plan .field { flex: 1; margin: 0; }
-    .l-i { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1.3px solid #b5a999; background: #ffffff; color: #6b6560; font: italic 600 10px Georgia, serif; cursor: pointer; padding: 0; margin-left: 5px; vertical-align: 1px; text-transform: none; letter-spacing: 0; }
-    .l-i:hover { border-color: #582b36; color: #582b36; }
-    .l-gloss { margin-top: 16px; border: 1.5px solid #d0c9bc; border-radius: 12px; background: #ffffff; }
-    .l-gloss summary { cursor: pointer; padding: 10px 14px; font: 600 13px 'DM Sans', sans-serif; color: #433E3C; list-style: none; }
-    .l-gloss summary::-webkit-details-marker { display: none; }
-    .l-gloss summary::after { content: '+'; float: right; color: #6b6560; font-weight: 500; }
-    .l-gloss[open] summary::after { content: '\2212'; }
-    .l-gloss dl { margin: 0; padding: 0 14px 12px; }
-    .l-gloss dt { font: 600 13px 'DM Sans', sans-serif; color: #582b36; margin-top: 10px; border-radius: 6px; transition: background 0.6s; }
-    .l-gloss dd { margin: 2px 0 0; font-size: 12.5px; color: #433E3C; line-height: 1.5; }
-    .l-gloss dt.flash { background: #eef3dc; }
     .l-quiet { font-size: 13.5px; color: #6b6560; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
     .l-quiet select { font: 500 14px 'DM Sans', sans-serif; border: 1.5px solid #d0c9bc; border-radius: 10px; padding: 6px 8px; background: #ffffff; color: #433E3C; }
     .l-ceil { margin-bottom: 12px; }
@@ -402,12 +365,9 @@
     .l-more[open] summary::after { content: '\2212'; }
     .l-more-body { padding: 6px 0 2px; font-size: 13px; color: #433E3C; line-height: 1.5; }
     .l-more-body p { margin: 0 0 8px; }
-    .l-count { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 99px; background: #f3e6e9; color: #582b36; font-size: 11px; line-height: 18px; text-align: center; }
     .l-sug { background: #f5f0e8; border-radius: 8px; padding: 7px 10px; }
     .l-add { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .l-warn { color: #582b36; background: #f3e6e9; border-radius: 8px; padding: 7px 10px; }
-    .l-goal .l-st { margin-left: 6px; }
-    .l-goal { font-size: 13px; color: #433E3C; line-height: 1.5; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d0c9bc; }
 
     /* ── PHONE AND NARROW SCREENS: plan on top, panel below, page scrolls ── */
     /* Saved plans */
@@ -503,7 +463,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="/static/tools/plan-engine.js?v=49"></script>
+  <script src="/static/tools/plan-engine.js?v=50"></script>
   <script>
     var API_URL = 'https://studio-lou-rag.onrender.com/api/vision';
     var MAX_SEND = 1600;      // longest side of the image sent to the model
@@ -1550,11 +1510,6 @@
       if (PASS) PASS.conf = out;
       return out;
     }
-    function conflictText(c, who) {
-      var other = who === c.a ? c.b : c.a;
-      if (c.type === 'wall') return 'runs ' + c.inch + '" into a wall';
-      return 'overlaps the ' + nameOf(other).toLowerCase() + ' by ' + c.inch + '"';
-    }
     // Every spacing line on the plan (see SPACE in plan-engine.js)
     // Lines that end on a room outline count only where the plan has a real wall.
     // Once doors are marked, walkways are judged along the real routes instead,
@@ -2003,29 +1958,6 @@
     }
     // Every side of one piece, plus the room checks other pieces make against it
     var SIDE_NAME = { front: 'Front', back: 'Back', left: 'Left side', right: 'Right side' };
-    function pieceChecks(k) {
-      var rows = [], fine = [], ORDER = { front: 0, back: 1, left: 2, right: 3 }, all = spacing(), sqs = islandSqueeze(all), sq = sqs[k];
-      // the counter facing a squeezed island shows the same sentence
-      if (!sq) Object.keys(sqs).forEach(function (i) { var a = sqs[i].aisle; if (a.piece === k || a.hit.i === k) sq = sqs[i]; });
-      if (sq) rows.push('<div class="space-row"><span class="space-label">' + esc(sq.label) + '</span><span class="space-val">' + esc(sq.value) +
-        ' <span class="badge ' + BADGE[sq.status] + '">Too narrow</span></span></div>');
-      all.filter(function (l) { return !(sq && (l === sq.aisle || l === sq.back || (l.rule === 'aisle' && (l.piece === k || l.hit.i === k)))); }).filter(function (l) { return (l.piece === k && (l.show !== false || l.against)) || (l.hit.type === 'piece' && l.hit.i === k && l.rule !== 'walk'); })
-        .sort(function (p, q) { return (p.piece === k ? 0 : 1) - (q.piece === k ? 0 : 1) || ORDER[p.side] - ORDER[q.side]; })
-        .forEach(function (l) {
-          var other = l.hit.type === 'piece' ? (l.piece === k ? l.hit.i : l.piece) : -1, on = other > -1 ? 'the ' + nameOf(other).toLowerCase() : 'the wall';
-          var label = l.rule === 'talk' ? 'Conversation with ' + on
-            : l.rule === 'tv' ? 'TV to ' + on
-            : l.piece === k ? SIDE_NAME[l.side] + ' to ' + on
-            : 'From the ' + nameOf(l.piece).toLowerCase();
-          var wallSet = l.against && l.rule === 'walk';   // a piece set against a plain wall (a bed's side keeps its own words)
-          var val = l.rule === 'talk' || l.rule === 'tv' ? fmtFtIn(l.gap) : l.against && !wallSet ? 'against the wall' : inchText(l.inch);
-          // A gap to a plain wall that isn't a walkway is only measured (see SPACE.check and spacing())
-          var free = l.free;
-          (l.status === 'ok' || l.against || free ? fine : rows).push('<div class="space-row"><span class="space-label">' + esc(label) + '</span><span class="space-val">' + val +
-            (free ? '' : ' <span class="badge ' + BADGE[l.status] + '">' + (wallSet ? 'Against the wall' : l.against ? 'On purpose' : spaceWord(l.rule, l.status, l.inch, l.near)) + '</span>') + '</span></div>');
-        });
-      return { bad: rows.join(''), fine: fine.join('') };
-    }
     // Details of the selected piece, in the panel
     function renderPieceBar() {
       var bar = $('pieceBar'), pc = state.pieces[state.pieceSel], r = state.rooms[state.selected];
@@ -3599,7 +3531,6 @@
     }
     var ADD_KINDS = [['recessed', 'Recessed'], ['chandelier', 'Chandelier'], ['pendant', 'Pendant'], ['flush', 'Flush mount'], ['sconce', 'Wall sconce']];
     function fmtNum(n) { return Math.round(n).toLocaleString(); }
-    function lightWord(n) { return n === 1 ? 'light' : 'lights'; }
     /* Light has two levels: every room at a glance (no room picked), then one room's card. The ceiling
        height is asked once, the first time Light opens, and then sits on one quiet line. */
     function lightAsked() {
@@ -4770,11 +4701,6 @@
       if (rugFit(c) === 'big') return 'Only ' + fmtGap(c) + ' of floor at the closest wall';
       return 'Leaves ' + fmtGap(c) + ' at the closest wall';
     }
-    // Card text for one size: the floor it leaves at the walls
-    function sizeDetail(it) {
-      var sp = it.spot;
-      return sp ? rugDetail(sp.clearance) : 'Larger than the room';
-    }
 
     function renderFurnish() {
       if (!$('furnishPanel')) return;
@@ -4792,7 +4718,7 @@
         body.innerHTML = '<p class="rug-empty">Pick a room on the plan or from the list.</p>';
         return;
       }
-      var res = rugCheckFor(r), type = RUG.roomType(r.name);
+      var res = rugCheckFor(r);
       var bestLabel = res && res.best ? RUG.get(res.best).label : null;
       $('rugSub').innerHTML = (bestLabel ? 'Best fit: <b>' + bestLabel + '</b>. ' : 'None of the standard sizes leave a foot of floor at the walls here. ') + 'Tap a size to lay it in the room.';
       var cards = res.list.map(function (it) {
@@ -5313,48 +5239,6 @@
       if (bed && !bedApproach(r, bed, c.places.slice(1).concat(adds).map(polyOf))) return null;
       return pcs;
     }
-    function readingNook(r, c, sts, bed, away) {
-      var ch = FURNITURE.get('armchair'), sd = FURNITURE.get('side'), sdR = FURNITURE.get('sideR'), wIn = ch.w + 3 + sd.w;
-      var mid = c.places.reduce(function (s, p) { return { x: s.x + p.cx / c.places.length, y: s.y + p.cy / c.places.length }; }, { x: 0, y: 0 });
-      var wins = windowSpots(), tries = [];
-      function nearWin(p) { return wins.some(function (w) { return Math.hypot(w.x - p.x, w.y - p.y) < 4; }); }
-      function farFrom(p) {
-        if (away && away.some(function (a) { return Math.hypot(p.x - a.x, p.y - a.y) < 6; })) return -1;
-        return Math.hypot(p.x - mid.x, p.y - mid.y);
-      }
-      // In a bedroom the chair never extends the bed's row (not on the headboard wall) and keeps 12"+
-      // from the bed and nightstands; in a corner it stands alone, turned 45 degrees (Lauren, Nov 26)
-      var row = bed ? c.places.filter(function (p) { return p.spec.role === 'bed' || p.spec.role === 'nightstand'; }).map(polyOf) : [];
-      function roomy(places) { return !row.length || places.every(function (p) { var pl = polyOf(p); return row.every(function (q) { return GEO.polyDist(pl, q) >= 1; }); }); }
-      // in a room corner: the chair turned 45 degrees out of the corner, a round side table beside it
-      roomCorners(sts).forEach(function (k) {
-        if (bed && k.st.edge === bed.edge) return;
-        var off = 2.2, cc = { x: k.p.x + (k.st.n.x + k.inw.x) * off, y: k.p.y + (k.st.n.y + k.inw.y) * off };
-        var f = { x: (k.st.n.x + k.inw.x) / Math.SQRT2, y: (k.st.n.y + k.inw.y) / Math.SQRT2 };
-        var chairP = { spec: ch, cx: cc.x, cy: cc.y, rot: LAYOUT.rotFacing(f) }, far = farFrom(cc);
-        if (bed) {
-          if (roomy([chairP])) tries.push({ places: [chairP], score: far < 0 ? -1 : far + 5 + (nearWin(cc) ? 2 : 0), at: cc, corner: true });
-          return;
-        }
-        var tt = k.end + k.dir * (off * 2 + 2 / 12 + sdR.w / 24);
-        if (!LAYOUT.fits(k.st, tt, sdR.w)) return;
-        tries.push({ places: [chairP, LAYOUT.against(sdR, k.st, tt)], score: far < 0 ? -1 : far + 3 + (nearWin(cc) ? 2 : 0), at: cc });
-      });
-      // along a wall, the chair square to it with a side table beside it
-      LAYOUT.wallSpots(sts, wIn).forEach(function (sp) {
-        var st = sts[sp.st], w = { x: st.a.x + st.u.x * sp.t, y: st.a.y + st.u.y * sp.t }, h = wIn / 24;
-        if (bed && st.edge === bed.edge) return;
-        var corner = Math.min(sp.t - h - st.t0, st.t1 - sp.t - h) < 0.6 ? 2 : 0, far = farFrom(w);
-        for (var sg = -1; sg <= 1; sg += 2) {
-          var chair = LAYOUT.against(ch, st, sp.t - sg * (sd.w + 3) / 24), table = LAYOUT.against(sd, st, sp.t + sg * (ch.w + 3) / 24);
-          if (!roomy([chair, table])) continue;
-          tries.push({ places: [chair, table], score: far < 0 ? -1 : far + corner + (nearWin(w) ? 2 : 0), at: { x: chair.cx, y: chair.cy } });
-        }
-      });
-      tries = tries.filter(function (o) { return o.score > 4; }).sort(function (a, b) { return b.score - a.score; }).slice(0, 48);
-      for (var i = 0; i < tries.length; i++) if (moreFits(r, c, tries[i].places, bed)) return tries[i];
-      return null;
-    }
     // The room's corners where two walls meet with no doorway: { st, end (along st), dir (into the
     // stretch), p (the corner), inw (along st, away from the corner) }
     function roomCorners(sts) {
@@ -5614,79 +5498,6 @@
        the main seating and within conversation distance of it (4'6" to 9'6" from the middle of the group),
        its back to a wall, never behind the seat or between the seat and the TV, never in a sliver. A
        window or the fireplace nearby makes it better. In a big room it may be a pair of chairs. */
-    function readingSpots(r, cc, rd, fire, pairs, apart) {
-      var clearOf = function (places) { return !apart || places.every(function (p) { var pl = polyOf(p); return apart.every(function (h) { return GEO.polyDist(pl, h) >= 2.5; }); }); };
-      if (!rd || !cc.seat) return [];
-      var ch = FURNITURE.get('armchair'), sdR = FURNITURE.get('sideR'), poly = r.ftShape, seat = cc.seat;
-      var sf = GEO.turn({ x: 0, y: 1 }, seat.rot), gc = cc.coffee ? { x: cc.coffee.cx, y: cc.coffee.cy } : { x: seat.cx + sf.x * (seat.spec.d / 24 + 2), y: seat.cy + sf.y * (seat.spec.d / 24 + 2) };
-      var media = cc.media, wins = windowSpots(), singles = [], pairList = [];
-      var seatsG = cc.places.filter(function (q) { return q.spec.role === 'seat'; });
-      LAY.poly = poly;
-      var pockets = rd.pockets.filter(function (pk) { return pk.kind !== 'kitchen' || !openPlan(r); });
-      [0].forEach(function () {
-        // the chair's spot: any free floor (not the path, not another zone) with room for the chair;
-        // in a pocket is better
-        for (var k = 0; k < rd.floor.length; k++) {
-          if (!rd.floor[k] || rd.path[k] || rd.used[k] || rd.clr[k] < 1) continue;
-          var p = readAt(rd, k);
-          var pk = pockets.filter(function (q) { return Math.hypot(p.x - q.at.x, p.y - q.at.y) <= q.size / 2 + 2.5; })[0] || null;
-          var dx = gc.x - p.x, dy = gc.y - p.y, d = Math.hypot(dx, dy);
-          // conversation distance: 8' or less to the nearest seat of the group; the conversation check holds
-          // it to 8' from any seat it faces straight on
-          if (d < 4.5 || d > 12) continue;
-
-          var f = { x: dx / d, y: dy / d };
-          // its back to a wall: the chair slid back until it's as close as it goes (a turned chair's back
-          // corners meet the wall first), from a spot no more than 18" out
-          // Its back to a wall when one is close (slid back until a turned chair's corners meet it), or
-          // standing in the floor near the group, which costs a little
-          var back = GEO.rayPoly(p, -f.x, -f.y, poly);
-          if (back == null) continue;
-          var rot0 = LAYOUT.rotFacing(f), c0 = null, walled = back - ch.d / 24 <= 1.5 + 1e-6;
-          if (walled) for (var gi = 0; gi < 6 && !c0; gi++) {
-            var g0 = [1, 3, 6, 9, 12, 16][gi] / 12, q0 = { x: p.x - f.x * (back - ch.d / 24 - g0), y: p.y - f.y * (back - ch.d / 24 - g0) };
-            if (GEO.place(FURNITURE.outline(ch), q0.x, q0.y, rot0, 1 / 12).every(function (pt) { return PLAN.pointInPoly(pt, poly); })) c0 = q0;
-          }
-          if (!walled) c0 = p;
-          if (!c0) continue;
-          if (!seatsG.some(function (q) { return Math.hypot(q.cx - c0.x, q.cy - c0.y) <= 8; })) continue;
-          // not behind the seat, not in front of the TV
-          if ((c0.x - seat.cx) * sf.x + (c0.y - seat.cy) * sf.y < -seat.spec.d / 24 + 0.25) continue;
-          if (media && GEO.segDist(c0, { x: seat.cx, y: seat.cy }, { x: media.cx, y: media.cy }) < 2.5) continue;
-          if (fire && cc.kind === 'fire' && GEO.segDist(c0, { x: seat.cx, y: seat.cy }, fire.mid) < 2.5) continue;
-          var winN = wins.some(function (w) { return Math.hypot(w.x - c0.x, w.y - c0.y) < 4.5; });
-          var fireN = !!fire && Math.hypot(fire.mid.x - c0.x, fire.mid.y - c0.y) < 6.5;
-          var corner = !!(pk && pk.corner);
-          var rot = LAYOUT.rotFacing(f), rt = GEO.turn({ x: 1, y: 0 }, rot);
-          var where = winN ? ' by the window' : fireN ? ' by the fireplace' : corner ? ' in the corner' : '';
-          var sc = Math.max(0, d - 8) * 0.4 + (winN ? -1.5 : 0) + (fireN ? -1 : 0) + (corner ? -0.5 : 0) + (pk ? -1 : 0) + (walled ? Math.max(0, back - ch.d / 24) * 0.4 : 1.5);
-          // the round table on either side of the chair, its middle in line with the chair's
-          [1, -1].forEach(function (sg) {
-            var t = { spec: sdR, cx: c0.x + rt.x * sg * (ch.w / 24 + 2 / 12 + sdR.w / 24), cy: c0.y + rt.y * sg * (ch.w / 24 + 2 / 12 + sdR.w / 24), rot: rot };
-            var one = [{ spec: ch, cx: c0.x, cy: c0.y, rot: rot }, t];
-            if (inside(one) && offPath(rd, one) && clearOf(one)) singles.push({ places: one, sc: sc + (sg < 0 ? 0.05 : 0), name: 'a reading chair' + where, zone: 'reading' + (where ? ':' + where.trim() : '') });
-          });
-          // two armchairs side by side, square to their wall, the table between them (by a window or the
-          // fireplace, facing the group within 50 degrees)
-          if (pairs && (winN || fireN)) {
-            var wn = wallNormal(poly, { x: p.x - f.x * back, y: p.y - f.y * back });
-            if (wn && wn.x * f.x + wn.y * f.y > 0.64) {
-              var prot = LAYOUT.rotFacing(wn), prt = GEO.turn({ x: 1, y: 0 }, prot), pc0 = { x: p.x - f.x * back + wn.x * (ch.d / 24 + 1 / 12), y: p.y - f.y * back + wn.y * (ch.d / 24 + 1 / 12) };
-              var off = sdR.w / 24 + 2 / 12 + ch.w / 24;
-              var two = [{ spec: ch, cx: pc0.x - prt.x * off, cy: pc0.y - prt.y * off, rot: prot }, { spec: ch, cx: pc0.x + prt.x * off, cy: pc0.y + prt.y * off, rot: prot },
-                         { spec: sdR, cx: pc0.x - wn.x * (ch.d - sdR.d) / 24, cy: pc0.y - wn.y * (ch.d - sdR.d) / 24, rot: prot }];
-              if (inside(two) && offPath(rd, two) && clearOf(two)) pairList.push({ places: two, sc: sc - 0.75, name: 'two armchairs' + where, zone: 'pair' + (where ? ':' + where.trim() : '') });
-            }
-          }
-        }
-      });
-      var by = function (a, b) { return a.sc - b.sc; };
-      // the best pairs and the best single chairs, mixed by score
-      // the same spot once (the best table side), the best pairs and singles mixed by score
-      var spotSeen = {};
-      singles = singles.sort(by).filter(function (o) { var k = Math.round(o.places[0].cx * 2) + ',' + Math.round(o.places[0].cy * 2); if (spotSeen[k]) return false; spotSeen[k] = 1; return true; });
-      return pairList.sort(by).slice(0, 16).concat(singles.slice(0, 80)).sort(by);
-    }
     // No piece on the read's walking path or another zone's floor (corners and edge middles)
     function offPath(rd, places) {
       return places.every(function (p) {
@@ -6786,6 +6597,9 @@
       var zp = c.zone ? c.zone.places : [];
       zp.forEach(function (p) { avoid.push(polyOf(p)); });
       if (c.fire) avoid.push(c.fire.poly);   // the rug stops short of the hearth
+      // and keeps off the pieces of the other zones (a desk, a reading spot, a console or bench by the front
+      // door, a console behind the sofa): only the group's own armchairs stand on it
+      c.places.slice(c.places.length - (c.nAdded || 0)).forEach(function (p) { if (!p.inGroup && p.spec.kind !== 'decor') avoid.push(polyOf(p)); });
       // the group's own armchairs (added beside the coffee table) stand on the rug too
       var group = c.extras || c.zone ? { places: c.places.slice(0, c.places.length - (c.nAdded || 0)).filter(function (p) { return zp.indexOf(p) < 0; })
         .concat(c.places.slice(c.places.length - (c.nAdded || 0)).filter(function (p) { return p.inGroup; })), coffee: c.coffee, seat: c.seat, media: c.media } : c;
@@ -6964,7 +6778,7 @@
       if (!el || !r) return;
       var html = '<button class="link-btn detail-back" data-lyback="1">' + backToRoom(r) + '</button>' +
         '<p class="lay-title">Layouts for ' + esc(r.name) + '</p>';
-      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the ' + ({ living: 'seating', dining: 'table', kitchendining: 'table', office: 'desk' }[layoutKind(r)] || 'bed') + ' on each wall and checking the walkways from the doors...</p>';
+      if (L.busy && !(L.list && L.list.length)) html += '<p class="pane-sub">Trying the ' + ({ living: 'seating', dining: 'table', kitchendining: 'table', office: 'desk', entry: 'console table and bench' }[layoutKind(r)] || 'bed') + ' on each wall and checking the walkways from the doors...</p>';
       else if (!L.list.length) html += '<p class="pane-sub">' + esc(L.why || 'No layout fits this room yet.') + '</p>';
       else {
         html += '<p class="pane-sub">' + (L.intro ? esc(L.intro) + ' ' : '') + 'Tap one to see it on the plan.</p><div class="lay-list">' +
@@ -7883,12 +7697,6 @@
     /* ---------- Room cards ---------- */
     function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
-    function badgeFor(r) {
-      if (r.source === 'labeled') return '<span class="badge labeled">From plan</span>';
-      if (r.source === 'edited') return '<span class="badge edited">Edited</span>';
-      if (r.source === 'measured') return '<span class="badge labeled">Measured</span>';
-      return '<span class="badge estimated">Estimated</span>';
-    }
 
     /* One room row, the same in every mode: a status dot (green fine, amber worth a look, grey nothing
        yet), the name, and one short summary that suits the mode. Tapping it opens that room. */
@@ -7934,11 +7742,6 @@
       $('roomGrid').innerHTML = html;
     }
 
-    function areaText(r) {
-      if (!area(r)) return 'Add dimensions';
-      var fromShape = r.shape && r.shapeArea && !r.dimsEdited && !r.printedArea;
-      return fmtArea(area(r)) + (fromShape ? ' (from shape)' : '');
-    }
 
     // Shown when the plan's printed area and its dimensions disagree, or when the
     // room's box on the plan and its dimensions disagree, by more than 10%

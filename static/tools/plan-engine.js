@@ -4633,21 +4633,6 @@ var WALLS = (function () {
     x -= R.x0; y -= R.y0;
     return x >= 0 && y >= 0 && x < R.w && y < R.h ? R.m[y * R.w + x] : 0;
   }
-  function toFull(R, W, H) {
-    var m = new Uint8Array(W * H);
-    for (var y = 0; y < R.h; y++) for (var x = 0; x < R.w; x++) if (R.m[y * R.w + x]) m[(y + R.y0) * W + x + R.x0] = 1;
-    return m;
-  }
-  function fromFull(m, W, H) {
-    var s = { n: 0, x0: W, y0: H, x1: -1, y1: -1 };
-    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) if (m[y * W + x]) {
-      s.n++; if (x < s.x0) s.x0 = x; if (x > s.x1) s.x1 = x; if (y < s.y0) s.y0 = y; if (y > s.y1) s.y1 = y;
-    }
-    if (!s.n) return null;
-    var rw = s.x1 - s.x0 + 1, rh = s.y1 - s.y0 + 1, r = new Uint8Array(rw * rh);
-    for (y = 0; y < rh; y++) for (x = 0; x < rw; x++) r[y * rw + x] = m[(y + s.y0) * W + x + s.x0];
-    return { x0: s.x0, y0: s.y0, w: rw, h: rh, m: r, n: s.n };
-  }
   // A region's mask with room around it (pad px), for growing and shrinking it on its own
   function padded(Rs, pad, W, H) {
     var x0 = W, y0 = H, x1 = 0, y1 = 0;
