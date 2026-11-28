@@ -1520,14 +1520,32 @@
     }
     // Pieces that run into a wall or into each other (see SPACE.conflicts in plan-engine.js).
     // Walls come from the plan's wall lines, so this needs the wall map from the analysis step.
-    function wallTestFt() {
+    // Wall ink, plus every marked window: glass is a wall to furniture, so a chair backed onto a window
+    // gets measured to it (the lines used to pass through the glass to open floor). A window counts only
+    // from the room outline outward, so a piece standing in front of it never reads as in the wall.
+    function wallTestFt(inkOnly) {
       if (!state.scale || !state.walls || !state.walls.map) return null;
       var f = state.scale.ftPerPx;
-      return function (p) { return PLAN.wallAt(state.walls, p.x / f, p.y / f, state.W); };
+      var ink = function (p) { return PLAN.wallAt(state.walls, p.x / f, p.y / f, state.W); };
+      if (inkOnly) return ink;
+      var wins = state.doors.filter(isWin).map(function (d) {
+        var g = doorFt(d), into = d.out ? -1 : 1;
+        return { cx: g.cx, cy: g.cy, ux: g.ux, uy: g.uy, ox: -g.nx * into, oy: -g.ny * into, half: g.w / 24 };
+      });
+      if (!wins.length) return ink;
+      return function (p) {
+        if (ink(p)) return true;
+        for (var i = 0; i < wins.length; i++) {
+          var w = wins[i], dx = p.x - w.cx, dy = p.y - w.cy;
+          var along = dx * w.ux + dy * w.uy, out = dx * w.ox + dy * w.oy;
+          if (Math.abs(along) <= w.half && out >= -1 / 24 && out <= 10 / 12) return true;
+        }
+        return false;
+      };
     }
     function conflicts() {
       if (PASS && PASS.conf) return PASS.conf;
-      var out = state.scale && state.pieces.length ? SPACE.conflicts(piecesFt(), wallTestFt()) : [];
+      var out = state.scale && state.pieces.length ? SPACE.conflicts(piecesFt(), wallTestFt(true)) : [];
       if (PASS) PASS.conf = out;
       return out;
     }
@@ -1895,7 +1913,13 @@
         // The room's name says what it is; only a name that doesn't (Flex, Bonus) gets asked
         if (r && !LIGHT.typeKnown(r.name)) html += '<div class="cat-type">What\u2019s this room used for? <select data-ftype aria-label="What this room is used for">' +
           LIGHT.TYPES.map(function (o) { return '<option value="' + o.id + '"' + (o.id === t ? ' selected' : '') + '>' + o.label.toLowerCase() + '</option>'; }).join('') + '</select></div>';
-        gs.forEach(function (x) { if (gs.length > 1) html += head(x); html += cards(groupItems(x)); });
+        gs.forEach(function (x) {
+          if (gs.length > 1) html += head(x);
+          var its = groupItems(x);
+          // a kitchen can take a bistro table for two (Lauren, Nov 27), unless Dining is listed here too
+          if (x === 'Kitchen' && t === 'kitchen' && gs.indexOf('Dining') < 0) its = its.concat([FURNITURE.get('dining2r')]);
+          html += cards(its);
+        });
         html += own;
         var rest = FURNITURE.CATALOG.map(function (x) { return x.group; }).filter(function (x) { return x !== 'Decor' && gs.indexOf(x) < 0; });
         if (state.morePieces) rest.forEach(function (x) { html += head(x) + cards(groupItems(x)); });
@@ -4938,7 +4962,7 @@
         var ls = q.role === 'dining' || (q.role === 'chair' && q.group) ? lands.shallow : q.role === 'seat' || q.role === 'side' ? lands.seat : lands;
         return ls.some(function (l) { return GEO.polyDist(q.poly, l) <= 1e-6; });
       })) { res.close++; res.landing = true; return res; }
-      res.close += SPACE.conflicts(pft, wallTestFt()).length;
+      res.close += SPACE.conflicts(pft, wallTestFt(true)).length;
       if (res.close) return res;
       state.doors.forEach(function (d) { if (DOOR.check(doorFt(d), pft).hits.length) res.close++; });
       if (res.close) return res;
