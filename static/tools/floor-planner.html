@@ -991,7 +991,7 @@
       if (!forExport) fitCanvas();
       var c = $('planCanvas'), ctx = c.getContext('2d'), s = scale();
       syncGeometry();
-      LABELS = [];   // room tags and spacing labels placed so far, so later labels can step aside
+      LABELS = []; GAP_TAGS = []; GAP_LINES = [];   // room tags and spacing labels placed so far; spacing labels wait until every line is drawn (drawGapLine)
       ctx.clearRect(0, 0, state.W, state.H);
       ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, state.W, state.H);
       ctx.drawImage(state.img, 0, 0, state.W, state.H);
@@ -1135,6 +1135,7 @@
       }
 
       if (state.scale && state.mode !== 'light') drawWalkways(ctx, forExport, 'pinches');
+      drawGapTags(ctx);   // every measuring label on top of every line
       if (!forExport && state.scale) { drawPieceHandles(ctx); drawHandleTag(ctx); }
       if (!forExport) drawBrush(ctx);
 
@@ -1341,7 +1342,25 @@
     function rugPicked() { return typeof selRugs === 'function' && selRugs().length > 0; }
     // One spacing line between two points in feet, with end ticks and its measurement
     var SPACE_COL = { ok: '#7f9433', tight: '#b07d14', close: '#582b36' };
+    // Labels are painted after all the lines (drawGapTags), so no line ever crosses a label
+    var GAP_TAGS = [], GAP_LINES = [];
+    function sameGap(from, to) {
+      var mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2, len = Math.hypot(to.x - from.x, to.y - from.y);
+      return GAP_LINES.some(function (g) { return Math.hypot(g.mx - mx, g.my - my) < 0.75 && Math.abs(g.len - len) < 0.75; });   // feet
+    }
+    function drawGapTags(ctx) {
+      GAP_TAGS.forEach(function (t) {
+        ctx.save();
+        ctx.font = t.font; ctx.fillStyle = '#ffffff'; ctx.strokeStyle = t.col; ctx.lineWidth = t.lw;
+        roundRect(ctx, t.x - t.pw / 2, t.y - t.ph / 2, t.pw, t.ph, t.ph / 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = t.col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(t.label, t.x, t.y + t.dy);
+        ctx.restore();
+      });
+      GAP_TAGS = [];
+    }
     function drawGapLine(ctx, from, to, col, label) {
+      GAP_LINES.push({ mx: (from.x + to.x) / 2, my: (from.y + to.y) / 2, len: Math.hypot(to.x - from.x, to.y - from.y) });
       var f = state.scale.ftPerPx, ratio = displayRatio();
       var a = { x: from.x / f, y: from.y / f }, b = { x: to.x / f, y: to.y / f };
       var len = Math.hypot(b.x - a.x, b.y - a.y);
@@ -1373,10 +1392,7 @@
       var spot = spots.filter(function (q) { return !hits(q[0], q[1]); })[0] || spots[0];
       mx = spot[0]; my = spot[1];
       LABELS.push({ x: mx - pw / 2, y: my - ph / 2, w: pw, h: ph });
-      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = col; ctx.lineWidth = 1.2 * ratio;
-      roundRect(ctx, mx - pw / 2, my - ph / 2, pw, ph, ph / 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(label, mx, my + 0.5 * ratio);
+      GAP_TAGS.push({ x: mx, y: my, pw: pw, ph: ph, col: col, label: label, font: ctx.font, lw: 1.2 * ratio, dy: 0.5 * ratio });
       ctx.restore();
     }
 
@@ -2295,6 +2311,7 @@
         if (rt.status === 'ok' || !rt.pinch) return;
         var a = rt.pinch.a, b = rt.pinch.b, key = [a.x, a.y, b.x, b.y].map(function (v) { return Math.round(v * 8); }).join(',');
         if (seen[key]) return; seen[key] = 1;
+        if (sameGap(a, b)) return;   // a furniture gap already measures this spot
         drawGapLine(ctx, a, b, SPACE_COL[rt.status], forExport && NUMBERS ? rt.width + '"' : rt.blocked || rt.from < 0 ? 'No way through' : spaceWord('walk', rt.status, rt.width));
       });
     }
