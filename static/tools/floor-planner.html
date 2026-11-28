@@ -1135,6 +1135,7 @@
       }
 
       if (state.scale && state.mode !== 'light') drawWalkways(ctx, forExport, 'pinches');
+      if (!forExport) drawRead(ctx);
       drawGapTags(ctx);   // every measuring label on top of every line
       if (!forExport && state.scale) { drawPieceHandles(ctx); drawHandleTag(ctx); }
       if (!forExport) drawBrush(ctx);
@@ -4966,6 +4967,168 @@
       out.seat = seatL;
       LAY.landRoom = r.id; LAY.landImg = state.img; LAY.lands = out;
       return out;
+    }
+    /* ---------- Reading a room (zones, Z1) ----------
+       Before any furniture: what the room's architecture offers. On a 6" grid over the room's floor:
+       the ways in (doors, openings, open sides) and the walking path between them (shortest routes,
+       36" wide), how much clear floor each spot has (away from the walls and the path), the pockets
+       (clear spots 5' across or more: in a corner, by a window, by the kitchen, or along a wall), the
+       slivers (floor the path leaves that never gets 4' across: a plant or nothing), and the focal
+       point (a fireplace; else the longest stretch of wall with no window or way in, for a media
+       console). Returns { cells, focal, entries, path, pockets, slivers, kitchen }. */
+    // taken: polygons (ft) already placed (the main zone): the path goes round them, pockets leave them out
+    function roomRead(r, taken) {
+      if (!r || !r.ftShape || !state.scale) return null;
+      taken = taken || [];
+      var key = JSON.stringify([r.ftShape, state.doors.length, (r.fixtures || []).length, state.img && state.img.src.length, taken]);
+      if (r._read && r._read.key === key) return r._read;
+      var poly = r.ftShape, bb = PLAN.bounds(poly), S = 0.5, nx = Math.ceil(bb.w / S), ny = Math.ceil(bb.h / S);
+      var at = function (i, j) { return { x: bb.x + (i + 0.5) * S, y: bb.y + (j + 0.5) * S }; };
+      var floor = new Uint8Array(nx * ny);
+      for (var j = 0; j < ny; j++) for (var i = 0; i < nx; i++) {
+        var p = at(i, j);
+        floor[j * nx + i] = PLAN.pointInPoly(p, poly) && GEO.edgeDist(p, poly) >= 0.2 ? 1 : 0;
+      }
+      var used = new Uint8Array(nx * ny);   // floor the main zone has
+      if (taken.length) for (var k0 = 0; k0 < nx * ny; k0++) if (floor[k0]) {
+        var p0 = at(k0 % nx, (k0 - k0 % nx) / nx);
+        if (taken.some(function (t) { return PLAN.pointInPoly(p0, t); })) used[k0] = 1;
+      }
+      var cellOf = function (p) { var i = Math.floor((p.x - bb.x) / S), j = Math.floor((p.y - bb.y) / S); return i >= 0 && j >= 0 && i < nx && j < ny ? j * nx + i : -1; };
+      // ways in: the middle of each landing, a little inside the room; a kitchen's open side noted
+      var lands = layoutLandings(r), entries = [];
+      lands.forEach(function (q) {
+        var m = { x: (q[0].x + q[1].x) / 2, y: (q[0].y + q[1].y) / 2 }, n = { x: (q[3].x - q[0].x), y: (q[3].y - q[0].y) }, L = Math.hypot(n.x, n.y) || 1;
+        var e = { x: m.x + n.x / L * 0.75, y: m.y + n.y / L * 0.75 }, k = cellOf(e);
+        if (k < 0 || !floor[k]) return;
+        entries.push({ p: e, cell: k, kitchen: kitchenAt(r, { x: m.x - n.x / L * 1.5, y: m.y - n.y / L * 1.5 }), w: Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) });
+      });
+      // the walking path: shortest routes between every pair of ways in, 18" either side
+      var path = new Uint8Array(nx * ny);
+      // the fewest turns: each step costs 1 (1.4 on a diagonal), each change of direction 4 more
+      var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+      function route(a, b) {
+        var N = nx * ny, cost = new Float32Array(N * 8).fill(1e9), prev = new Int32Array(N * 8).fill(-1), heap = [];
+        function push(st, c) { heap.push([c, st]); var i = heap.length - 1; while (i > 0) { var pi = (i - 1) >> 1; if (heap[pi][0] <= heap[i][0]) break; var t = heap[pi]; heap[pi] = heap[i]; heap[i] = t; i = pi; } }
+        function pop() { var top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; var i = 0; for (;;) { var l = 2 * i + 1, rr = l + 1, m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (rr < heap.length && heap[rr][0] < heap[m][0]) m = rr; if (m === i) break; var t = heap[m]; heap[m] = heap[i]; heap[i] = t; i = m; } } return top; }
+        for (var d0 = 0; d0 < 8; d0++) { cost[a * 8 + d0] = 0; push(a * 8 + d0, 0); }
+        var end = -1;
+        while (heap.length) {
+          var it = pop(), c = it[0], st = it[1];
+          if (c > cost[st]) continue;
+          var cell = (st - st % 8) / 8, dd = st % 8;
+          if (cell === b) { end = st; break; }
+          var ci = cell % nx, cj = (cell - ci) / nx;
+          for (var d = 0; d < 8; d++) {
+            var ii = ci + DIRS[d][0], jj = cj + DIRS[d][1], k = jj * nx + ii;
+            if (ii < 0 || jj < 0 || ii >= nx || jj >= ny || !floor[k] || used[k]) continue;
+            var nc = c + (d < 4 ? 1 : 1.42) + (d !== dd ? 4 : 0), ns = k * 8 + d;
+            if (nc < cost[ns]) { cost[ns] = nc; prev[ns] = st; push(ns, nc); }
+          }
+        }
+        if (end < 0) return;
+        for (var s2 = end; s2 > -1; s2 = prev[s2]) {
+          var c2 = (s2 - s2 % 8) / 8, ci2 = c2 % nx, cj2 = (c2 - ci2) / nx;
+          for (var dj2 = -3; dj2 <= 3; dj2++) for (var di2 = -3; di2 <= 3; di2++) {
+            var ii2 = ci2 + di2, jj2 = cj2 + dj2;
+            if (ii2 >= 0 && jj2 >= 0 && ii2 < nx && jj2 < ny && di2 * di2 + dj2 * dj2 <= 10) path[jj2 * nx + ii2] = 1;
+          }
+          if (prev[s2] < 0) break;
+        }
+      }
+      for (var e1 = 0; e1 < entries.length; e1++) for (var e2 = e1 + 1; e2 < entries.length; e2++) route(entries[e1].cell, entries[e2].cell);
+      lands.forEach(function (q) {   // the landings themselves stay clear too
+        for (var k = 0; k < nx * ny; k++) if (floor[k] && PLAN.pointInPoly(at(k % nx, (k - k % nx) / nx), q)) path[k] = 1;
+      });
+      // clear floor: distance (ft) to the nearest wall or path cell, as the half-size of the square that fits
+      var clr = new Float32Array(nx * ny), INF = 1e9;
+      for (var k1 = 0; k1 < nx * ny; k1++) clr[k1] = floor[k1] && !path[k1] && !used[k1] ? INF : 0;
+      for (var pass = 0; pass < 2; pass++) for (var jy = 0; jy < ny; jy++) for (var ix = 0; ix < nx; ix++) {   // chessboard distance, two passes
+        var i3 = pass ? nx - 1 - ix : ix, j3 = pass ? ny - 1 - jy : jy, k3 = j3 * nx + i3, sg = pass ? 1 : -1;
+        if (!clr[k3]) continue;
+        var m3 = clr[k3];
+        [[sg, 0], [0, sg], [sg, sg], [-sg, sg]].forEach(function (d) {
+          var ii = i3 + d[0], jj = j3 + d[1];
+          var v = ii < 0 || jj < 0 || ii >= nx || jj >= ny ? 0 : clr[jj * nx + ii];
+          if (v + 1 < m3) m3 = v + 1;
+        });
+        clr[k3] = m3;
+      }
+      for (var k4 = 0; k4 < nx * ny; k4++) clr[k4] = clr[k4] >= INF ? 0 : clr[k4] * S;
+      // pockets: connected floor with 5'+ across (clearance 2.5'), each described by where it is
+      var seen = new Uint8Array(nx * ny), pockets = [], wins = windowSpots();
+      var fire = (r.fixtures || []).filter(function (f) { return f.kind === 'fireplace' && f.face; })[0];
+      for (var k5 = 0; k5 < nx * ny; k5++) {
+        if (seen[k5] || clr[k5] < 2.5) continue;
+        var q5 = [k5], cells = [], top = k5; seen[k5] = 1;
+        while (q5.length) {
+          var c5 = q5.pop(); cells.push(c5); if (clr[c5] > clr[top]) top = c5;
+          var ci5 = c5 % nx, cj5 = (c5 - ci5) / nx;
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var ii = ci5 + d[0], jj = cj5 + d[1], kk = jj * nx + ii; if (ii >= 0 && jj >= 0 && ii < nx && jj < ny && !seen[kk] && clr[kk] >= 2.5) { seen[kk] = 1; q5.push(kk); } });
+        }
+        var c0 = at(top % nx, (top - top % nx) / nx), walls = 0;
+        // how many walls the pocket's clear square touches (two at right angles: a corner)
+        var reach = clr[top] + 1.5, dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(function (d) { var t = { x: c0.x + d[0] * reach, y: c0.y + d[1] * reach }; return !PLAN.pointInPoly(t, poly); });
+        walls = dirs.length;
+        var corner = dirs.some(function (d) { return dirs.some(function (e) { return d[0] * e[0] + d[1] * e[1] === 0; }); });
+        var win = wins.filter(function (w) { return Math.hypot(w.x - c0.x, w.y - c0.y) <= clr[top] + 4; })[0];
+        var kit = entries.filter(function (e) { return e.kitchen; }).some(function (e) { return Math.hypot(e.p.x - c0.x, e.p.y - c0.y) <= clr[top] + 6; });
+        pockets.push({ at: c0, size: 2 * clr[top], area: cells.length * S * S, cells: cells, corner: corner, walls: walls, window: !!win, kitchen: kit,
+                       kind: kit ? 'kitchen' : corner ? 'corner' : win ? 'window' : walls ? 'wall' : 'open' });
+      }
+      pockets.sort(function (a, b) { return b.area - a.area; });
+      // slivers: free floor no clear 4' square covers (an opening of the free floor): a plant or nothing
+      var cover = new Uint8Array(nx * ny);
+      for (var k7 = 0; k7 < nx * ny; k7++) {
+        if (clr[k7] < 2) continue;
+        var rr7 = Math.floor(clr[k7] / S), i7 = k7 % nx, j7 = (k7 - i7) / nx;
+        for (var dj7 = -rr7 + 1; dj7 < rr7; dj7++) for (var di7 = -rr7 + 1; di7 < rr7; di7++) { var ii7 = i7 + di7, jj7 = j7 + dj7; if (ii7 >= 0 && jj7 >= 0 && ii7 < nx && jj7 < ny) cover[jj7 * nx + ii7] = 1; }
+      }
+      var slivers = [];
+      for (var k6 = 0; k6 < nx * ny; k6++) if (floor[k6] && !path[k6] && !used[k6] && !cover[k6]) slivers.push(k6);
+      // the focal point: a fireplace; else the longest stretch of wall with no window and no way in
+      var focal = null;
+      if (fire) {
+        var f = state.scale.ftPerPx, fa = { x: fire.face[0].x / 100 * state.W * f, y: fire.face[0].y / 100 * state.H * f }, fb = { x: fire.face[1].x / 100 * state.W * f, y: fire.face[1].y / 100 * state.H * f };
+        focal = { kind: 'fireplace', a: fa, b: fb, n: { x: fire.n[0], y: fire.n[1] }, tvAbove: true };
+      } else {
+        var opens = state.doors.map(function (d) { var g = DOOR.geom(doorFt(d)); return { a: g.jambs[0], b: g.jambs[1], window: isWin(d) }; });
+        var sts = LAYOUT.stretches(poly, opens, wallTestFt()).filter(function (st) { return !(st.windows && st.windows.length); });
+        var bestSt = sts.reduce(function (m, st) { return !m || st.t1 - st.t0 > m.t1 - m.t0 ? st : m; }, null);
+        if (bestSt && bestSt.t1 - bestSt.t0 >= 6) focal = { kind: 'wall', a: { x: bestSt.a.x + bestSt.u.x * bestSt.t0, y: bestSt.a.y + bestSt.u.y * bestSt.t0 }, b: { x: bestSt.a.x + bestSt.u.x * bestSt.t1, y: bestSt.a.y + bestSt.u.y * bestSt.t1 }, n: bestSt.n, st: bestSt };
+      }
+      var out = { key: key, grid: { x: bb.x, y: bb.y, S: S, nx: nx, ny: ny }, floor: floor, path: path, used: used, clr: clr, entries: entries, pockets: pockets, slivers: slivers, focal: focal,
+                  kitchen: entries.some(function (e) { return e.kitchen; }), area: roomAreaFt(r) };
+      Object.defineProperty(r, '_read', { value: out, enumerable: false, configurable: true, writable: true });
+      return out;
+    }
+    // The read drawn on the plan (state.showRead, for checking it): the path grey, slivers amber,
+    // each pocket a green ring with its kind, the focal point a burgundy line
+    function drawRead(ctx) {
+      if (!state.showRead || !state.scale) return;
+      var f = state.scale.ftPerPx, R = displayRatio();
+      state.rooms.forEach(function (r) {
+        var rd = roomRead(r);
+        if (!rd) return;
+        var g = rd.grid, cell = function (k, col) { var i = k % g.nx, j = (k - i) / g.nx; ctx.fillStyle = col; ctx.fillRect((g.x + i * g.S) / f, (g.y + j * g.S) / f, g.S / f + 0.5, g.S / f + 0.5); };
+        ctx.save();
+        for (var k = 0; k < g.nx * g.ny; k++) if (rd.floor[k] && rd.path[k]) cell(k, 'rgba(107,101,96,0.22)');
+        rd.slivers.forEach(function (k) { cell(k, 'rgba(176,125,20,0.28)'); });
+        rd.pockets.forEach(function (pk) {
+          ctx.strokeStyle = '#7f9433'; ctx.lineWidth = 2.5 * R; ctx.fillStyle = 'rgba(166,190,71,0.16)';
+          ctx.beginPath(); ctx.arc(pk.at.x / f, pk.at.y / f, pk.size / 2 / f, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.font = '700 ' + 11 * R + 'px "DM Sans", sans-serif'; ctx.fillStyle = '#4f5c1d'; ctx.textAlign = 'center';
+          ctx.fillText(pk.kind + ' ' + fmtFtIn(pk.size), pk.at.x / f, pk.at.y / f + 4 * R);
+        });
+        if (rd.focal) {
+          ctx.strokeStyle = '#582b36'; ctx.lineWidth = 6 * R; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(rd.focal.a.x / f, rd.focal.a.y / f); ctx.lineTo(rd.focal.b.x / f, rd.focal.b.y / f); ctx.stroke();
+          ctx.font = '700 ' + 11 * R + 'px "DM Sans", sans-serif'; ctx.fillStyle = '#582b36'; ctx.textAlign = 'center';
+          var m = { x: (rd.focal.a.x + rd.focal.b.x) / 2 + rd.focal.n.x * 1.2, y: (rd.focal.a.y + rd.focal.b.y) / 2 + rd.focal.n.y * 1.2 };
+          ctx.fillText(rd.focal.kind === 'fireplace' ? 'Fireplace' : 'TV wall', m.x / f, m.y / f);
+        }
+        ctx.restore();
+      });
     }
     function layoutQuick(r, pcs) {
       var pft = withLayout(r, pcs, function () { return pcs.map(pieceFt); });
