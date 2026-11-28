@@ -5736,9 +5736,25 @@
     // chair's back clears the lamp and its corners clear both walls (at 2'7" a turned armchair poked through)
     // chair-only (alone): 2'10" out, as near the corner as a turned armchair goes
     var CORNER_CHAIR = 3.4, CORNER_LAMP = 1.15, CORNER_ALONE = 2.8;
-    function cornerChair(k, alone) {
+    // view: turn the chair toward a window it can see (Lauren, Nov 27: orienting toward a view is always
+    // nice), up to 30 degrees off the corner's diagonal so it still sits in the corner
+    function cornerChair(k, alone, view) {
       var dg = { x: (k.st.n.x + k.inw.x) / Math.SQRT2, y: (k.st.n.y + k.inw.y) / Math.SQRT2 }, D = alone ? CORNER_ALONE : CORNER_CHAIR;
-      return { dg: dg, at: { x: k.p.x + dg.x * D, y: k.p.y + dg.y * D }, lamp: { x: k.p.x + dg.x * CORNER_LAMP, y: k.p.y + dg.y * CORNER_LAMP }, rot: LAYOUT.rotFacing(dg) };
+      var at = { x: k.p.x + dg.x * D, y: k.p.y + dg.y * D }, face = dg, win = null;
+      if (view) {
+        var best = 1e9;
+        windowSpots().forEach(function (w) {
+          var v = { x: w.x - at.x, y: w.y - at.y }, L = Math.hypot(v.x, v.y);
+          if (L < 2 || L > 16) return;
+          var a = Math.atan2(dg.x * v.y - dg.y * v.x, dg.x * v.x + dg.y * v.y);
+          if (Math.abs(a) <= Math.PI / 3 && Math.abs(a) < best) { best = Math.abs(a); win = a; }
+        });
+        if (win != null) {
+          var t = Math.max(-Math.PI / 6, Math.min(Math.PI / 6, win));
+          face = { x: dg.x * Math.cos(t) - dg.y * Math.sin(t), y: dg.x * Math.sin(t) + dg.y * Math.cos(t) };
+        }
+      }
+      return { dg: face, view: win != null, at: at, lamp: { x: k.p.x + dg.x * CORNER_LAMP, y: k.p.y + dg.y * CORNER_LAMP }, rot: LAYOUT.rotFacing(face) };
     }
     function readingVignettes(r, cc, sts, rd) {
       if (!rd) return [];
@@ -5747,7 +5763,7 @@
       var seats = cc.places.filter(function (q) { return q.spec.role === 'seat'; });
       function facesGroup(p, rot) { var f = GEO.turn({ x: 0, y: 1 }, rot); return seats.some(function (q) { var d = { x: q.cx - p.x, y: q.cy - p.y }, L = Math.hypot(d.x, d.y) || 1; return (f.x * d.x + f.y * d.y) / L > 0.6; }); }
       roomCorners(sts).forEach(function (k) {
-        var cn = cornerChair(k), cc0 = cn.at, rot = cn.rot;
+        var cn = cornerChair(k, false, true), cc0 = cn.at, rot = cn.rot;
         var lamp = { spec: lp, cx: cn.lamp.x, cy: cn.lamp.y, rot: 0 };
         // the table beside the chair, against the wall
         var tt = k.end + k.dir * (CORNER_CHAIR / Math.SQRT2 + ch.w / 24 + 4 / 12 + sdR.w / 24);
@@ -5822,10 +5838,10 @@
     }
     // Facing the room: at least 4' of floor straight ahead of a seat at p facing f (never a wall)
     function facesRoom(poly, p, f) { var t = GEO.rayPoly(p, f.x, f.y, poly); return t != null && t >= 4; }
-    /* Reading chairs for a bedroom or an office: an armchair alone in a room corner, turned 45 degrees out of
-       it, a floor lamp tucked behind (Lauren, Nov 26: a bedroom corner chair stands alone, no side table);
-       or against a wall by a window, turned 20 degrees toward the middle of the room, a round table beside
-       it. Off the walking path, facing the room, 12"+ from the avoid polygons (the bed and nightstands),
+    /* Reading chairs for a bedroom or an office: an armchair in a room corner, turned 45 degrees out of it
+       (up to 30 degrees more toward a window in view), a floor lamp tucked behind (Lauren, Nov 26: a bedroom
+       corner chair stands alone, no side table). Corners only (Lauren, Nov 27: a chair against a window in the
+       middle of a wall reads oddly). Off the walking path, facing the room, 12"+ from the avoid polygons (the bed and nightstands),
        never on the noEdge wall (the headboard's). Doesn't need a window; one nearby is better. */
     function readingChairs(r, sts, rd, avoid, noEdge) {
       if (!rd) return [];
@@ -5838,30 +5854,17 @@
       }
       roomCorners(sts).forEach(function (k) {
         if (noEdge != null && k.st.edge === noEdge) return;
-        // with a floor lamp tucked behind; else the chair alone, nearer the corner
-        [false, true].some(function (alone) {
-          var cn = cornerChair(k, alone), c0 = cn.at, dg = cn.dg;
+        // with a floor lamp tucked behind; else the chair alone, nearer the corner; turned toward a window in
+        // view when it still fits, else straight out of the corner
+        [[false, true], [false, false], [true, true], [true, false]].forEach(function (o) {
+          var alone = o[0], cn = cornerChair(k, alone, o[1]), c0 = cn.at, dg = cn.dg;
+          if (o[1] && !cn.view) return false;
           var places = [{ spec: ch, cx: c0.x, cy: c0.y, rot: cn.rot }].concat(alone ? [] : [{ spec: lp, cx: cn.lamp.x, cy: cn.lamp.y, rot: 0 }]);
           if (!ok(places, c0, dg)) return false;
           var winN = wins.some(function (w) { return Math.hypot(w.x - c0.x, w.y - c0.y) < 5; });
-          out.push({ places: places, sc: (winN ? 0.2 : 0.8) + (alone ? 0.3 : 0), name: 'a reading chair ' + (winN ? 'by the window' : 'in the corner'), zone: 'reading' + (winN ? ':by the window' : '') });
+          var where = cn.view ? 'facing the window' : winN ? 'by the window' : 'in the corner';
+          out.push({ places: places, sc: (cn.view ? 0 : winN ? 0.2 : 0.8) + (alone ? 0.3 : 0), name: 'a reading chair ' + where, zone: 'reading' + (where === 'in the corner' ? '' : ':' + where) });
           return true;
-        });
-      });
-      sts.forEach(function (st) {
-        if (st.angled || (noEdge != null && st.edge === noEdge)) return;
-        st.windows.forEach(function (w) {
-          var wm = (w[0] + w[1]) / 2;
-          [-1, 1].forEach(function (sg) {
-            var tc = wm - sg * (sdR.w + 2) / 24, tt = wm + sg * (ch.w + 2) / 24;
-            if (!LAYOUT.fits(st, tc - sg * 3 / 12, ch.w) || !LAYOUT.fits(st, tt, sdR.w)) return;
-            var wp = { x: st.a.x + st.u.x * tc, y: st.a.y + st.u.y * tc }, c0 = { x: wp.x + st.n.x * (ch.d / 24 + 5 / 12), y: wp.y + st.n.y * (ch.d / 24 + 5 / 12) };
-            // turned toward the middle of the room, away from its table
-            var a = 20 * Math.PI / 180, side = (mid.x - c0.x) * st.u.x + (mid.y - c0.y) * st.u.y >= 0 ? 1 : -1;
-            var f = { x: st.n.x * Math.cos(a) + st.u.x * side * Math.sin(a), y: st.n.y * Math.cos(a) + st.u.y * side * Math.sin(a) };
-            var places = [{ spec: ch, cx: c0.x, cy: c0.y, rot: LAYOUT.rotFacing(f) }, LAYOUT.against(sdR, st, tt)];
-            if (ok(places, c0, f)) out.push({ places: places, sc: 0, name: 'a reading chair by the window', zone: 'reading:by the window' });
-          });
         });
       });
       return out.sort(function (a, b) { return a.sc - b.sc; });
@@ -6650,6 +6653,10 @@
       function sideLight(p, f) {
         return windowSpots().some(function (w) { var v = { x: w.x - p.x, y: w.y - p.y }, L = Math.hypot(v.x, v.y) || 1; return L < 9 && Math.abs((v.x * f.x + v.y * f.y) / L) < 0.6 && GEO.edgeDist({ x: w.x, y: w.y }, r.ftShape) < 1; });
       }
+      // a window straight ahead of someone at p facing f: a view
+      function viewAhead(p, f) {
+        return windowSpots().some(function (w) { var v = { x: w.x - p.x, y: w.y - p.y }, L = Math.hypot(v.x, v.y) || 1; return (v.x * f.x + v.y * f.y) / L > 0.75 && GEO.edgeDist({ x: w.x, y: w.y }, r.ftShape) < 1; });
+      }
       // Client chairs (one card, not always): two chairs across the desk from a desk facing into the room,
       // 6" off its front edge, facing it, tied to the desk so they move with it
       function withGuests(c) {
@@ -6690,9 +6697,9 @@
             var desk = { spec: dk, cx: dc.x, cy: dc.y, rot: LAYOUT.rotFacing({ x: -st.n.x, y: -st.n.y }) };
             places.push(desk, { spec: ch, cx: cc.x, cy: cc.y, rot: LAYOUT.rotFacing(st.n) });
             if (books) places.push(LAYOUT.against(bk, st, t - (bk.w + 1) / 24), LAYOUT.against(bk, st, t + (bk.w + 1) / 24));
-            var sees = doorSide(cc, st.n), lit = sideLight(cc, st.n);
-            // facing the door, with daylight from the side (Lauren, Nov 27: zones)
-            push('room', st, t, places, Math.abs(t - st.L / 2) * 5 + (books ? 0 : 2) + (sees > 0 ? 0 : 1.5) + (lit ? -1 : 0), books, { seesDoor: sees > 0, daylight: lit });
+            var sees = doorSide(cc, st.n), lit = sideLight(cc, st.n), vw = viewAhead(cc, st.n);
+            // a view out a window ahead first (Lauren, Nov 27), then the door ahead with daylight from the side
+            push('room', st, t, places, Math.abs(t - st.L / 2) * 5 + (books ? 0 : 2) + (vw ? -2 : 0) + (sees > 0 ? 0 : 1.5) + (lit ? -1 : 0), books, { seesDoor: sees > 0, daylight: lit, view: vw });
           });
         });
         // against a plain wall
@@ -6703,13 +6710,16 @@
         });
       });
       cands.sort(function (a, b) { return a.score - b.score; });
-      var run = layoutRunner(r), out = [], kinds = ['room', 'window', 'wall'], ki = 0, guestsTried = false;
+      // a view is always nice (Lauren, Nov 27): with a window, the desk facing it leads, then the desk facing
+      // into the room (which also ranks a window ahead first)
+      var kinds = cands.some(function (c) { return c.kind === 'window'; }) ? ['window', 'room', 'wall'] : ['room', 'window', 'wall'];
+      var run = layoutRunner(r), out = [], ki = 0, guestsTried = false;
       (function next() {
         if (ki >= kinds.length) {
           // then the one card with client chairs, from the desks facing into the room
           if (guestsTried) return finish(false);
           guestsTried = true;
-          var gl = cands.filter(function (c) { return c.kind === 'room'; }).slice(0, 12).map(withGuests).filter(Boolean).sort(function (a, b) { return a.score - b.score; });
+          var gl = cands.filter(function (c) { return c.kind === 'room'; }).sort(function (a, b) { return a.score - b.score; }).slice(0, 12).map(withGuests).filter(Boolean).sort(function (a, b) { return a.score - b.score; });
           return run.best(gl, 6, function (c) { if (c) out.push(c); finish(false); });
         }
         var kind = kinds[ki++];
@@ -6757,7 +6767,7 @@
       (c.extras || []).forEach(function (x) { parts.push(x); });
       if (rug) parts.push((/^(8|11|18)'/.test(RUG.get(rug.size).label) ? 'an ' : 'a ') + RUG.get(rug.size).label + ' rug');
       var notes = ['With ' + (parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0]) + '.'];
-      if (c.kind === 'room') notes.push('You face the ' + (c.seesDoor ? 'door' : 'room') + (c.daylight ? ', with daylight from the side' : '') + ', with 42" behind the desk for the chair.');
+      if (c.kind === 'room') notes.push('You face the ' + (c.view ? 'window' : c.seesDoor ? 'door' : 'room') + (c.daylight && !c.view ? ', with daylight from the side' : '') + ', with 42" behind the desk for the chair.');
       if (c.full && c.full.tight) notes.push(c.full.tight === 1 ? 'One spot is tight.' : c.full.tight + ' spots are tight.');
       return { label: label, note: notes.join(' '), places: c.places, rug: rug };
     }

@@ -111,7 +111,10 @@ with sync_playwright() as pw:
         ok('the client chairs face the desk, 2 of them', len(gs) == 2 and facing, json.dumps([(g['cx'], g['cy'], g['rot']) for g in gs]))
     ok('an office of 100 sq ft and up gets a reading corner or a loveseat on a card', any('reading corner' in l or 'loveseat' in l for l in labels), json.dumps(labels))
     rm = [c for c in of['cards'] if c['label'].startswith('Desk facing into the room')]
-    ok('the desk facing into the room faces the door, with daylight from the side', bool(rm) and 'You face the door' in rm[0]['note'] and 'daylight' in rm[0]['note'], json.dumps([c['note'] for c in rm]))
+    ok('an office with a window leads with the desk facing it', bool(of['cards']) and of['cards'][0]['label'].startswith('Desk facing the window'), json.dumps(labels))
+    ok('the desk facing into the room faces a view first (the window, else the door)', bool(rm) and 'You face the window' in rm[0]['note'], json.dumps([c['note'] for c in rm]))
+    chairs = [p for c in of['cards'] + bd['cards'] for p in c['places'] if p['id'] == 'armchair' and p['role'] == 'seat']
+    ok('reading chairs stand in corners, never in the middle of a wall', all(p.get('edge') is None for p in chairs) and len(chairs) > 0, json.dumps([(p['cx'], p['cy'], p.get('edge')) for p in chairs]))
     use_all(pg, 'z3', 'Office', of)
 
     fy = cards(pg, 'z3', 'Foyer')
