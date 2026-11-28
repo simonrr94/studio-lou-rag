@@ -9,7 +9,7 @@ PPF = 20          # pixels per foot
 WALL = 10         # 6" walls
 PAD = 60          # margin round the plan
 
-def build(rooms, doors, windows, openings, open_sides, outdir, fixtures=(), inner=None):
+def build(rooms, doors, windows, openings, open_sides, outdir, fixtures=(), inner=None, fires=()):
     W = int(max(r[1] + r[3] for r in rooms) * PPF + 2 * PAD)
     H = int(max(r[2] + r[4] for r in rooms) * PPF + 2 * PAD)
     im = Image.new('RGB', (W, H), 'white'); d = ImageDraw.Draw(im)
@@ -61,6 +61,26 @@ def build(rooms, doors, windows, openings, open_sides, outdir, fixtures=(), inne
         c = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
         ops.append({'kind': 'window', 'type': None, 'x': X(c[0]) / W * 100, 'y': X(c[1]) / H * 100, 'width_in': None, 'rooms': ['', 'outside']})
     fx = []
+    for f in fires:   # fireplaces: (wall point a, wall point b, into unit, style 'solid' or 'line')
+        a, b, n, style = f
+        u = ((b[0] - a[0]) / max(1e-9, abs(b[0] - a[0]) + abs(b[1] - a[1])), (b[1] - a[1]) / max(1e-9, abs(b[0] - a[0]) + abs(b[1] - a[1])))
+        L = abs(b[0] - a[0]) + abs(b[1] - a[1]); w0 = WALL / 2 / PPF   # from the wall's face
+        def P(t, s): return (X(a[0] + u[0] * t + n[0] * (w0 + s)), X(a[1] + u[1] * t + n[1] * (w0 + s)))
+        def box(t0, t1, s0, s1):
+            q = [P(t0, s0), P(t1, s0), P(t1, s1), P(t0, s1)]
+            return [min(v[0] for v in q), min(v[1] for v in q), max(v[0] for v in q), max(v[1] for v in q)]
+        if style == 'solid':   # a chimney breast 18" deep, a firebox notch, a hearth 20" deep in thin line
+            d.rectangle(box(0, L, -w0, 1.5), fill='#222222')
+            d.rectangle(box(L / 2 - 1.25, L / 2 + 1.25, 0.6, 1.5), fill='white')
+            d.rectangle(box(L / 2 - 2.5, L / 2 + 2.5, 1.5, 1.5 + 20 / 12), outline='#555555', width=2)
+            depth = 1.5 + 20 / 12
+        else:                  # drawn in thin line: the surround, the firebox inside it, the hearth in front
+            d.rectangle(box(0, L, 0, 1.2), outline='#333333', width=2)
+            d.rectangle(box(L / 2 - 1.25, L / 2 + 1.25, 0, 0.9), outline='#333333', width=2)
+            d.rectangle(box(L / 2 - 2.25, L / 2 + 2.25, 1.2, 1.2 + 18 / 12), outline='#666666', width=1)
+            depth = 1.2 + 18 / 12
+        bb = box(0, L, 0, depth)
+        fx.append({'kind': 'fireplace', 'x': round(bb[0] / W * 100, 2), 'y': round(bb[1] / H * 100, 2), 'w': round((bb[2] - bb[0]) / W * 100, 2), 'h': round((bb[3] - bb[1]) / H * 100, 2)})
     for kind, x0, y0, x1, y1 in fixtures:   # counters and islands: thin-line boxes, a sink on the long ones
         d.rectangle([X(x0), X(y0), X(x1), X(y1)], outline='#555555', width=2)
         if kind == 'island' or max(x1 - x0, y1 - y0) > 6:
@@ -113,3 +133,13 @@ build(rooms3, doors3, windows3, openings3, [], os.path.join(HERE, 'kd'), fixture
 # The great room drawn with thin partitions: 6" outside walls, inside walls a 2" pen (3 px), under a
 # third of the outside walls' thickness (tests/harness/thin/)
 build(rooms2, doors2, windows2, openings2, [((26, 0), (26, 18))], os.path.join(HERE, 'thin'), inner=3)
+
+# Fireplaces (Nov 27, zones): a living room with a solid chimney breast centered on its short wall,
+# windows on the long outside wall, open to a kitchen (fire/); and the same plan with the fireplace drawn
+# in thin line on the long inside wall (fire2/)
+rooms4 = [('Living Room', 0, 0, 22, 16), ('Kitchen', 22, 0, 12, 16), ('Bedroom', 0, 16, 14, 12), ('Bath', 14, 16, 8, 7), ('Hall', 14, 23, 8, 5), ('Closet', 22, 16, 12, 6, False)]
+doors4 = [((0, 11), D, 3, R, ['Living Room', 'outside']), ((5, 16), R, 2.75, D, ['Bedroom', 'Living Room']), ((15, 16), R, 2.5, D, ['Bath', 'Living Room']), ((24, 16), R, 2.75, D, ['Closet', 'Kitchen'])]
+windows4 = [((4, 0), (9, 0)), ((13, 0), (18, 0)), ((26, 0), (31, 0)), ((0, 20), (0, 25)), ((4, 28), (10, 28)), ((34, 6), (34, 11))]
+openings4 = [((14, 25), (14, 27.5), ['Bedroom', 'Hall'])]
+build(rooms4, doors4, windows4, openings4, [((22, 0), (22, 16))], os.path.join(HERE, 'fire'), fires=[((0, 5), (0, 11 - 3.5), R, 'solid')] if False else [((0, 3.5), (0, 9.5), R, 'solid')])
+build(rooms4, doors4, windows4, openings4, [((22, 0), (22, 16))], os.path.join(HERE, 'fire2'), fires=[((8, 16), (14, 16), U, 'line')])

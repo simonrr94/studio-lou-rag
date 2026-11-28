@@ -5825,6 +5825,11 @@ var KITCHEN = (function () {
     var out = [];
     hints.forEach(function (h) {
       var B = { x0: h.x / 100 * W, y0: h.y / 100 * H, x1: (h.x + h.w) / 100 * W, y1: (h.y + h.h) / 100 * H };
+      if (h.kind === 'fireplace') {   // the model points, the drawing pins it to its wall (zones, Nov 27)
+        var fp = fire(B);
+        out.push(fp || { kind: 'fireplace', rough: true, poly: [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]] });
+        return;
+      }
       var got = h.kind === 'island' ? island(B) : counter(B);
       if (got) { got.kind = h.kind === 'island' ? 'island' : 'counter'; out.push(got); }
       else out.push({ kind: h.kind === 'island' ? 'island' : 'counter', rough: true, poly: [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]] });
@@ -5836,6 +5841,70 @@ var KITCHEN = (function () {
       var n = 0, k = 0;
       for (var t = t0; t <= t1; t += 1) { n++; if (horiz ? ink(t, v) : ink(v, t)) k++; }
       return n ? k / n : 0;
+    }
+    /* A fireplace: the wall it stands on is the nearest wall to the model's box (a chimney breast drawn
+       solid is wall ink, so its face is the nearest wall there); its width is the breast (a stretch of
+       wall that stands out 2' to 10' long) or, drawn in thin line on a flat wall, the run of lines in front
+       of the wall; the hearth is the farthest line out in front of its middle. Returns { kind, poly (from
+       the face to the hearth's front), face: [a, b], n (into the room), wall, widthIn, depthIn }. */
+    function fire(B) {
+      var best = null, band = Math.round(14 * inch);
+      // the wall side: the side of the box with the most wall along it (within 14" either way)
+      [true, false].forEach(function (horiz) {   // horiz: the wall runs along x
+        var a0 = horiz ? B.x0 : B.y0, a1 = horiz ? B.x1 : B.y1;
+        [-1, 1].forEach(function (dir) {
+          var side = horiz ? (dir < 0 ? B.y0 : B.y1) : (dir < 0 ? B.x0 : B.x1), top = 0;
+          for (var o = -band; o <= band; o += 2) {
+            var n = 0, k = 0;
+            for (var i = 1; i < 20; i++) { var t = a0 + (a1 - a0) * i / 20; n++; if (horiz ? isWall(t, side + o) : isWall(side + o, t)) k++; }
+            top = Math.max(top, k / n);
+          }
+          if (!best || top > best.top) best = { horiz: horiz, dir: dir, top: top, a0: a0, a1: a1, far: horiz ? (dir < 0 ? B.y1 : B.y0) : (dir < 0 ? B.x1 : B.x0) };
+        });
+      });
+      if (!best || best.top < 0.5) return null;
+      // the face: marching in from the room side, the wall most samples reach first (a firebox notch goes deeper)
+      var hits = [], start = best.far - best.dir * 12 * inch;
+      for (var i2 = 1; i2 < 24; i2++) {
+        var tt = best.a0 + (best.a1 - best.a0) * i2 / 24;
+        for (var s3 = 0; s3 < 160 * inch; s3++) { var vv = start + best.dir * s3; if (best.horiz ? isWall(tt, vv) : isWall(vv, tt)) { hits.push({ t: tt, s: s3 }); break; } }
+      }
+      if (hits.length < 8) return null;
+      var sorted = hits.map(function (h) { return h.s; }).sort(function (p, q) { return p - q; });
+      // the face most samples agree on (within 2px); a firebox notch or a hearth line makes a smaller cluster
+      var hs = sorted[0], bestN = 0;
+      sorted.forEach(function (v) { var n = sorted.filter(function (w) { return Math.abs(w - v) <= 2; }).length; if (n > bestN) { bestN = n; hs = v; } });
+      var onFace = hits.filter(function (h) { return Math.abs(h.s - hs) <= 2; }).map(function (h) { return h.t; });
+      best.f0 = Math.min.apply(null, onFace); best.f1 = Math.max.apply(null, onFace);
+      best.face = start + best.dir * (hs - 1); best.dist = hs;
+      if (!best) return null;
+      var hz = best.horiz, dir = best.dir, face = best.face, tm = (best.a0 + best.a1) / 2;
+      var wallAt = function (t, v) { return hz ? isWall(t, v) : isWall(v, t); };
+      var inkAt = function (t, v) { return hz ? ink(t, v) : ink(v, t); };
+      // a breast standing out from the wall: the stretch where the wall reaches this face
+      var lo = Math.round(best.f0), hi = Math.round(best.f1), lim = (best.a1 - best.a0) / 2 + 36 * inch;   // the face samples span a firebox notch
+      while (lo > tm - lim && wallAt(lo - 1, face + dir * 2)) lo--;
+      while (hi < tm + lim && wallAt(hi + 1, face + dir * 2)) hi++;
+      var run, breast = hi - lo >= 24 * inch && hi - lo <= 120 * inch && !(wallAt(lo - 3, face + dir * 2) && wallAt(hi + 3, face + dir * 2));
+      if (breast) run = { s: lo, e: hi };
+      else {   // drawn on a flat wall: the lines just in front of it, near the model's box
+        var on = function (t) { for (var d = 2; d <= 30 * inch; d += 1) if (inkAt(t, face - dir * d)) return true; return false; };
+        var s0 = Math.round(tm), e0 = s0, gap = 0, t2;
+        if (!on(s0)) { var found = null; for (var o = 1; o < (best.a1 - best.a0) / 2 && !found; o++) found = on(tm - o) ? tm - o : on(tm + o) ? tm + o : null; if (found == null) return null; s0 = e0 = Math.round(found); }
+        for (t2 = s0, gap = 0; t2 > best.a0 - 18 * inch; t2--) { if (on(t2)) { s0 = t2; gap = 0; } else if (++gap > 3 * inch) break; }
+        for (t2 = e0, gap = 0; t2 < best.a1 + 18 * inch; t2++) { if (on(t2)) { e0 = t2; gap = 0; } else if (++gap > 3 * inch) break; }
+        if (e0 - s0 < 24 * inch) return null;
+        run = { s: s0, e: e0 };
+      }
+      // the hearth's front: the farthest line out across the middle 2 feet
+      var mm = (run.s + run.e) / 2, depth = 0;
+      for (var d2 = 3; d2 <= 42 * inch; d2++) if (cover(hz, face - dir * d2, Math.round(mm - 12 * inch), Math.round(mm + 12 * inch)) >= 0.6) depth = d2;
+      if (depth < 12 * inch) depth = Math.round(18 * inch);
+      var f1 = face - dir * depth, poly, fa, fb;
+      if (hz) { poly = [[run.s, Math.min(face, f1)], [run.e, Math.min(face, f1)], [run.e, Math.max(face, f1)], [run.s, Math.max(face, f1)]]; fa = [run.s, face]; fb = [run.e, face]; }
+      else { poly = [[Math.min(face, f1), run.s], [Math.max(face, f1), run.s], [Math.max(face, f1), run.e], [Math.min(face, f1), run.e]]; fa = [face, run.s]; fb = [face, run.e]; }
+      return { kind: 'fireplace', poly: poly, face: [fa, fb], n: hz ? [0, -dir] : [-dir, 0], wall: hz ? (dir < 0 ? 'N' : 'S') : (dir < 0 ? 'W' : 'E'),
+               breast: breast, widthIn: Math.round((run.e - run.s) / inch), depthIn: Math.round(depth / inch) };
     }
     function counter(B) {
       var horizF = (B.x1 - B.x0) >= (B.y1 - B.y0), best = null;
