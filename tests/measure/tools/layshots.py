@@ -13,11 +13,13 @@ D = score.D
 BASE, OUT = sys.argv[1].rstrip('/'), sys.argv[2]
 ONLY = sys.argv[3:]
 LIVING = os.environ.get('LIVING')   # LIVING=1: living rooms only (Living, Sitting, Great)
+Z3 = os.environ.get('Z3')   # Z3=1: bedrooms, offices and entryways only
 os.makedirs(OUT, exist_ok=True)
 HDIR = os.path.join(os.path.dirname(D), 'harness')
-ROOMS = {'studio': ['Bedroom', 'Living Room'], 'cabin': ['Sleeping', 'Living'], 'twostory': ['Bedroom', 'Living Room'],
+ROOMS = {'studio': ['Bedroom', 'Living Room', 'Entrance'], 'cabin': ['Sleeping', 'Living', 'Entry'], 'twostory': ['Bedroom', 'Living Room', 'Entrance'],
          'floor2': ['Primary Bedroom', 'Sitting Room'], 'bedroom': ['Bedroom'],
-         'harness': ['Living Room', 'Dining Room', 'Office', 'Bedroom'], 'open': ['Living Room'], 'kd': ['Kitchen/Dining'], 'fire': ['Living Room'], 'fire2': ['Living Room'], 'fire3': ['Living Room'], 'big': ['Living Room']}
+         'harness': ['Living Room', 'Dining Room', 'Office', 'Bedroom'], 'open': ['Living Room'], 'kd': ['Kitchen/Dining'], 'fire': ['Living Room'], 'fire2': ['Living Room'], 'fire3': ['Living Room'], 'big': ['Living Room'],
+         'z3': ['Primary Bedroom', 'Office', 'Foyer', 'Living Room'], 'z3n': ['Primary Bedroom', 'Guest Room', 'Foyer']}
 try: FONT = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 15); BOLD = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 16)
 except Exception: FONT = BOLD = ImageFont.load_default()
 
@@ -63,6 +65,7 @@ def shoot(page, plan, rooms, log):
     page.evaluate("() => setMode('furnish')")
     for rm in rooms:
         if LIVING and not re.search('living|sitting|great', rm, re.I): continue
+        if Z3 and not re.search('bed|sleep|office|guest|entr|foyer|mud', rm, re.I): continue
         i = page.evaluate("(n) => state.rooms.findIndex(r => r.name === n)", rm)
         if i < 0: log.write('%s %s: no such room\n' % (plan, rm)); continue
         t0 = time.time()
@@ -102,7 +105,7 @@ with sync_playwright() as pw, open(os.path.join(OUT, 'cards.txt'), 'w') as log:
         ctx = b.new_context(viewport={'width': 1360, 'height': 860}, device_scale_factor=2)
         page = ctx.new_page(); errs = []
         page.on('pageerror', lambda e: errs.append(str(e)))
-        if plan in ('harness', 'open', 'kd', 'fire', 'fire2', 'fire3', 'big'):
+        if plan == 'harness' or os.path.isdir(os.path.join(HDIR, plan)):
             hd = HDIR if plan == 'harness' else os.path.join(HDIR, plan)
             rj, oj = open(os.path.join(hd, 'rooms.json')).read(), open(os.path.join(hd, 'openings.json')).read()
             ctx.route('**/*', mocked(rj, oj)); img = os.path.join(hd, 'plan.png')

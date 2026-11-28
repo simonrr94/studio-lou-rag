@@ -56,7 +56,7 @@ with sync_playwright() as pw:
     n = layouts(page, 'Nursery'); ok('nursery (4\'6" wide) says why', len(n) == 1 and n[0].startswith('WHY'), json.dumps(n)); cap(page, 'nursery-why', state=False)
     page.evaluate("() => { state.rooms[H.room('Nursery')].name = 'Closet'; renderAll(); }")
     lv = layouts(page, 'Living Room')
-    ok('living room offers a TV layout, a conversation layout and a sectional', len(lv) == 3 and 'TV' in lv[0] and 'Conversation' in lv[1] and 'Sectional' in lv[2], json.dumps(lv))
+    ok('living room offers a TV layout, a conversation layout and a sectional', len(lv) == 3 and 'TV' in lv[0] and 'onversation' in lv[1] and 'Sectional' in lv[2], json.dumps(lv))
     cap(page, 'living-list')
     lb = page.evaluate("() => snap()")
     page.click('[data-lay="1"]'); page.click('[data-lact=use]'); page.wait_for_timeout(200)

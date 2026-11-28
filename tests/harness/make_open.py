@@ -157,3 +157,18 @@ doors6 = [((18, 17), R, 3, U, ['Living Room', 'outside']), ((15, 17), R, 2.5, D,
 windows6 = [((4, 0), (10, 0)), ((14, 0), (20, 0)), ((27, 0), (33, 0)), ((0, 21), (0, 26)), ((36, 14), (36, 19))]
 openings6 = [((24, 3), (24, 7), ['Living Room', 'Dining Room']), ((28, 12), (32, 12), ['Dining Room', 'Kitchen'])]
 build(rooms6, doors6, windows6, openings6, [], os.path.join(HERE, 'fire3'), fires=[((0, 5.5), (0, 11.5), R, 'solid')])
+
+# Zones (Z3): a foyer at the front door (open to the living room and a hall), an office off the foyer, a big
+# primary bedroom off the hall with windows on two walls, a bath and a closet (z3/); and the same house with
+# the office as a guest room, so the house has no office (z3n/)
+def z3(office_name, outdir):
+    rooms = [('Living Room', 0, 0, 18, 16), ('Foyer', 18, 0, 8, 8), (office_name, 26, 0, 12, 11), ('Hall', 18, 8, 8, 8),
+             ('Primary Bedroom', 8, 16, 18, 14), ('Bath', 26, 11, 12, 8), ('Closet', 26, 19, 8, 7, False)]
+    doors = [((20, 0), R, 3, D, ['Foyer', 'outside']), ((26, 5.25), D, 2.5, R, [office_name, 'Foyer']),
+             ((21, 16), R, 2.75, D, ['Primary Bedroom', 'Hall']), ((26, 12), D, 2.5, R, ['Bath', 'Hall']),
+             ((26, 21), D, 2.5, R, ['Closet', 'Primary Bedroom'])]
+    windows = [((4, 0), (10, 0)), ((0, 5), (0, 11)), ((30, 0), (35, 0)), ((38, 3), (38, 8)), ((12, 30), (18, 30)), ((8, 21), (8, 26))]
+    openings = [((18, 2), (18, 7), ['Living Room', 'Foyer']), ((19, 8), (25, 8), ['Foyer', 'Hall'])]
+    build(rooms, doors, windows, openings, [], os.path.join(HERE, outdir))
+z3('Office', 'z3')
+z3('Guest Room', 'z3n')
